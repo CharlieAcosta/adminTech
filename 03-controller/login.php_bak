@@ -1,0 +1,77 @@
+<?php
+ob_start(); // para que funcione el header
+include_once '../00-config/db.php'; 
+include_once '../06-funciones_php/cleanInput.php'; // limpia las variables input
+include_once '../06-funciones_php/base_url.php';
+
+include_once '../06-funciones_php/funciones.php'; //funciones últiles
+
+if (!$db) {
+    echo "Error: No se pudo conectar a MySQL." . PHP_EOL;
+    echo "error de depuración: " . mysqli_connect_errno() . PHP_EOL;
+    echo "error de depuración: " . mysqli_connect_error() . PHP_EOL;
+    exit;
+} else {
+    if(isset($_POST['usuario']) && isset($_POST['password'])){
+
+
+        $_POST = cleanInput($_POST); //sanitiza las variables que vienen del formulario
+
+        $query = "
+        SELECT u.*
+        FROM usuarios AS u
+        WHERE u.email = '".$_POST['usuario']."'
+        ;"; // consulta si existe el usuario
+
+        $resultado = $db->query($query);
+        while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
+
+        $password_md5_ext = md5($_POST['password']); // encripta la constraseña enviada
+        $password_md5_int = $rows[0]['password'];    // contraseña traida de la base
+        $estado_int       = $rows[0]['estado'];      // estado traido de la base
+
+        mysqli_close($db);                           // cierra la base de datos
+    
+
+        if($password_md5_ext == $password_md5_int && $estado_int == "Activo"){
+
+            session_start(); // incia la sesión
+            
+            // Establece duración máxima de la sesión en segundos (3600 = 1 hora)
+            ini_set('session.gc_maxlifetime', SESION_TIME);
+
+            // Set session variables
+            $_SESSION["usuario"] = $rows[0];    
+            $_SESSION["base_url"] = base_url()."/adminTech/";
+            header('Location: ../01-views/panel.php'); // redirecciona al panel
+
+        }else{
+
+            header('Location: ../01-views/login.php'); // credenciales invalidas
+
+        }
+
+    }else{
+       header('Location: ../01-views/login.php'); // intento entrar por url al php
+    }
+
+}
+ 
+
+// $fechaActual = new DateTime(date("Y-m-d H:i:s", time()));
+
+// $res = array();
+// $res["id"] = $rows[0]["id"];
+// $res["fechaHora"] = $rows[0]["fechaHora"];
+// $res["cotizacion"] = round($rows[0]["monto"] / ($rows[0]["garantia"] - $rows[0]["garantia"]*0.35),2);
+// $res["monto"] = $rows[0]["monto"];
+// $res["crypto"] = $rows[0]["crypto"];
+// $res["interes"] = $rows[0]["interes"];
+// $res["liquidacion"] = $rows[0]["liquidacion"];
+
+
+// echo json_encode($res);
+
+
+
+?>

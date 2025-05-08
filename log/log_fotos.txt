@@ -1,0 +1,95 @@
+Array
+(
+)
+--- NUEVO INGRESO ---
+🟠 _POST:
+Array
+(
+    [id_visita] => 107
+    [tareas] => Array
+        (
+            [0] => Array
+                (
+                    [descripcion] => Cambios de chapa djasjsdjf sdjfklsj fklsf sdlfj lksdfj lksdf klsfj klsfj klsdj fklsdj fklsdjf klsdjf kljsdjf klsdfj klsdfj lksdfj lsd jfl
+                    [materiales] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 3
+                                    [cantidad] => 10
+                                )
+
+                            [1] => Array
+                                (
+                                    [id] => 2
+                                    [cantidad] => 50
+                                )
+
+                        )
+
+                    [mano_obra] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 3
+                                    [cantidad] => 2
+                                    [observacion] => 
+                                )
+
+                            [1] => Array
+                                (
+                                    [id] => 1
+                                    [cantidad] => 1
+                                    [observacion] => sjkdksakdj
+                                )
+
+                        )
+
+                )
+
+            [1] => Array
+                (
+                    [descripcion] => Cambio de canletas sdfsdlñfksdk f sdlfksdkf sdlñfk dñskfñsdksdlñdsk fñsdkf kdkfñksdlñfklñsdfk ñskdf ñsk ñak dfñskañdfkñsdkf lñsdfsdfsdf
+                    [materiales] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 2
+                                    [cantidad] => 121
+                                )
+
+                        )
+
+                    [mano_obra] => Array
+                        (
+                            [0] => Array
+                                (
+                                    [id] => 2
+                                    [cantidad] => 12
+                                    [observacion] => sdfsdfsd
+                                )
+
+                        )
+
+                )
+
+        )
+
+    [foto_tarea_0_0] => null
+    [foto_tarea_0_1] => null
+)
+🔵 _FILES:
+Array
+(
+)
+🗑️ Eliminando tarea previa ID 10 y todas sus fotos asociadas
+➡️ Insertando tarea: visita=, desc=
+❌ No se insertó la tarea. Error: 
+🗑️ Eliminando tarea previa ID 11 y todas sus fotos asociadas
+➡️ Insertando tarea: visita=, desc=
+❌ No se insertó la tarea. Error: 
+🗑️ Eliminando tarea previa ID 12 y todas sus fotos asociadas
+➡️ Insertando tarea: visita=, desc=
+❌ No se insertó la tarea. Error: 
+➡️ Insertando tarea: visita=107, desc=Cambios de chapa djasjsdjf sdjfklsj fklsf sdlfj lksdfj lksdf klsfj klsfj klsdj fklsdj fklsdjf klsdjf kljsdjf klsdfj klsdfj lksdfj lsd jfl
+➡️ Insertando tarea: visita=107, desc=Cambio de canletas sdfsdlñfksdk f sdlfksdkf sdlñfk dñskfñsdksdlñdsk fñsdkf kdkfñksdlñfklñsdfk ñskdf ñsk ñak dfñskañdfkñsdkf lñsdfsdfsdf

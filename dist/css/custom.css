@@ -1,0 +1,750 @@
+/* datables */
+div.dt-top-container {
+  display: grid;
+  grid-template-columns: auto auto auto;
+}
+
+div.dt-center-in-div {
+  margin: 0 auto;
+}
+
+div.dt-filter-spacer {
+  margin: 10px 0;
+}
+
+thead {
+    background-color: #17a2b8;
+}
+
+th {
+    color:  white;  
+}
+
+#current_table tr{
+  line-height: 1rem !important;  
+}
+
+#current_table tbody td {
+  padding: .4rem .8rem .4rem !important;
+}
+
+
+/* datables - end */
+
+.v-fondo-01 {
+  background-image: url('../dist/img/fondo_01.jpg');  
+}
+
+.v-disabled {
+    pointer-events: none !important;
+    background-color: #e9ecef !important;
+}
+
+.v-li-he {
+    line-height: 1.1 !important;
+}
+
+.v-visual-style {
+    font-weight: bold !important;
+    font-size: 1.0rem !important;
+    pointer-events: none !important;    
+}
+
+.v-documento-link {
+   cursor: pointer;  
+}
+
+
+.fc .fc-bg-event {
+  background: var(--fc-bg-event-color);
+  opacity: unset !important;
+  align-content: center !important;
+  display: inline-grid !important;
+  margin-bottom: unset;
+}
+
+.fc-event-title{
+  text-align: center !important;
+  font-size: initial !important;
+  font-weight: bolder !important;
+  font-style: normal !important;
+  color: white !important;
+}
+
+.novedades-totales{
+  font-weight: bold !important;
+}
+
+.fc .fc-col-header-cell-cushion {
+  display: inline-block;
+  padding: 2px 4px;
+  color: white !important;
+}
+
+.fc-daygrid-day-number {
+  padding: 4px;
+  position: relative;
+  z-index: 4;
+  color: #c3c3c3;
+  font-weight: bold;
+  font-size: x-large;
+}
+
+.cuarta-columna {
+  border-left-width: 2px;
+  border-left-style: solid;
+}
+
+#novedades_tabla td.primera-quincena,
+#novedades_tabla th.primera-quincena {
+  border-left: 2px solid #ddd !important;
+}
+
+#novedades_tabla td.segunda-quincena,
+#novedades_tabla th.segunda-quincena {
+  border-right: 3px solid #ddd !important;
+}
+
+#novedades_tabla td.central,
+#novedades_tabla th.central {
+  border-right: 3px solid #ddd !important;
+}
+
+.custom-file-input:lang(es)~.custom-file-label::after {
+  content: "Buscar" !important;
+}
+
+.foto4x4{
+  max-width: 15vw; 
+  max-height: 15vh;
+  width: auto; 
+  height: auto;
+  border: 6px solid white;
+  outline: 1px solid rgb(165, 165, 165);
+  box-shadow: 4px 4px 3px rgba(0, 0, 0, 0.2);
+}
+
+.v-icon-pointer {
+  cursor: pointer;
+}
+
+.texto-capital {
+  text-transform: capitalize;
+}
+
+.v-bg-magenta{
+  background-color: magenta !important;
+  color: white !important;
+}
+
+.v-bg-verde-oscuro{
+    background-color: rgb(7, 116, 1) !important;
+    color: white !important;
+  }
+
+.border-bottom, .border-top  {
+    border-bottom: 1px solid #00BCD4 !important;
+}
+
+.border-bottom-apellido  {
+    border-bottom: 3px solid #00A2BA !important;
+}
+
+.v-icon-accion {
+    color: #6c757d;
+    transition: transform 0.2s ease, color 0.2s ease;
+    margin-right: 3px; /* Agrega un margen de 3px solo a la derecha */
+}
+
+.v-icon-accion:hover {
+    color: #007bff;
+    cursor: pointer;
+    transform: scale(1.2); /* Aumenta el tamaño en un 20% */
+}
+
+.v-accion-hidden {
+    display: none;
+}
+
+.form-control, .select2-container--bootstrap4 .select2-selection--single {
+    min-width: 200px; /* Ancho mínimo */
+    max-width: 100%; /* Ancho máximo para no desbordarse en pantallas pequeñas */
+    width: 100%; /* Ancho por defecto completo */
+}
+
+.ayuda {
+    position: fixed;
+    top: 0;
+    transition: width .3s ease-in-out;
+    width: 250px;
+    z-index: 1035;
+    max-height: 100vh; /* Limita la altura máxima al tamaño del viewport */
+    overflow-y: auto;  /* Habilita el scroll vertical si el contenido excede la altura */
+}
+
+.ayuda {
+    scrollbar-width: thin; /* Para Firefox */
+}
+
+.ayuda::-webkit-scrollbar {
+    width: 6px; /* Ajusta el ancho del scrollbar */
+}
+
+.ayuda::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.5); /* Ajusta el color del thumb */
+    border-radius: 10px; /* Bordes redondeados */
+}
+
+.ayuda::-webkit-scrollbar-track {
+    background-color: rgba(0, 0, 0, 0.1); /* Color de fondo del scrollbar */
+}
+
+.bg-yellow-soft {
+  background-color: #fff9e6;
+}
+
+.main-sidebar {
+    height: 100vh; /* Altura máxima de la ventana */
+    overflow-y: auto; /* Activar scroll vertical si el contenido es largo */
+}
+
+.sidebar {
+    overflow-y: auto; /* Asegurar que el contenido dentro también pueda hacer scroll */
+}
+
+/* Estilo para centrar solo los botones */
+/* Ajuste para centrar los botones en relación a toda la página */
+.navbar-nav.mx-auto {
+    display: flex;
+    justify-content: center; /* Asegura que los botones estén alineados al centro */
+    align-items: center;
+    width: auto; /* Ajusta el ancho automáticamente para que no ocupe el 100% */
+    padding-left: 23%; /* Ajuste para centrar mejor el bloque en relación a la página */
+    padding-right: 7%; /* Espaciado adicional en la derecha */
+    margin-left: auto;
+    margin-right: auto; /* Centrar en relación al navbar */
+}
+
+
+/* Botones personalizados con borde blanco */
+.custom-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px; /* Tamaño cuadrado */
+    height: 60px; /* Tamaño cuadrado */
+    margin: 5px; /* Espaciado entre los botones */
+    border-radius: 12px; /* Bordes redondeados */
+    color: white; /* Color del ícono */
+    font-size: 1.5rem; /* Tamaño del ícono */
+    text-align: center;
+    transition: transform 0.2s ease; /* Animación al pasar el mouse */
+    border: 2px solid white; /* Borde blanco delgado */
+}
+
+.custom-button:hover {
+    transform: scale(1.1); /* Efecto de agrandamiento al pasar el mouse */
+}
+
+.custom-button i {
+    font-size: inherit; /* Asegura que el ícono escale con el botón */
+}
+
+/* Colores y estilos de fondo */
+.bg-warning { background-color: #ffc107; }
+.bg-danger { background-color: #dc3545; }
+.bg-info { background-color: #17a2b8; }
+.bg-success { background-color: #28a745; }
+.bg-secondary { background-color: #6c757d; }
+.bg-primary { background-color: #007bff; }
+.v-bg-magenta { background-color: #ff00ff; }
+
+/* Responsividad para pantallas más pequeñas */
+@media (max-width: 768px) {
+    .custom-button {
+        width: 50px;
+        height: 50px;
+        font-size: 1.2rem;
+    }
+}
+
+/* Bloque del perfil del usuario y logout */
+.navbar-nav.ml-auto {
+    display: flex;
+    align-items: center; /* Alinea verticalmente los elementos */
+}
+
+/* Contenedor del nombre y perfil en dos líneas */
+.v-li-he {
+    display: block;
+    margin-left: 10px; /* Espacio entre el ícono de usuario y el texto */
+    line-height: 1.2; /* Ajusta el espacio entre el nombre y el perfil */
+}
+
+/* Nombre completo (nombre y apellido en una sola línea) */
+.v-li-he .nombre-completo {
+    display: block; /* El nombre y apellido se muestran en una línea */
+    font-size: 1rem; /* Tamaño del texto */
+}
+
+/* Perfil del usuario (en la segunda línea debajo del nombre) */
+.v-li-he .perfil-usuario {
+    display: block; /* El perfil se muestra en una nueva línea */
+    font-size: 0.85rem; /* Tamaño más pequeño para el perfil */
+    color: #ccc; /* Color más claro para el perfil */
+    margin-top: 2px; /* Espacio entre el nombre y el perfil */
+}
+
+
+/* Cambiar el color del fondo y el texto de los tooltips */
+.tooltip-inner {
+    background-color: #007bff !important; /* Color de fondo (ejemplo: azul) */
+    color: #fff !important; /* Color del texto (ejemplo: blanco) */
+}
+
+/* Cambiar el color de la flecha del tooltip */
+.tooltip.bs-tooltip-top .arrow::before {
+    border-top-color: #007bff !important; /* Color de la flecha para tooltips en la parte superior */
+}
+
+.tooltip.bs-tooltip-bottom .arrow::before {
+    border-bottom-color: #007bff !important; /* Color de la flecha para tooltips en la parte inferior */
+}
+
+.tooltip.bs-tooltip-left .arrow::before {
+    border-left-color: #007bff !important; /* Color de la flecha para tooltips a la izquierda */
+}
+
+.tooltip.bs-tooltip-right .arrow::before {
+    border-right-color: #007bff !important; /* Color de la flecha para tooltips a la derecha */
+}
+
+
+
+/* Asegurar que el tooltip esté sobre otros elementos */
+.tooltip {
+    z-index: 9999 !important;
+    margin-top: 15px; /* Desplaza el tooltip hacia abajo */
+}
+
+/* Si el contenedor tiene posición relativa, asegúrate de que no interfiera */
+.custom-button {
+    position: relative; /* Asegurar que el botón tenga una posición relativa */
+    z-index: 1; /* Evitar que el z-index interfiera con el tooltip */
+}
+
+/* NOVEDADES - START */
+
+/* Fondo ciruela */
+.bg-ciruela {
+    background-color: #D86DCD !important;
+    color: #fff !important; /* Texto blanco sobre fondo ciruela */
+}
+
+/* Texto color ciruela */
+.text-ciruela {
+    color: #D86DCD !important;
+}
+
+
+body {
+  overflow-x: hidden; /* Deshabilita el desplazamiento horizontal en toda la página */
+}
+
+.novedades-card {
+    overflow-x: hidden; /* Evita que se muestre el scroll horizontal */
+    position: relative; /* Mantén el control del contenedor */
+}
+
+/* Asegura que el card de novedades no exceda la pantalla y tenga scroll */
+.novedades-card .card-body {
+    max-height: 77.8vh; /* Ajusta el máximo a 75.5% de la altura de la ventana */
+    overflow-y: auto; /* Solo permitir scroll vertical */
+    overflow-x: hidden; /* Evitar el scroll horizontal */
+    padding: 0; /* Asegura que no haya relleno extra que cause desbordamiento */
+    scrollbar-width: thin; /* Scroll delgado para Firefox */
+}
+
+.novedades-card .card-body::-webkit-scrollbar {
+    width: 8px; /* Ajustar el grosor del scroll lateral para navegadores WebKit */
+}
+
+.novedades-card .card-body::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2); /* Color del "thumb" del scroll */
+    border-radius: 10px; /* Bordes redondeados del thumb */
+}
+
+.novedades-card .card-body::-webkit-scrollbar-track {
+    background-color: rgba(0, 0, 0, 0.1); /* Color del fondo del track del scroll */
+}
+
+/* Asegura que el contenedor de eventos tenga el scroll necesario */
+#external-events {
+    max-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden; /* Evita el scroll horizontal aquí también */
+    position: relative; /* Añade esta propiedad para mantener el control */
+}
+
+.btn-light-green {
+    background-color: #a8d5ba; /* Verde claro */
+    color: #000; /* Texto oscuro */
+    border-color: #a8d5ba; /* Bordes del mismo color que el fondo */
+}
+
+.btn-light-green:hover {
+    background-color: #8bbd9d; /* Color un poco más oscuro para el hover */
+    border-color: #8bbd9d; /* Bordes del mismo color que el fondo en hover */
+    color: #000; /* Texto blanco al hacer hover */
+}
+
+
+/* Fondo verde más claro */
+.bg-light-green {
+    background-color: #a8d5ba !important; /* Verde claro */
+    color: #000 !important; /* Texto oscuro para contraste */
+}
+
+/* Fondo verde claro intermedio */
+.bg-mid-light-green {
+    background-color: #75c096 !important; /* Verde intermedio claro */
+    color: #000 !important;
+}
+
+/* Fondo verde medio */
+.bg-mid-green-2 {
+    background-color: #4da36e !important; /* Verde medio */
+    color: #fff !important;
+}
+
+/* Fondo verde más oscuro intermedio */
+.bg-mid-green-1 {
+    background-color: #2e7c4d !important; /* Verde oscuro intermedio */
+    color: #fff !important;
+}
+
+/* Fondo verde oscuro */
+.bg-dark-green {
+    background-color: #1b5936 !important; /* Verde oscuro */
+    color: #fff !important;
+}
+
+/* Fondo verde más oscuro ajustado */
+.bg-deep-dark-green {
+    background-color: #103822 !important; /* Verde muy oscuro pero no tan cercano al negro */
+    color: #fff !important;
+}
+
+/* Borde verde más claro */
+.border-light-green {
+    border: 1px solid #a8d5ba !important;
+}
+
+/* Borde verde claro intermedio */
+.border-mid-light-green {
+    border: 1px solid #75c096 !important;
+}
+
+/* Borde verde medio */
+.border-mid-green-2 {
+    border: 1px solid #4da36e !important;
+}
+
+/* Borde verde más oscuro intermedio */
+.border-mid-green-1 {
+    border: 1px solid #2e7c4d !important;
+}
+
+/* Borde verde oscuro */
+.border-dark-green {
+    border: 1px solid #1b5936 !important;
+}
+
+/* Borde verde más oscuro ajustado */
+.border-deep-dark-green {
+    border: 1px solid #103822 !important;
+}
+
+/* Fondo rojo más oscuro (dark-danger) */
+.bg-dark-danger {
+    background-color: #7a1a1a !important; /* Rojo más oscuro */
+    color: #fff !important;
+}
+
+/* Fondo primer tono intermedio (más oscuro que danger) */
+.bg-mid-danger-1 {
+    background-color: #a32626 !important; /* Tono intermedio más oscuro que danger */
+    color: #fff !important;
+}
+
+/* Fondo segundo tono intermedio (más oscuro que success, pero más claro que mid-danger-1) */
+.bg-mid-danger-2 {
+    background-color: #c9302c !important; /* Tono intermedio más claro pero aún distinto a danger */
+    color: #fff !important;
+}
+
+/* Borde rojo más oscuro */
+.border-dark-danger {
+    border: 1px solid #7a1a1a !important;
+}
+
+/* Borde primer tono intermedio */
+.border-mid-danger-1 {
+    border: 1px solid #a32626 !important;
+}
+
+/* Borde segundo tono intermedio */
+.border-mid-danger-2 {
+    border: 1px solid #c9302c !important;
+}
+
+/* Fondo rojo más oscuro que dark-danger */
+.bg-deep-dark-danger {
+    background-color: #5e1414 !important; /* Rojo aún más oscuro */
+    color: #fff !important;
+}
+
+/* Borde más oscuro que dark-danger */
+.border-deep-dark-danger {
+    border: 1px solid #5e1414 !important;
+}
+
+/* Fondo amarillo más claro */
+.bg-light-warning {
+    background-color: #fff4cc !important; /* Amarillo muy claro */
+    color: #000 !important; /* Texto oscuro para contraste */
+}
+
+/* Fondo amarillo claro intermedio */
+.bg-mid-light-warning {
+    background-color: #ffe299 !important; /* Amarillo claro intermedio */
+    color: #000 !important;
+}
+
+/* Fondo amarillo medio */
+.bg-mid-warning-2 {
+    background-color: #ffd166 !important; /* Amarillo medio */
+    color: #000 !important;
+}
+
+/* Fondo amarillo más oscuro intermedio */
+.bg-mid-warning-1 {
+    background-color: #cc9a00 !important; /* Amarillo intermedio oscuro */
+    color: #fff !important;
+}
+
+/* Fondo amarillo oscuro */
+.bg-dark-warning {
+    background-color: #b38200 !important; /* Amarillo oscuro */
+    color: #fff !important;
+}
+
+/* Fondo amarillo más oscuro ajustado */
+.bg-deep-dark-warning {
+    background-color: #7f5f00 !important; /* Amarillo más oscuro sin acercarse demasiado al negro */
+    color: #fff !important;
+}
+
+/* Borde amarillo más claro */
+.border-light-warning {
+    border: 1px solid #fff4cc !important;
+}
+
+/* Borde amarillo claro intermedio */
+.border-mid-light-warning {
+    border: 1px solid #ffe299 !important;
+}
+
+/* Borde amarillo medio */
+.border-mid-warning-2 {
+    border: 1px solid #ffd166 !important;
+}
+
+/* Borde amarillo más oscuro intermedio */
+.border-mid-warning-1 {
+    border: 1px solid #cc9a00 !important;
+}
+
+/* Borde amarillo oscuro */
+.border-dark-warning {
+    border: 1px solid #b38200 !important;
+}
+
+/* Borde amarillo más oscuro ajustado */
+.border-deep-dark-warning {
+    border: 1px solid #7f5f00 !important;
+}
+
+.mejo-event .fc-event-title {
+    color: black !important; /* Forzar el color negro solo para eventos con código "mejo" */
+}
+
+.pres-event .fc-event-title {
+    color: black !important; /* Cambiar el color a azul solo para eventos con código "pres" */
+}
+
+/* Elimina el borde derecho de la primera columna en la primera fila del thead */
+#novedades_tabla thead tr:first-child th:first-child {
+    border-right: none !important;
+}
+
+#novedades_tabla thead tr:nth-child(1) th:nth-child(5),
+#novedades_tabla thead tr:nth-child(1) th:nth-child(6),
+#novedades_tabla thead tr:nth-child(1) th:nth-child(7) {
+    border-right: none !important;
+}
+
+#tablaPrimeraQuincena, #tablaSegundaQuincena {
+    margin-top: 0.5rem;
+}
+
+#valorPrimeraQuincena, #valorSegundaQuincena {
+    max-width: 100px; /* Limitar el ancho del campo de entrada */
+}
+
+.uniform-width {
+    width: 100px !important; /* Forzar el ancho fijo para todos los campos */
+}
+
+#totalSegundaQuincena {
+  font-size: 1.2rem; /* Ajusta el tamaño al que prefieras */
+}
+
+.formato-miles {
+  text-align: right;
+  direction: rtl; /* Hace que los números ingresen desde la derecha */
+}
+
+button[data-toggle="collapse"]::after {
+  content: none !important;
+}
+
+.v-icon-pointer {
+  transition: color 0.3s ease;
+}
+
+.v-icon-pointer:hover {
+  color: #ff4d4d; /* rojo clarito al pasar el mouse */
+}
+
+.v-bg-violeta{
+background-color: #708bd3 !important;
+}
+
+/* Compactar altura de los encabezados de las tablas */
+.materiales-table th,
+.mano-obra-table th {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 0.9rem; /* Opcional para hacerlo aún más prolijo */
+}
+
+#accordionVisita .select2-container .select2-selection--single {
+    font-size: 0.9rem !important;
+    height: calc(1.8125rem + 2px) !important;
+    padding: 0.375rem 0.75rem !important;
+    line-height: 1.5 !important;
+}
+
+#accordionVisita .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 100% !important;
+    top: 0px !important;
+}
+
+/* Compactar filas en tablas de materiales */
+.materiales-table td, 
+.materiales-table th,
+.mano-obra-table td,
+.mano-obra-table th {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    vertical-align: middle;
+}
+
+.materiales-table th,
+.mano-obra-table th, {
+    font-size: 0.85rem; /* Encabezado más pequeño */
+}
+
+.materiales-table td,
+.mano-obra-table td, {
+    font-size: 0.85rem; /* Celdas más chicas */
+}
+
+/* Ícono de eliminar sin estilo de botón */
+.eliminar-mano-obra {
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.preview-fotos img {
+    object-fit: cover;
+    border: 2px solid #dee2e6;
+}
+
+.preview-img-container {
+    position: relative;
+    display: inline-block;
+}
+
+.preview-img-container .eliminar-imagen {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 1rem;
+    color: #000000 !important;             /* X negra */
+    background-color: #ffffff !important; /* Fondo blanco */
+    border-radius: 50%;
+    padding: 2px;   
+    cursor: pointer;
+    z-index: 10;
+    border: none;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.2); /* Sombra suave */
+}
+
+/* Sombra suave a imagen ampliada */
+.swal2-image.v-preview-imagen-sombra {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+/* Elimina el recuadro molesto del botón X al pasar el mouse */
+.swal2-close {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    color: #dc3545 !important; /* rojo bootstrap */
+    font-size: 1.5rem;
+    position: absolute;
+    top: -19px !important;   /* sube más arriba */
+    right: -12px !important; /* más a la derecha */
+    z-index: 1055; /* asegurarse de que esté por encima */
+}
+
+
+/* Forzamos el botón a ubicarse correctamente */
+.swal2-popup {
+    position: relative;
+}
+
+textarea.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 4px rgba(220, 53, 69, 0.6);
+}
+
+.preview-img-container img,
+.preview-img-container .eliminar-imagen, 
+.img-thumbnail {
+  cursor: pointer;
+}
+
+/* Para que todos los botones de acción tengan el mismo ancho */
+.btn-uniform {
+  min-width: 160px; /* ajustá este valor a tu gusto */
+}
+
+
+

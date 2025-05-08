@@ -1,0 +1,6 @@
+❌ Error en prepare (foto): Unknown column 'ruta_archivo' in 'field list'
+❌ Error en prepare (foto): Unknown column 'ruta_archivo' in 'field list'
+OK: uploads/visitas/20250502/foto_6814f95b9781b_012_0008.JPG
+OK: uploads/visitas/20250502/foto_6814fa0d49a89_012_0008.JPG
+FOTO OK: uploads/visitas/20250502/foto_6814fd043cbc6_012_0008.JPG
+FOTO OK: uploads/visitas/20250502/foto_6814fda60e9ac_012_0006.JPG

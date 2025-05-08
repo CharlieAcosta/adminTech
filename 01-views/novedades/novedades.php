@@ -1,0 +1,144 @@
+<?php  
+session_start();
+define('BASE_URL', $_SESSION["base_url"]);
+echo BASE_URL;
+include_once 'controller/usuariosController.php'; //conecta a la base de datos
+$filas = poblarDatableActivos(array('id_usuario', 'estado', 'apellidos', 'nombres', 'tipo_documento', 'nro_documento', 'cuil', 'nacimiento', 'ingreso'), '');
+?>
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta name="robots" content="noindex">
+  <meta name="googlebot" content="noindex">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADMINTECH | Listado de personal</title>
+
+  <!-- Google Font: Source Sans Pro -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>05-plugins/fontawesome-free/css/all.min.css">
+  <!-- DataTables -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>05-plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>05-plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>05-plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
+  <!-- Theme style -->
+  <link rel="stylesheet" href="<?= BASE_URL ?>dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="<?= BASE_URL ?>dist/css/custom.css">
+  <script src='<?= BASE_URL ?>05-plugins/pdfmake/pdfmake.min.js'></script>
+  <script src='<?= BASE_URL ?>05-plugins/pdfmake/vfs_fonts.js'></script>
+</head>
+<body class="hold-transition sidebar-collapse layout-navbar-fixed">
+<div class="wrapper">
+
+  <!-- Navbar -->
+
+  <!-- /.navbar -->
+  <?php include '<?= BASE_URL ?>01-views/layout/navbar_layout.php';?> 
+  <!-- Main Sidebar Container -->
+
+  <!-- Content Wrapper. Contains page content -->
+  <div class="content-wrapper">
+    <!-- Content Header (Page header) -->
+    <section class="content-header">
+      <div class="container-fluid">
+        <div class="row mb-2">
+          <div class="col-sm-6">
+            <h1><strong>Listado de agentes</strong></h1>
+          </div>
+        </div>
+      </div><!-- /.container-fluid -->
+    </section>
+
+    <!-- Main content -->
+    <section class="content">
+      <div class="container-fluid">
+            <div class="row d-flex text-center justify-content-end p-2">
+              <button type="button" class="col-1 btn btn-warning btn-block mb-0 mt-0 mr-1 v-accion-ver-todos" data-accion="vertodos"><i class="fa fa-eye"></i> Todos</button><button onclick="window.location.href='agente_form.php'" type="button" class="col-1 btn btn-success btn-block mb-0 mt-0 mr-0"><i class="fa fa-plus-circle"></i> Agregar</button>
+            </div>
+        <div class="row">
+          <div class="col-12">
+            <div class="card">
+              <!-- /.card-header -->
+              <div class="card-body">
+                <table id="current_table" class="table table-bordered table-striped">
+                  <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Estado</th>
+                    <th>Apellido(s)</th>
+                    <th>Nombre(s)</th>
+                    <th>Tipo documento</th>
+                    <th>Nro. documento</th>
+                    <th>CUIL</th>
+                    <th>Fecha de nacimiento</th>
+                    <th>Fecha de ingreso</th>
+                    <th>Acciones</th>
+                  </tr>
+                  </thead>
+                  <tbody>
+                   <?php echo $filas?> 
+                  </tbody>
+                </table>
+              </div>
+              <!-- /.card-body -->
+            </div>
+            <!-- /.card -->
+          </div>
+          <!-- /.col -->
+        </div>
+        <!-- /.row -->
+      </div>
+      <!-- /.container-fluid -->
+    </section>
+    <!-- /.content -->
+  </div>
+  <!-- /.content-wrapper -->
+  <?php include BASE_URL.'01-views/layout/footer_layout.php';?>
+
+  <!-- Control Sidebar -->
+  <aside class="control-sidebar control-sidebar-dark">
+    <!-- Control sidebar content goes here -->
+  </aside>
+  <!-- /.control-sidebar -->
+</div>
+<!-- ./wrapper -->
+
+<!-- jQuery -->
+<script src="<?= BASE_URL ?>05-plugins/jquery/jquery.min.js"></script>
+<!-- Bootstrap 4 -->
+<script src="<?= BASE_URL ?>05-plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<!-- DataTables  & Plugins -->
+<script src="<?= BASE_URL ?>05-plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-buttons/js/dataTables.buttons.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-buttons/js/buttons.bootstrap4.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/jszip/jszip.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/pdfmake/pdfmake.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/pdfmake/vfs_fonts.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-buttons/js/buttons.html5.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-buttons/js/buttons.print.min.js"></script>
+<script src="<?= BASE_URL ?>05-plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
+<!-- AdminLTE App -->
+<script src="../dist/js/adminlte.min.js"></script>
+<!-- Page specific script -->
+
+<script>
+  $(function () {
+    $("#current_table").DataTable({
+      "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
+      "responsive": true, "lengthChange": true, "autoWidth": false,
+      "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
+      "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
+      "columns": [{ "width": "3%" }, { "width": "5%" }, null, null, { "width": "10%" }, { "width": "10%" }, { "width": "10%" }, { "width": "11%" }, { "width": "10%" }, { "width": "10%" }]
+    }).buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+  });
+</script>
+</body>
+</html>
+<script src="<?= BASE_URL ?>07-funciones_js/usuariosAcciones.js"></script>
+
+

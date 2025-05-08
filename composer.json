@@ -1,0 +1,11 @@
+{
+    "name": "charl/admin-tech",
+    "autoload": {
+        "psr-4": {
+            "Charl\\AdminTech\\": "src/"
+        }
+    },
+    "require": {
+        "dropbox/dropbox-sdk": "*"
+    }
+}
