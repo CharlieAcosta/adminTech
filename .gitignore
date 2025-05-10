@@ -1,9 +1,6 @@
-# Archivos y carpetas a ignorar
-/vendor/
-node_modules/
-.env
-*.log
-*.bak
-*.tmp
-.idea/
+*.tmp.driveupload
 .vscode/
+vendor/
+*.log
+
+
