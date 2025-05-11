@@ -3,5 +3,7 @@
 vendor/
 *.log
 uploads/visitas/
+log/
+log/log_fotos.txt
 
 
