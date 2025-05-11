@@ -3,3 +3,6 @@
 [2025-05-06 17:32:37] ✅ Depuración realizada. No se encontraron duplicados.
 [2025-05-06 17:32:45] ✅ Depuración realizada. No se encontraron duplicados.
 [2025-05-07 22:00:11] ✅ Depuración realizada. No se encontraron duplicados.
+[2025-05-10 16:24:44] ✅ Depuración realizada. No se encontraron duplicados.
+[2025-05-10 16:43:47] ✅ Depuración realizada. No se encontraron duplicados.
+[2025-05-10 16:43:47] ✅ Depuración realizada. No se encontraron duplicados.

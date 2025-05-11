@@ -2,6 +2,9 @@ $(document).ready(function() {
   // Objeto global donde vamos guardando imágenes por tarea
   const imagenesPorTarea = {};
   let hayCambios = false;
+  const fotosEliminadasPorTarea = {};
+  const fotos = {};
+
 
   // Inicializar select2 para Materiales
   $('.material-select').select2({
@@ -32,29 +35,30 @@ $(document).ready(function() {
   $(document).on('change', '.tarea-fotos', function() {
     hayCambios = true;
   });
-  $(document).on('click', '.eliminar-imagen', function() {
-    hayCambios = true;
-  });
 
-  // 1) Delegado para eliminar miniatura
   $(document).on('click', '.eliminar-imagen', function() {
     const $thumb = $(this).closest('.preview-img-container');
-    const idx    = parseInt($thumb.closest('.preview-fotos').attr('id').split('_').pop(), 10);
     const nombre = $thumb.data('nombre-archivo');
-
+    const idx = parseInt($thumb.closest('.preview-fotos').attr('id').split('_').pop(), 10);
+  
     // Quitar de la UI
     $thumb.remove();
-
-    // Registrar eliminación
-    window.fotosEliminadasPorTarea = window.fotosEliminadasPorTarea || {};
-    window.fotosEliminadasPorTarea[idx] = window.fotosEliminadasPorTarea[idx] || [];
-    window.fotosEliminadasPorTarea[idx].push(nombre);
-
-    // Actualizar también imagenesPorTarea si quieres
-    if (imagenesPorTarea[idx]) {
-      imagenesPorTarea[idx] = imagenesPorTarea[idx].filter(img => img.nombre !== nombre);
+  
+    // Inicializar si hace falta
+    fotosEliminadasPorTarea[idx] = fotosEliminadasPorTarea[idx] || [];
+    imagenesPorTarea[idx]     = imagenesPorTarea[idx]     || [];
+  
+    // Registrar eliminación **sin duplicados**
+    if (!fotosEliminadasPorTarea[idx].includes(nombre) && 
+        imagenesPorTarea[idx].some(img => img.nombre === nombre && img.file === null)
+    ) {
+      fotosEliminadasPorTarea[idx].push(nombre);
     }
+  
+    // Eliminar de la lista de imágenes en memoria
+    imagenesPorTarea[idx] = imagenesPorTarea[idx].filter(img => img.nombre !== nombre);
   });
+  
 
   // 2) Delegado para ampliar miniatura
   $(document).on('click', '.preview-img-container img', function() {
@@ -337,25 +341,6 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
         }
   });
 
-  $(document).on('click', '.btn-guardar-visita', function () {
-      //console.log('Guardar visita clickeado');
-
-      let faltaDescripcion = false;
-
-      $('.tarea-descripcion').each(function () {
-          if ($(this).val().trim() === '') {
-              faltaDescripcion = true;
-              $(this).addClass('is-invalid');
-          } else {
-              $(this).removeClass('is-invalid');
-          }
-      });
-
-      if (faltaDescripcion) {
-          mostrarAdvertencia('Debe completar la descripción de todas las tareas antes de guardar.', 4);
-          return;
-      }
-  });
 
   $(document).on('input', '.tarea-descripcion', function () {
       if ($(this).val().trim() !== '') {
@@ -630,174 +615,135 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
       });
   });
 
-  // Guardar visita
-  $(document).on('click', '.btn-guardar-visita', function () {
-      let tareas = [];
-      let hayError = false;
-
-      // 🔄 Reconstruir imagenesPorTarea a partir de previews ya existentes (modo edición)
-      $('.preview-fotos').each(function () {
-          const previewContainer = $(this);
-          const tareaIndex = parseInt(previewContainer.attr('id').replace('preview_fotos_tarea_', ''), 10);
-
-          if (!imagenesPorTarea[tareaIndex]) {
-              imagenesPorTarea[tareaIndex] = [];
-          }
-
-          previewContainer.find('.preview-img-container').each(function () {
-              const nombreArchivo = $(this).data('nombre-archivo');
-
-              // Creamos un objeto falso solo con el nombre (sin file real), para evitar duplicados
-              if (!imagenesPorTarea[tareaIndex].some(img => img.nombre === nombreArchivo)) {
-                  imagenesPorTarea[tareaIndex].push({ file: null, nombre: nombreArchivo });
-              }
-          });
+// Guardar visita
+$(document).on('click', '.btn-guardar-visita', function () {
+    $('#accordionTareas > .card').each(function() {
+        const idx = parseInt($(this)
+          .find('.preview-fotos')
+          .attr('id')
+          .replace('preview_fotos_tarea_', ''), 10);
+      
+        // FILTRAR: sólo dejamos los objetos con file real
+        imagenesPorTarea[idx] = (imagenesPorTarea[idx] || [])
+          .filter(img => img.file instanceof File);
       });
 
-      $('#accordionTareas > .card').each(function (index) {
-          const $tarea = $(this);
-          const $descripcionElem = $tarea.find('.tarea-descripcion');
-          if ($descripcionElem.length === 0) {
-              hayError = true;
-              console.warn(`No se encontró el campo de descripción en la tarea #${index + 1}`);
-              return;
-          }
-
-          const idTareaVal = $tarea.find('input[name="id_tarea[]"]').val() || null;
-          const descripcionVal = $descripcionElem.val() ?? '';
-          const idTarea = $tarea.data('id-tarea') ?? null;
-
-          if (descripcionVal.trim() === '') {
-              $descripcionElem.addClass('is-invalid');
-              hayError = true;
-              return;
-          } else {
-              $descripcionElem.removeClass('is-invalid');
-          }
-
-          // Recolectar materiales
-          let materiales = [];
-          $tarea.find('.materiales-table tbody tr').each(function () {
-              if (!$(this).hasClass('fila-vacia-materiales')) {
-                  const id = $(this).data('material-id');
-                  const cantidad = $(this).find('td:nth-child(3)').text();
-                  materiales.push({ id, cantidad });
-              }
-          });
-
-          // Recolectar mano de obra
-          let manoDeObra = [];
-          $tarea.find('.mano-obra-table tbody tr').each(function () {
-              if (!$(this).hasClass('fila-vacia-mano-obra')) {
-                  const id = $(this).find('input[name="mano_obra_id[]"]').val();
-                  const cantidad = $(this).find('input[name="mano_obra_cantidad[]"]').val();
-                  const observacion = $(this).find('input[name="mano_obra_observacion[]"]').val();
-                  manoDeObra.push({ id, cantidad, observacion });
-              }
-          });
-
-          // Recolectar fotos
-          const fotosInput = $tarea.find('.tarea-fotos')[0];
-          const fotos = imagenesPorTarea[index + 1] ?? [];
-
-          // Recolectar fotos eliminadas
-          let fotosEliminadas = [];
-          const indexVisual = index + 1;
-          if (window.fotosEliminadasPorTarea && window.fotosEliminadasPorTarea[indexVisual]) {
-              fotosEliminadas = window.fotosEliminadasPorTarea[indexVisual];
-          }
-
-          tareas.push({
-              id_tarea: idTareaVal,
-              descripcion: descripcionVal.trim(),
-              materiales,
-              manoDeObra,
-              fotos,
-              fotosEliminadas
-          });
-
-      });
-
-      if (hayError) {
-          mostrarAdvertencia('Debe completar la descripción de todas las tareas.', 4);
-          return;
+    // 1) Validar descripciones
+    let falta = false;
+    $('.tarea-descripcion').each(function () {
+      if (!$(this).val().trim()) {
+        falta = true;
+        $(this).addClass('is-invalid');
+      } else {
+        $(this).removeClass('is-invalid');
       }
-
-      const formData = new FormData();
-      formData.append('id_visita', $('#id_previsita').val());
-
-      tareas.forEach((tarea, i) => {
-          if (tarea.id_tarea) {
-              formData.append(`tareas[${i}][id_tarea]`, tarea.id_tarea);
-          }
-
-          formData.append(`tareas[${i}][descripcion]`, tarea.descripcion);
-
-          tarea.materiales.forEach((mat, j) => {
-              formData.append(`tareas[${i}][materiales][${j}][id]`, mat.id);
-              formData.append(`tareas[${i}][materiales][${j}][cantidad]`, mat.cantidad);
-          });
-
-          tarea.manoDeObra.forEach((mo, j) => {
-              formData.append(`tareas[${i}][mano_obra][${j}][id]`, mo.id);
-              formData.append(`tareas[${i}][mano_obra][${j}][cantidad]`, mo.cantidad);
-              formData.append(`tareas[${i}][mano_obra][${j}][observacion]`, mo.observacion);
-          });
-
-          // Adjuntar fotos eliminadas
-          tarea.fotosEliminadas.forEach((nombreArchivo, j) => {
-              formData.append(`tareas[${i}][fotos_eliminadas][${j}]`, nombreArchivo);
-          });
-
-          tarea.fotos.forEach((imgObj, j) => {
-              const clave = `foto_tarea_${i}_${j}`;
-              formData.append(clave, imgObj.file);
-          });
-
+    });
+    if (falta) {
+      mostrarAdvertencia('Debe completar la descripción de todas las tareas antes de guardar.', 4);
+      return;
+    }
+  
+    // 2) Preparar FormData
+    const formData = new FormData();
+    formData.append('id_visita', $('#id_previsita').val());
+  
+    // 3) Para cada card de tarea, usamos su data-index real
+    $('#accordionTareas > .card').each(function () {
+      const $card = $(this);
+      // 🏷️ obtenemos el índice de tarea a partir del ID de la zona de fotos:
+      const tareaIndex = parseInt(
+        $card.find('.preview-fotos').attr('id').replace('preview_fotos_tarea_', ''),
+        10
+      );
+  
+      // 3.1) ID de la tarea (si existe)
+      const idTarea = $card.find('input[name="id_tarea[]"]').val();
+      if (idTarea) {
+        formData.append(`tareas[${tareaIndex}][id_tarea]`, idTarea);
+      }
+  
+      // 3.2) Descripción
+      const desc = $card.find('textarea.tarea-descripcion').val().trim();
+      formData.append(`tareas[${tareaIndex}][descripcion]`, desc);
+  
+      // 3.3) Materiales
+      $card.find('.materiales-table tbody tr').each(function (j) {
+        if (!$(this).hasClass('fila-vacia-materiales')) {
+          const idMat = $(this).data('material-id');
+          const cant  = $(this).find('td:nth-child(3)').text();
+          formData.append(`tareas[${tareaIndex}][materiales][${j}][id]`, idMat);
+          formData.append(`tareas[${tareaIndex}][materiales][${j}][cantidad]`, cant);
+        }
       });
-
-      // Enviar por AJAX
-      for (var pair of formData.entries()) {
-        console.log(pair[0]+ ':', pair[1]);
-      }      
-      $.ajax({
-          url: '../06-funciones_php/guardar_visita.php',
-          method: 'POST',
-          data: formData,
-          contentType: false,
-          processData: false,
-          success: function (resp) {
-              console.log('Respuesta servidor:', resp);
-              try {
-                  const res = resp;
-                  if (res.status === true) {
-                      $('#accordionTareas > .card').each(function (index) {
-                        $(this).attr('data-id-tarea', res.ids_tareas[index]);
-                        // Insertar input oculto con id_tarea si no existe ya
-                        let inputId = $(this).find('input[name="id_tarea[]"]');
-                        if (inputId.length === 0) {
-                            $(this).find('.tarea-descripcion')
-                            .closest('.card-body')
-                            .append(`<input type="hidden" class="tarea-id-oculto" name="id_tarea[]" value="${res.ids_tareas[index]}">`);
-                        } else {
-                            inputId.val(res.ids_tareas[index]);
-                        }
-                      });
-                      hayCambios = false;        // <— RESET del flag
-                      mostrarExito('Visita guardada correctamente', 4);
-                  } else {
-                      mostrarError(res.mensaje || 'Error al guardar.', 4);
-                  }
-              } catch (e) {
-                  mostrarError('Respuesta inválida del servidor.', 4);
-              }
-          },
-          error: function () {
-              mostrarError('Error al comunicar con el servidor.', 4);
-          }
+  
+      // 3.4) Mano de obra
+      $card.find('.mano-obra-table tbody tr').each(function (j) {
+        if (!$(this).hasClass('fila-vacia-mano-obra')) {
+          const idMo = $(this).find('input[name="mano_obra_id[]"]').val();
+          const cant = $(this).find('input[name="mano_obra_cantidad[]"]').val();
+          const obs  = $(this).find('input[name="mano_obra_observacion[]"]').val();
+          formData.append(`tareas[${tareaIndex}][mano_obra][${j}][id]`, idMo);
+          formData.append(`tareas[${tareaIndex}][mano_obra][${j}][cantidad]`, cant);
+          formData.append(`tareas[${tareaIndex}][mano_obra][${j}][observacion]`, obs);
+        }
       });
+  
+      // 3.5) Fotos eliminadas (solo los nombres que el usuario borró)
+      (fotosEliminadasPorTarea[tareaIndex] || []).forEach((nombre, j) => {
+        formData.append(
+          `tareas[${tareaIndex}][fotos_eliminadas][${j}]`,
+          nombre
+        );
+      });
+  
+      // 3.6) Fotos nuevas (solo los File)
+      (imagenesPorTarea[tareaIndex] || []).forEach((imgObj, j) => {
+        if (imgObj.file instanceof File) {
+          // OBSERVA: uso tareaIndex, **no** la variable i del forEach de tareas
+          formData.append(`foto_tarea_${tareaIndex}_${j}`, imgObj.file);
+        }
+      });
+    });
+  
+    // 4) Envío AJAX
+    $.ajax({
+      url: '../06-funciones_php/guardar_visita.php',
+      method: 'POST',
+      data: formData,
+      contentType: false,
+      processData: false,
+      success(resp) {
+        if (resp.status) {
+          // Actualizar los hidden id_tarea[] con los nuevos IDs
+          $('#accordionTareas > .card').each(function () {
+            const $c = $(this);
+            const idx = parseInt(
+              $c.find('.preview-fotos').attr('id').replace('preview_fotos_tarea_', ''),
+              10
+            );
+            const newId = resp.ids_tareas[idx];
+            let $hid = $c.find('input[name="id_tarea[]"]');
+            if ($hid.length) {
+              $hid.val(newId);
+            } else {
+              $c.find('.card-body')
+                .append(`<input type="hidden" name="id_tarea[]" value="${newId}">`);
+            }
+          });
+          hayCambios = false;
+          mostrarExito('Visita guardada correctamente', 4);
+        } else {
+          mostrarError(resp.mensaje || 'Error al guardar.', 4);
+        }
+      },
+      error() {
+        mostrarError('Error al comunicar con el servidor.', 4);
+      }
+    });
   });
-
+  // ——— Fin del handler unificado ———
+  
+  
 
   $(document).on('click', '.btn-cancelar-visita', function() {
     if (!hayCambios) {
@@ -806,7 +752,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
     } else {
       // Hay cambios, pedimos confirmación
       mostrarConfirmacion(
-        'Tiene cambios sin guardar, <strong>¿continúas de todas maneras?</strong>',
+        'Tiene cambios sin guardar, <strong>¿Continua la salida sin guardarS?</strong>',
         // onConfirm
         () => window.location.href = 'seguimiento_de_obra_listado.php',
         // onCancel (opcional, lo dejamos null para que cierre el modal)
@@ -816,99 +762,109 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
   });
 
 
-  // ======= POBLAR DESDE EL BACKEND =======
-  if (typeof tareasVisitadas !== 'undefined' && tareasVisitadas.length) {
-    // Población de la primera tarea (ya existe en el HTML inicial)
-    const primera = tareasVisitadas[0];
-    $('#collapseTarea1 textarea.tarea-descripcion')
-      .val(primera.descripcion)
-      .trigger('input');
 
-    // Materiales
-    primera.materiales.forEach(mat => {
-      const $btn = $('#collapseTarea1 .agregar-material');
-      const $sel = $btn.closest('.card-body').find('.material-select');
-      $sel.val(mat.id_material).trigger('change');
-      $btn.closest('.card-body').find('.material-cantidad').val(mat.cantidad);
-      $btn.click();
-    });
-
-    // Mano de obra
-    primera.mano_obra.forEach(mo => {
-      const $btn = $('#collapseTarea1 .agregar-mano-obra');
-      const $sel = $btn.closest('.card-body').find('.mano-obra-select');
-      $sel.val(mo.id_jornal).trigger('change');
-      $btn.closest('.card-body').find('.mano-obra-cantidad').val(mo.cantidad);
-      $btn.click();
-      // poner la observación
-      $('#collapseTarea1 .mano-obra-table tbody tr:last')
-        .find('input[name="mano_obra_observacion[]"]')
-        .val(mo.observaciones);
-    });
-
-    // Fotos
-    primera.fotos.forEach(f => {
-      const cont = $('#preview_fotos_tarea_1');
-      const thumb = $(`
-        <div class="preview-img-container position-relative d-inline-block m-1" data-nombre-archivo="${f.nombre_archivo}">
-          <img src="${f.ruta_archivo}" class="img-thumbnail" style="width:100px;height:100px;object-fit:cover;">
-          <i class="fa fa-times-circle text-white rounded-circle position-absolute eliminar-imagen"
-             style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
-        </div>
-      `);
-      cont.append(thumb);
-      imagenesPorTarea[1] = imagenesPorTarea[1]||[];
-      imagenesPorTarea[1].push({ file: null, nombre: f.nombre_archivo });
-    });
-
-    // Para las tareas adicionales
-    for (let i = 1; i < tareasVisitadas.length; i++) {
-      $('#btn-agregar-tarea').click();
-      const tarea = tareasVisitadas[i];
+// ======= POBLAR DESDE EL BACKEND =======
+if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
+    // Reiniciamos trackers
+    Object.keys(fotosEliminadasPorTarea).forEach(k => delete fotosEliminadasPorTarea[k]);
+    // Para cada tarea que vino del servidor...
+    tareasVisitadas.forEach((tarea, i) => {
       const num = i + 1;
+  
+      // 1) Si no es la primera, simulamos click en "Agregar nueva tarea"
+      if (i > 0) {
+        $('#btn-agregar-tarea').click();
+      }
+  
+      // 2) Referencia al card recién creado o inicial
       const $card = $(`#headingTarea${num}`).closest('.card');
-
-      // Descripción
+  
+      // 3) Descripción
       $card.find('textarea.tarea-descripcion')
-           .val(tarea.descripcion).trigger('input');
-
-      // Materiales
+           .val(tarea.descripcion)
+           .trigger('input');
+  
+      // 4) Hidden con el ID real de la tarea
+      let $hid = $card.find('input[name="id_tarea[]"]');
+      if ($hid.length) {
+        $hid.val(tarea.id_tarea);
+      } else {
+        $card.find('.card-body')
+             .append(`<input type="hidden" name="id_tarea[]" value="${tarea.id_tarea}">`);
+      }
+  
+      // 5) Materiales
       tarea.materiales.forEach(mat => {
-        const $b = $card.find('.agregar-material');
-        const $s = $b.closest('.card-body').find('.material-select');
-        $s.val(mat.id_material).trigger('change');
-        $b.closest('.card-body').find('.material-cantidad').val(mat.cantidad);
-        $b.click();
+        const $btnMat = $card.find('.agregar-material');
+        const $selMat = $card.find('.material-select');
+        $selMat.val(mat.id_material).trigger('change');
+        $card.find('.material-cantidad').val(mat.cantidad);
+        $btnMat.click();
       });
-
-      // Mano de obra
+  
+      // 6) Mano de obra
       tarea.mano_obra.forEach(mo => {
-        const $b = $card.find('.agregar-mano-obra');
-        const $s = $b.closest('.card-body').find('.mano-obra-select');
-        $s.val(mo.id_jornal).trigger('change');
-        $b.closest('.card-body').find('.mano-obra-cantidad').val(mo.cantidad);
-        $b.click();
+        const $btnMO = $card.find('.agregar-mano-obra');
+        const $selMO = $card.find('.mano-obra-select');
+        $selMO.val(mo.id_jornal).trigger('change');
+        $card.find('.mano-obra-cantidad').val(mo.cantidad);
+        $btnMO.click();
+        // luego ponemos la observación
         $card.find('.mano-obra-table tbody tr:last')
              .find('input[name="mano_obra_observacion[]"]')
              .val(mo.observaciones);
       });
+  
+        // 7) Fotos
+        imagenesPorTarea[num]       = [];
+        fotosEliminadasPorTarea[num] = [];
 
-      // Fotos
-      tarea.fotos.forEach(f => {
-        const cont = $(`#preview_fotos_tarea_${num}`);
+        const $preview = $(`#preview_fotos_tarea_${num}`);
+        tarea.fotos.forEach(f => {
         const thumb = $(`
-          <div class="preview-img-container position-relative d-inline-block m-1" data-nombre-archivo="${f.nombre_archivo}">
-            <img src="${f.ruta_archivo}" class="img-thumbnail" style="width:100px;height:100px;object-fit:cover;">
+            <div class="preview-img-container position-relative d-inline-block m-1"
+                data-nombre-archivo="${f.nombre_archivo}">
+            <img src="${f.ruta_archivo}"
+                class="img-thumbnail"
+                style="width:100px;height:100px;object-fit:cover;">
             <i class="fa fa-times-circle text-white rounded-circle position-absolute eliminar-imagen"
-               style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
-          </div>
+                style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
+            </div>
         `);
-        cont.append(thumb);
-        imagenesPorTarea[num] = imagenesPorTarea[num]||[];
+
+        // Guardar en array global como foto "existente"
         imagenesPorTarea[num].push({ file: null, nombre: f.nombre_archivo });
-      });
-    }
+
+        // ✅ Evento para eliminar imagen repoblada
+        thumb.find('.eliminar-imagen').on('click', function () {
+            const $thumb = $(this).closest('.preview-img-container');
+            const nombre = $thumb.data('nombre-archivo');
+
+            // Inicializar arrays si hiciera falta
+            fotosEliminadasPorTarea[num] = fotosEliminadasPorTarea[num] || [];
+            imagenesPorTarea[num] = imagenesPorTarea[num] || [];
+
+            // Agregar a array de eliminadas (sin duplicados)
+            if (!fotosEliminadasPorTarea[num].includes(nombre)) {
+            fotosEliminadasPorTarea[num].push(nombre);
+            }
+
+            // Eliminar de imágenes en memoria
+            imagenesPorTarea[num] = imagenesPorTarea[num].filter(img => img.nombre !== nombre);
+
+            // Eliminar del DOM
+            $thumb.remove();
+        });
+
+  // Agregar al contenedor
+  $preview.append(thumb);
+});
+
+    });
   }
-// ======= FIN POBLACIÓN BACKEND =======
+  // ======= FIN POBLACIÓN BACKEND =======
+  
+
+  
 
 });

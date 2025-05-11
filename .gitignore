@@ -2,5 +2,6 @@
 .vscode/
 vendor/
 *.log
+uploads/visitas/
 
 

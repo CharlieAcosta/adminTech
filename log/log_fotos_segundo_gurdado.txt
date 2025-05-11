@@ -1,0 +1,149 @@
+Array
+(
+    [foto_tarea_1_0] => Array
+        (
+            [name] => Foto c.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php263E.tmp
+            [error] => 0
+            [size] => 458213
+        )
+
+    [foto_tarea_1_1] => Array
+        (
+            [name] => buda.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php263F.tmp
+            [error] => 0
+            [size] => 69486
+        )
+
+    [foto_tarea_2_0] => Array
+        (
+            [name] => Foto B.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2640.tmp
+            [error] => 0
+            [size] => 287393
+        )
+
+    [foto_tarea_2_1] => Array
+        (
+            [name] => WhatsApp Image 2025-04-10 at 15.27.30 (1).jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2650.tmp
+            [error] => 0
+            [size] => 70244
+        )
+
+    [foto_tarea_3_0] => Array
+        (
+            [name] => Foto A.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2651.tmp
+            [error] => 0
+            [size] => 320321
+        )
+
+    [foto_tarea_3_1] => Array
+        (
+            [name] => WhatsApp Image 2025-04-13 at 11.04.05.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2652.tmp
+            [error] => 0
+            [size] => 171266
+        )
+
+)
+--- NUEVO INGRESO ---
+🟠 _POST:
+Array
+(
+    [id_visita] => 107
+    [tareas] => Array
+        (
+            [1] => Array
+                (
+                    [id_tarea] => 1
+                    [descripcion] => T1
+                )
+
+            [2] => Array
+                (
+                    [id_tarea] => 2
+                    [descripcion] => T2
+                )
+
+            [3] => Array
+                (
+                    [id_tarea] => 3
+                    [descripcion] => T3
+                )
+
+        )
+
+)
+🔵 _FILES:
+Array
+(
+    [foto_tarea_1_0] => Array
+        (
+            [name] => Foto c.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php263E.tmp
+            [error] => 0
+            [size] => 458213
+        )
+
+    [foto_tarea_1_1] => Array
+        (
+            [name] => buda.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php263F.tmp
+            [error] => 0
+            [size] => 69486
+        )
+
+    [foto_tarea_2_0] => Array
+        (
+            [name] => Foto B.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2640.tmp
+            [error] => 0
+            [size] => 287393
+        )
+
+    [foto_tarea_2_1] => Array
+        (
+            [name] => WhatsApp Image 2025-04-10 at 15.27.30 (1).jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2650.tmp
+            [error] => 0
+            [size] => 70244
+        )
+
+    [foto_tarea_3_0] => Array
+        (
+            [name] => Foto A.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2651.tmp
+            [error] => 0
+            [size] => 320321
+        )
+
+    [foto_tarea_3_1] => Array
+        (
+            [name] => WhatsApp Image 2025-04-13 at 11.04.05.jpeg
+            [type] => image/jpeg
+            [tmp_name] => C:\wamp64\tmp\php2652.tmp
+            [error] => 0
+            [size] => 171266
+        )
+
+)
+✔️ Saved foto_681fcc839b858_Foto c.jpeg
+✔️ Saved foto_681fcc839c82d_buda.jpg
+✔️ Saved foto_681fcc839d230_Foto B.jpeg
+✔️ Saved foto_681fcc839d91c_WhatsApp Image 2025-04-10 at 15.27.30 (1).jpeg
+✔️ Saved foto_681fcc839e00b_Foto A.jpeg
+✔️ Saved foto_681fcc839e72e_WhatsApp Image 2025-04-13 at 11.04.05.jpeg
