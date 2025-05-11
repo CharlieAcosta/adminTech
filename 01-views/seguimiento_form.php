@@ -240,7 +240,12 @@ $opcionesManoDeObra = arrayToOptionsV2(
     <div class="card-header" id="headingOne">
       <h2 class="mb-0 d-flex justify-content-between align-items-center">
         <button class="btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-          Pre-visita <?php echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>'); ?>
+        Pre-visita <?php 
+          echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>');
+          if (!empty($datos['razon_social'])) {
+            echo ' | ' . strtoupper($datos['razon_social']);
+          }
+        ?>
         </button>
         <small><span><i class="fas fa-print fa-xs v-icon-pointer v-icon-accion" data-accion="pdf-previsita" data-toggle="tooltip" data-placement="top" title="Imprimir" style="color: #ffffff;"></i></span></small>
       </h2>
@@ -783,7 +788,7 @@ $opcionesManoDeObra = arrayToOptionsV2(
           <!-- Botones generales -->
           <div class="text-center">
             <button type="button" class="btn btn-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
-            <button type="button" class="btn btn-info mr-2 btn-uniform">Generar Presupuesto</button>
+            <button type="button" class="btn btn-info mr-2 btn-uniform btn-generar-presupuesto">Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
           </div>
 

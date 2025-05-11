@@ -1,4 +1,7 @@
 $(document).ready(function() {
+    let modoVisualizacion = false;
+    let snapshotFormulario = '';
+
   // Objeto global donde vamos guardando imágenes por tarea
   const imagenesPorTarea = {};
   let hayCambios = false;
@@ -23,20 +26,21 @@ $(document).ready(function() {
 
   // 1) Cualquier input, select o textarea modificado dispara el flag
   $(document).on('change input', 'input, textarea, select', function() {
-    hayCambios = true;
+    if (!modoVisualizacion) hayCambios = true;
   });
 
   // 2) Añadir o eliminar materiales / mano de obra también cuenta
   $(document).on('click', '.agregar-material, .eliminar-material, .agregar-mano-obra, .eliminar-mano-obra', function() {
-    hayCambios = true;
+    if (!modoVisualizacion) hayCambios = true;;
   });
 
   // 3) Subir o eliminar fotos marca cambios
   $(document).on('change', '.tarea-fotos', function() {
-    hayCambios = true;
+    if (!modoVisualizacion) hayCambios = true;;
   });
 
   $(document).on('click', '.eliminar-imagen', function() {
+    if (!modoVisualizacion) hayCambios = true;
     const $thumb = $(this).closest('.preview-img-container');
     const nombre = $thumb.data('nombre-archivo');
     const idx = parseInt($thumb.closest('.preview-fotos').attr('id').split('_').pop(), 10);
@@ -321,7 +325,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
   // ACCIONES Y EVENTOS
   $(document).on('click', '#btn-agregar-tarea', function () {
       //console.log('Agregar nueva tarea clickeado');
-        
+        if (!modoVisualizacion) hayCambios = true;
         let hayDescripcionIncompleta = false;
 
           $('.tarea-descripcion').each(function () {
@@ -570,7 +574,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
   // eliminar tarea
   $(document).on('click', '.eliminar-tarea', function () {
       const totalTareas = $('#accordionTareas > .card').length;
-
+      if (!modoVisualizacion) hayCambios = true;
       // Evitar eliminar si queda solo una
       if (totalTareas === 1) {
           mostrarAdvertencia('Debe quedar al menos una tarea.', 4);
@@ -741,79 +745,83 @@ $(document).on('click', '.btn-guardar-visita', function () {
       }
     });
   });
-  // ——— Fin del handler unificado ———
   
+  $(document).on('click', '.btn-cancelar-visita', function () {
+    if (modoVisualizacion) {
+      // En modo visualización, salir directamente sin preguntar
+      window.location.href = 'seguimiento_de_obra_listado.php';
+      return;
+    }
   
-
-  $(document).on('click', '.btn-cancelar-visita', function() {
     if (!hayCambios) {
-      // No hay cambios, vamos directo
+      // Si no hubo cambios, salir directo
       window.location.href = 'seguimiento_de_obra_listado.php';
     } else {
-      // Hay cambios, pedimos confirmación
+      // Si hubo cambios, mostrar confirmación
       mostrarConfirmacion(
-        'Tiene cambios sin guardar, <strong>¿Continua la salida sin guardarS?</strong>',
-        // onConfirm
+        'Tiene cambios sin guardar, <strong>¿deseas salir de todas maneras?</strong>',
         () => window.location.href = 'seguimiento_de_obra_listado.php',
-        // onCancel (opcional, lo dejamos null para que cierre el modal)
         null
       );
     }
   });
-
-
-
+  
+  
 // ======= POBLAR DESDE EL BACKEND =======
 if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
+    modoVisualizacion = $('form').find('.v-id').data('visualiza') === 'on';
+
     // Reiniciamos trackers
     Object.keys(fotosEliminadasPorTarea).forEach(k => delete fotosEliminadasPorTarea[k]);
+
+
     // Para cada tarea que vino del servidor...
     tareasVisitadas.forEach((tarea, i) => {
       const num = i + 1;
   
-      // 1) Si no es la primera, simulamos click en "Agregar nueva tarea"
-      if (i > 0) {
-        $('#btn-agregar-tarea').click();
-      }
+        // 1) Si no es la primera, simulamos click en "Agregar nueva tarea"
+        if (i > 0) {
+            $('#btn-agregar-tarea').click();
+        }
   
-      // 2) Referencia al card recién creado o inicial
-      const $card = $(`#headingTarea${num}`).closest('.card');
+        // 2) Referencia al card recién creado o inicial
+        const $card = $(`#headingTarea${num}`).closest('.card');
   
-      // 3) Descripción
-      $card.find('textarea.tarea-descripcion')
-           .val(tarea.descripcion)
-           .trigger('input');
+        // 3) Descripción
+        $card.find('textarea.tarea-descripcion')
+            .val(tarea.descripcion)
+            .trigger('input');
   
-      // 4) Hidden con el ID real de la tarea
-      let $hid = $card.find('input[name="id_tarea[]"]');
-      if ($hid.length) {
-        $hid.val(tarea.id_tarea);
-      } else {
-        $card.find('.card-body')
-             .append(`<input type="hidden" name="id_tarea[]" value="${tarea.id_tarea}">`);
-      }
+        // 4) Hidden con el ID real de la tarea
+        let $hid = $card.find('input[name="id_tarea[]"]');
+        if ($hid.length) {
+            $hid.val(tarea.id_tarea);
+        } else {
+            $card.find('.card-body')
+                .append(`<input type="hidden" name="id_tarea[]" value="${tarea.id_tarea}">`);
+        }
   
-      // 5) Materiales
-      tarea.materiales.forEach(mat => {
-        const $btnMat = $card.find('.agregar-material');
-        const $selMat = $card.find('.material-select');
-        $selMat.val(mat.id_material).trigger('change');
-        $card.find('.material-cantidad').val(mat.cantidad);
-        $btnMat.click();
-      });
+        // 5) Materiales
+        tarea.materiales.forEach(mat => {
+            const $btnMat = $card.find('.agregar-material');
+            const $selMat = $card.find('.material-select');
+            $selMat.val(mat.id_material).trigger('change');
+            $card.find('.material-cantidad').val(mat.cantidad);
+            $btnMat.click();
+        });
   
-      // 6) Mano de obra
-      tarea.mano_obra.forEach(mo => {
-        const $btnMO = $card.find('.agregar-mano-obra');
-        const $selMO = $card.find('.mano-obra-select');
-        $selMO.val(mo.id_jornal).trigger('change');
-        $card.find('.mano-obra-cantidad').val(mo.cantidad);
-        $btnMO.click();
-        // luego ponemos la observación
-        $card.find('.mano-obra-table tbody tr:last')
-             .find('input[name="mano_obra_observacion[]"]')
-             .val(mo.observaciones);
-      });
+        // 6) Mano de obra
+        tarea.mano_obra.forEach(mo => {
+            const $btnMO = $card.find('.agregar-mano-obra');
+            const $selMO = $card.find('.mano-obra-select');
+            $selMO.val(mo.id_jornal).trigger('change');
+            $card.find('.mano-obra-cantidad').val(mo.cantidad);
+            $btnMO.click();
+            // luego ponemos la observación
+            $card.find('.mano-obra-table tbody tr:last')
+                .find('input[name="mano_obra_observacion[]"]')
+                .val(mo.observaciones);
+        });
   
         // 7) Fotos
         imagenesPorTarea[num]       = [];
@@ -821,48 +829,91 @@ if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
 
         const $preview = $(`#preview_fotos_tarea_${num}`);
         tarea.fotos.forEach(f => {
-        const thumb = $(`
-            <div class="preview-img-container position-relative d-inline-block m-1"
-                data-nombre-archivo="${f.nombre_archivo}">
-            <img src="${f.ruta_archivo}"
-                class="img-thumbnail"
-                style="width:100px;height:100px;object-fit:cover;">
-            <i class="fa fa-times-circle text-white rounded-circle position-absolute eliminar-imagen"
-                style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
-            </div>
-        `);
+                const thumb = $(`
+                    <div class="preview-img-container position-relative d-inline-block m-1"
+                        data-nombre-archivo="${f.nombre_archivo}">
+                    <img src="${f.ruta_archivo}"
+                        class="img-thumbnail"
+                        style="width:100px;height:100px;object-fit:cover;">
+                    <i class="fa fa-times-circle text-white rounded-circle position-absolute eliminar-imagen"
+                        style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
+                    </div>
+                `);
 
-        // Guardar en array global como foto "existente"
-        imagenesPorTarea[num].push({ file: null, nombre: f.nombre_archivo });
+                // Guardar en array global como foto "existente"
+                imagenesPorTarea[num].push({ file: null, nombre: f.nombre_archivo });
 
-        // ✅ Evento para eliminar imagen repoblada
-        thumb.find('.eliminar-imagen').on('click', function () {
-            const $thumb = $(this).closest('.preview-img-container');
-            const nombre = $thumb.data('nombre-archivo');
+                // ✅ Evento para eliminar imagen repoblada
+                thumb.find('.eliminar-imagen').on('click', function () {
+                    const $thumb = $(this).closest('.preview-img-container');
+                    const nombre = $thumb.data('nombre-archivo');
 
-            // Inicializar arrays si hiciera falta
-            fotosEliminadasPorTarea[num] = fotosEliminadasPorTarea[num] || [];
-            imagenesPorTarea[num] = imagenesPorTarea[num] || [];
+                    // Inicializar arrays si hiciera falta
+                    fotosEliminadasPorTarea[num] = fotosEliminadasPorTarea[num] || [];
+                    imagenesPorTarea[num] = imagenesPorTarea[num] || [];
 
-            // Agregar a array de eliminadas (sin duplicados)
-            if (!fotosEliminadasPorTarea[num].includes(nombre)) {
-            fotosEliminadasPorTarea[num].push(nombre);
-            }
+                    // Agregar a array de eliminadas (sin duplicados)
+                    if (!fotosEliminadasPorTarea[num].includes(nombre)) {
+                    fotosEliminadasPorTarea[num].push(nombre);
+                    }
 
-            // Eliminar de imágenes en memoria
-            imagenesPorTarea[num] = imagenesPorTarea[num].filter(img => img.nombre !== nombre);
+                    // Eliminar de imágenes en memoria
+                    imagenesPorTarea[num] = imagenesPorTarea[num].filter(img => img.nombre !== nombre);
 
-            // Eliminar del DOM
-            $thumb.remove();
+                    // Eliminar del DOM
+                    $thumb.remove();
+                });
+
+            // Agregar al contenedor
+            $preview.append(thumb);
         });
 
-  // Agregar al contenedor
-  $preview.append(thumb);
-});
+        // Deshabilitar campos si estamos en modo visualización
+        if (modoVisualizacion) {
+            const contenedorTarea = $(`#collapseTarea${num}`);
+
+            // 🔒 Deshabilitar todos los campos de la tarea
+            contenedorTarea.find('input, textarea, select, button').prop('disabled', true);
+
+            // ❌ Eliminar tachitos de encabezado
+            contenedorTarea.closest('.card').find('.eliminar-tarea').remove();
+
+            // ❌ Eliminar tachitos de tablas (materiales, mano de obra, fotos)
+            contenedorTarea.find('.eliminar-material').closest('td').remove();
+            contenedorTarea.find('.eliminar-mano-obra').closest('td').remove();
+            contenedorTarea.find('.eliminar-imagen').remove();
+
+            // ❌ Ocultar campo de selección de fotos
+            contenedorTarea.find('.custom-file').hide();
+
+            // ❌ Ocultar fila superior de materiales (select + input + botón)
+            contenedorTarea.find('.material-select').closest('.form-row').hide();
+
+            // ❌ Ocultar fila superior de mano de obra (select + input + botón)
+            contenedorTarea.find('.mano-obra-select').closest('.form-row').hide();
+
+            // ✅ Solo mostrar botón "Volver"
+            $('#btn-agregar-tarea').hide();
+            $('.btn-guardar-visita').hide();
+            $('.btn-generar-presupuesto').hide();
+            $('.btn-cancelar-visita').show().text('Volver');
+
+            // 🎯 Expandir solo esta tarea
+            $(`#accordionTareas .collapse`).removeClass('show');
+            contenedorTarea.addClass('show');
+
+            // Eliminar columna "Acción" de materiales
+            contenedorTarea.find('.materiales-table thead tr th:last-child').remove();
+
+            // Eliminar columna "Acción" de mano de obra
+            contenedorTarea.find('.mano-obra-table thead tr th:last-child').remove();           
+
+        }
 
     });
-  }
-  // ======= FIN POBLACIÓN BACKEND =======
+
+}
+// ======= FIN POBLACIÓN BACKEND =======
   
 
   
