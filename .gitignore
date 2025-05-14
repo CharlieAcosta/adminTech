@@ -1,12 +1,14 @@
-*.tmp.driveupload        # ignora archivos temporales de Google Drive
-.vscode/                 # ignora configuración local de VSCode
-vendor/                  # ignora dependencias PHP instaladas por Composer
-*.log                    # ignora todos los archivos con extensión .log
+# ignora la carpeta completa y su contenido
+.tmp.driveupload/
+.vscode/
+vendor/
 
-uploads/visitas/**        # ignora recursivamente todo lo que haya dentro de visitas/
-!uploads/visitas/.gitkeep # PERMITE mantener la carpeta visitas en el repo usando .gitkeep
+# visitas: ignora todo dentro de visitas, menos el .gitkeep
+uploads/visitas/
+!uploads/visitas/.gitkeep
 
-log/*                    # ignora todo el contenido dentro del directorio log
+# log: ignora la carpeta entera
+log/
 
 
 
