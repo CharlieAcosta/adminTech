@@ -146,10 +146,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $moId = (int)$mo['id'];
                 $cant = (int)$mo['cantidad'];
                 $obs  = trim((string)($mo['observacion'] ?? ''));
+                $dias = isset($mo['dias']) ? (int)$mo['dias'] : 1;
                 $stm = $db->prepare(
-                    "INSERT INTO visita_tarea_mano_obra (id_tarea,id_jornal,cantidad,observaciones) VALUES (?,?,?,?)"
+                    "INSERT INTO visita_tarea_mano_obra (id_tarea, id_jornal, cantidad, dias, observaciones) VALUES (?,?,?,?,?)"
                 );
-                $stm->bind_param('iiis', $tareaId, $moId, $cant, $obs);
+                $stm->bind_param('iiiis', $tareaId, $moId, $cant, $dias, $obs);               
                 $stm->execute();
                 $stm->close();
             }

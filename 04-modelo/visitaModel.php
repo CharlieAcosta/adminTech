@@ -47,17 +47,18 @@ function modGetTareasByVisitaId(int $id_visita, string $callType = 'php') {
         }
 
         // 3) Mano de obra de la tarea
-        $sqlJ = "SELECT mo.id_jornal, mo.cantidad, mo.observaciones,
-                        j.jornal_codigo, j.jornal_descripcion
-                 FROM visita_tarea_mano_obra mo
-                 JOIN tipo_jornales j ON j.jornal_id = mo.id_jornal
-                 WHERE mo.id_tarea = $tid";
+        $sqlJ = "SELECT mo.id_jornal, mo.cantidad, mo.dias, mo.observaciones,
+        j.jornal_codigo, j.jornal_descripcion
+        FROM visita_tarea_mano_obra mo
+        JOIN tipo_jornales j ON j.jornal_id = mo.id_jornal
+        WHERE mo.id_tarea = $tid";
         $resJ = mysqli_query($db, $sqlJ);
         if ($resJ) {
             while ($rowJ = mysqli_fetch_assoc($resJ)) {
                 $tarea['mano_obra'][] = [
                     'id_jornal'          => (int)$rowJ['id_jornal'],
                     'cantidad'           => $rowJ['cantidad'],
+                    'dias'               => (int)$rowJ['dias'],                   
                     'observaciones'      => $rowJ['observaciones'],
                     'jornal_codigo'      => $rowJ['jornal_codigo'],
                     'jornal_descripcion' => $rowJ['jornal_descripcion'],

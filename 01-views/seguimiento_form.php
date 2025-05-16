@@ -727,18 +727,20 @@ $opcionesManoDeObra = arrayToOptionsV2(
 
                           <div class="table-responsive">
                             <table class="table table-bordered mano-obra-table mb-2">
-                              <thead class="thead-light">
+                              <thead class="thead-light text-center">
                                 <tr>
                                   <th>#</th>
                                   <th>Mano de obra</th>
                                   <th>Cantidad</th>
+                                  <th>Días</th>
+                                  <th>Jornales</th>
                                   <th>Observaciones</th>
                                   <th>Acción</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 <tr class="fila-vacia-mano-obra">
-                                  <td colspan="5" class="text-center text-muted">Sin mano de obra asociada</td>
+                                  <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
                                 </tr>
                               </tbody>
                             </table>

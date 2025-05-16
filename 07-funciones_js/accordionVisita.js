@@ -166,6 +166,16 @@ $(document).ready(function() {
 
   // Función para agregar mano de obra  
   $(document).on('click', '.agregar-mano-obra', function () {
+
+      // Recalcular jornales al modificar cantidad o días
+      $(document).on('input', '.mano-obra-cantidad, .mano-obra-dias', function () {
+        const $row = $(this).closest('tr');
+        const cantidad = parseInt($row.find('input[name="mano_obra_cantidad[]"]').val()) || 0;
+        const dias     = parseInt($row.find('input[name="mano_obra_dias[]"]').val()) || 0;
+        const jornales = cantidad * dias;
+        $row.find('.mano-obra-jornales').text(jornales);
+      });
+
       const $cardBody = $(this).closest('.card-body');
       const $select = $cardBody.find('.mano-obra-select');
       const $cantidad = $cardBody.find('.mano-obra-cantidad');
@@ -218,6 +228,12 @@ $(document).ready(function() {
               <span>${cantidad}</span>
               <input type="hidden" name="mano_obra_cantidad[]" value="${cantidad}">
           </td>
+          <td class="text-center align-middle p-0">
+            <div style="width: 100%; display: flex; justify-content: center;">
+              <input type="number" class="form-control form-control-sm mano-obra-dias" name="mano_obra_dias[]" value="1" min="1" style="min-width: 60px; max-width: 60px;">
+            </div>
+          </td>
+          <td class="text-center mano-obra-jornales">${cantidad}</td>               
           <td>
               <input type="text" name="mano_obra_observacion[]" class="form-control form-control-sm" placeholder="Observaciones">
           </td>
@@ -244,7 +260,7 @@ $(document).ready(function() {
       if (filasRestantes.length === 0) {
           tabla.append(`
               <tr class="fila-vacia-mano-obra">
-                  <td colspan="4" class="text-center text-muted">Sin mano de obra asociada</td>
+                <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
               </tr>
           `);
       }
@@ -322,7 +338,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
       });
   });
 
-  // ACCIONES Y EVENTOS
+  // acciones y eventos
   $(document).on('click', '#btn-agregar-tarea', function () {
       //console.log('Agregar nueva tarea clickeado');
         if (!modoVisualizacion) hayCambios = true;
@@ -347,28 +363,22 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
 
 
   $(document).on('input', '.tarea-descripcion', function () {
-      if ($(this).val().trim() !== '') {
-          $(this).removeClass('is-invalid');
-      }
+    const texto = $(this).val().trim();
+
+    // Validación visual
+    if (texto !== '') {
+        $(this).removeClass('is-invalid');
+    }
+
+    // Actualizar encabezado de la tarea
+    const collapseId = $(this).closest('.collapse').attr('id');
+    const encabezado = $(`button[data-target="#${collapseId}"]`);
+
+    const preview = texto.length > 100 ? texto.substring(0, 100) + '...' : texto;
+
+    encabezado.html(`<strong>${encabezado.data('titulo-base')}:</strong> ${preview || 'Breve descripción'}`);
   });
 
-  $(document).on('input', '.tarea-descripcion', function () {
-      const texto = $(this).val().trim();
-
-      // Desde el textarea, subimos hasta el collapse y obtenemos el id (ej. collapseTarea1)
-      const collapseId = $(this).closest('.collapse').attr('id');
-
-      // Luego buscamos el encabezado asociado (tiene el data-target a ese id)
-      const encabezado = $(`button[data-target="#${collapseId}"]`);
-
-      let preview = texto.length > 100 ? texto.substring(0, 100) + '...' : texto;
-
-      if (preview !== '') {
-          encabezado.html(`<strong>${encabezado.data('titulo-base')}:</strong> ${preview}`);
-      } else {
-          encabezado.html(`<strong>${encabezado.data('titulo-base')}:</strong> Breve descripción`);
-      }
-  });
 
   // clonado de tarea
   $(document).on('click', '#btn-agregar-tarea', function () {
@@ -494,13 +504,15 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
                                   </div>
                                   <div class="table-responsive">
                                       <table class="table table-bordered mano-obra-table mb-2">
-                                          <thead class="thead-light">
+                                          <thead class="thead-light text-center">
                                               <tr>
-                                                  <th>#</th>
-                                                  <th>Mano de obra</th>
-                                                  <th>Cantidad</th>
-                                                  <th>Observaciones</th>
-                                                  <th>Acción</th>
+                                              <th>#</th>
+                                              <th>Mano de obra</th>
+                                              <th>Cantidad</th>
+                                              <th>Días</th>
+                                              <th>Jornales</th>
+                                              <th>Observaciones</th>
+                                              <th>Acción</th>
                                               </tr>
                                           </thead>
                                           <tbody>
@@ -573,51 +585,56 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
 
   // eliminar tarea
   $(document).on('click', '.eliminar-tarea', function () {
-      const totalTareas = $('#accordionTareas > .card').length;
-      if (!modoVisualizacion) hayCambios = true;
-      // Evitar eliminar si queda solo una
-      if (totalTareas === 1) {
-          mostrarAdvertencia('Debe quedar al menos una tarea.', 4);
-          return;
-      }
+    const totalTareas = $('#accordionTareas > .card').length;
+    const $boton = $(this); // capturamos el botón para usar en el callback
 
-      // Eliminar la tarea actual
-      $(this).closest('.card').remove();
+    if (totalTareas === 1) {
+        mostrarAdvertencia('Debe quedar al menos una tarea.', 4);
+        return;
+    }
 
-      // Renumerar tareas
-      $('#accordionTareas > .card').each(function (index) {
-          const nuevoIndex = index + 1;
-          const card = $(this);
-          const header = card.find('.card-header button');
-          const textarea = card.find('.tarea-descripcion').val().trim();
+    mostrarConfirmacion('Se va a eliminar una tarea, confirma', () => {
+        if (!modoVisualizacion) hayCambios = true;
 
-          // Actualizar texto del botón
-          const preview = textarea.length > 50 ? textarea.substring(0, 50) + '...' : textarea;
-          header.attr('data-titulo-base', `Tarea ${nuevoIndex}`);
-          header.html(`<strong>Tarea ${nuevoIndex}:</strong> ${preview || 'Breve descripción'}`);
+        // Eliminar la tarea actual
+        $boton.closest('.card').remove();
 
-          // Actualizar IDs y targets del acordeón
-          const nuevoHeadingId = `headingTarea${nuevoIndex}`;
-          const nuevoCollapseId = `collapseTarea${nuevoIndex}`;
+        // Renumerar tareas
+        $('#accordionTareas > .card').each(function (index) {
+            const nuevoIndex = index + 1;
+            const card = $(this);
+            const header = card.find('.card-header button');
+            const textarea = card.find('.tarea-descripcion').val().trim();
 
-          card.find('.card-header').attr('id', nuevoHeadingId);
-          header.attr('data-target', `#${nuevoCollapseId}`);
-          header.attr('aria-controls', nuevoCollapseId);
+            // Actualizar texto del botón
+            const preview = textarea.length > 50 ? textarea.substring(0, 50) + '...' : textarea;
+            header.attr('data-titulo-base', `Tarea ${nuevoIndex}`);
+            header.html(`<strong>Tarea ${nuevoIndex}:</strong> ${preview || 'Breve descripción'}`);
 
-          card.find('.collapse')
-              .attr('id', nuevoCollapseId)
-              .attr('aria-labelledby', nuevoHeadingId)
-              .attr('data-parent', '#accordionTareas');
+            // Actualizar IDs y targets del acordeón
+            const nuevoHeadingId = `headingTarea${nuevoIndex}`;
+            const nuevoCollapseId = `collapseTarea${nuevoIndex}`;
 
-          // Actualizar campos de fotos
-        card.find('.tarea-fotos')
-          .attr('id', `fotos_tarea_${nuevoIndex}`)
-          .removeAttr('name')  // ✅ ELIMINA ESE NAME SI EXISTE
-          .attr('data-index', nuevoIndex);
-          card.find('.custom-file-label').attr('for', `fotos_tarea_${nuevoIndex}`);
-          card.find('.preview-fotos').attr('id', `preview_fotos_tarea_${nuevoIndex}`);
-      });
+            card.find('.card-header').attr('id', nuevoHeadingId);
+            header.attr('data-target', `#${nuevoCollapseId}`);
+            header.attr('aria-controls', nuevoCollapseId);
+
+            card.find('.collapse')
+                .attr('id', nuevoCollapseId)
+                .attr('aria-labelledby', nuevoHeadingId)
+                .attr('data-parent', '#accordionTareas');
+
+            // Actualizar campos de fotos
+            card.find('.tarea-fotos')
+                .attr('id', `fotos_tarea_${nuevoIndex}`)
+                .removeAttr('name')
+                .attr('data-index', nuevoIndex);
+            card.find('.custom-file-label').attr('for', `fotos_tarea_${nuevoIndex}`);
+            card.find('.preview-fotos').attr('id', `preview_fotos_tarea_${nuevoIndex}`);
+        });
+    });
   });
+
 
 // Guardar visita
 $(document).on('click', '.btn-guardar-visita', function () {
@@ -683,12 +700,15 @@ $(document).on('click', '.btn-guardar-visita', function () {
       // 3.4) Mano de obra
       $card.find('.mano-obra-table tbody tr').each(function (j) {
         if (!$(this).hasClass('fila-vacia-mano-obra')) {
-          const idMo = $(this).find('input[name="mano_obra_id[]"]').val();
-          const cant = $(this).find('input[name="mano_obra_cantidad[]"]').val();
-          const obs  = $(this).find('input[name="mano_obra_observacion[]"]').val();
-          formData.append(`tareas[${tareaIndex}][mano_obra][${j}][id]`, idMo);
-          formData.append(`tareas[${tareaIndex}][mano_obra][${j}][cantidad]`, cant);
-          formData.append(`tareas[${tareaIndex}][mano_obra][${j}][observacion]`, obs);
+            const idMo = $(this).find('input[name="mano_obra_id[]"]').val();
+            const cant = $(this).find('input[name="mano_obra_cantidad[]"]').val();
+            const dias = $(this).find('input[name="mano_obra_dias[]"]').val();
+            const obs  = $(this).find('input[name="mano_obra_observacion[]"]').val();
+
+            formData.append(`tareas[${tareaIndex}][mano_obra][${j}][id]`, idMo);
+            formData.append(`tareas[${tareaIndex}][mano_obra][${j}][cantidad]`, cant);
+            formData.append(`tareas[${tareaIndex}][mano_obra][${j}][dias]`, dias);
+            formData.append(`tareas[${tareaIndex}][mano_obra][${j}][observacion]`, obs);
         }
       });
   
@@ -819,8 +839,10 @@ if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
             $btnMO.click();
             // luego ponemos la observación
             $card.find('.mano-obra-table tbody tr:last')
-                .find('input[name="mano_obra_observacion[]"]')
-                .val(mo.observaciones);
+            .find('input[name="mano_obra_dias[]"]')
+            .val(mo.dias || 1)  // default a 1 si no viene definido
+            .trigger('input');  // actualiza también los jornales si hace falta
+          
         });
   
         // 7) Fotos
