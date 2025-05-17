@@ -248,33 +248,67 @@ function mostrarExito(mensaje, segundos = 3) {
 }
 
 /**
- * Muestra un diálogo de confirmación.
+ * Muestra un diálogo de confirmación personalizado según el tipo.
+ *
  * @param {string} mensaje        — Texto HTML que aparece bajo el título.
  * @param {function} onConfirm    — Callback si el usuario confirma.
  * @param {function} [onCancel]   — Callback si el usuario cancela (opcional).
+ * @param {string} [tipo='AD']    — Tipo de mensaje: 'AD' (advertencia), 'ER' (error), 'EX' (éxito).
+ *                                   Cambia colores, ícono y título. Si se omite, se usa advertencia.
  */
-function mostrarConfirmacion(mensaje, onConfirm, onCancel) {
-  Swal.fire({
-    icon: 'warning',
-    title: '<h2 class="mb-1"><STRONG>ADVERTENCIA<STRONG></h2>',
-    html: '<h4 class="mt-0">'+mensaje+'</h4>',
-    background: '#ffc107',
-    iconColor: '#000000',
-    showCancelButton: true,
-    confirmButtonText: 'Sí',
-    cancelButtonText: 'No',
-    confirmButtonColor: '#28a745', // verde
-    cancelButtonColor: '#6c757d'   // gris
-  }).then(result => {
-    if (result.isConfirmed) {
-      onConfirm && onConfirm();
-    } else {
-      onCancel && onCancel();
-    }
-  });
+function mostrarConfirmacion(mensaje, onConfirm, onCancel, tipo = 'AD') {
+    // Configuraciones por tipo
+    const configuraciones = {
+      AD: {
+        titulo: 'ADVERTENCIA',
+        icono: 'warning',
+        background: '#ffc107',        // amarillo
+        iconColor: '#000000',         // ícono negro
+        tituloColor: '#000000',       // texto negro
+        mensajeColor: '#000000'
+      },
+      ER: {
+        titulo: 'ERROR',
+        icono: 'error',
+        background: '#dc3545',        // rojo
+        iconColor: '#ffffff',
+        tituloColor: '#ffffff',
+        mensajeColor: '#ffffff'
+      },
+      EX: {
+        titulo: 'ÉXITO',
+        icono: 'success',
+        background: '#28a745',        // verde
+        iconColor: '#ffffff',
+        tituloColor: '#ffffff',
+        mensajeColor: '#ffffff'
+      }
+    };
+  
+    const cfg = configuraciones[tipo] || configuraciones['AD']; // fallback a ADVERTENCIA
+  
+    Swal.fire({
+      icon: cfg.icono,
+      title: `<h2 class="mb-1" style="color: ${cfg.tituloColor};"><strong>${cfg.titulo}</strong></h2>`,
+      html: `<h4 class="mt-0" style="color: ${cfg.mensajeColor};">${mensaje}</h4>`,
+      background: cfg.background,
+      iconColor: cfg.iconColor,
+      showCancelButton: true,
+      confirmButtonText: 'Sí',
+      cancelButtonText: 'No',
+      confirmButtonColor: '#1e7e34',
+      cancelButtonColor: '#6c757d',   // gris cancel
+      customClass: {
+        confirmButton: 'swal2-confirm custom-success-btn'
+      }
+    }).then(result => {
+      if (result.isConfirmed) {
+        onConfirm && onConfirm();
+      } else {
+        onCancel && onCancel();
+      }
+    });
 }
-
-
 
 // inputPushValue(
 //  jason // jason =  {"#id": {"valor": valor1, "texto": valor2}, "#apellido": {"valor": valor1, "texto": false},}; // si el valor y el texto son iguale texto en false

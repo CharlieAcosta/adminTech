@@ -746,5 +746,11 @@ textarea.is-invalid {
   min-width: 160px; /* ajustá este valor a tu gusto */
 }
 
+.custom-success-btn {
+    background-color: #1e7e34 !important;
+    color: #ffffff !important;
+    border: none;
+}
+  
 
 

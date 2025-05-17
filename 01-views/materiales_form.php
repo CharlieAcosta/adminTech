@@ -360,37 +360,22 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
              //   //console.log(data);
                if(data == 1)
                  {
-                   sAlertDialog(
-                       'success',   
-                       '<h3 class="text-success"><b>EL MATERIAL SE REGISTRO CORRECTAMENTE<b></h3>',
-                       '<h5>¿Desea seguir ingresando materiales?</h5>', 
-                       'SI',            
-                       'success',         
-                       'NO',
-                       'dark',
-                       function(){ window.location.href = "../01-views/materiales_form.php"; },
-                       function(){ window.location.href = "../01-views/materiales_listado.php"; }
-                   );
+                  mostrarConfirmacion(
+                      '¿Desea seguir ingresando materiales?',
+                      () => window.location.href = "../01-views/materiales_form.php",
+                      () => window.location.href = "../01-views/materiales_listado.php",
+                      'EX'
+                    );
                  }
                else
                  {
-                   sAlertAutoClose(
-                    'error',                  
-                    '<h3 class="text-danger"><b>NO SE PUDO REGISTRAR EL MATERIAL<b></h3>',
-                    '<h5>Vuelva a intentarlo en unos minutos.<br> Si persiste este mensaje oprima <b>cancelar</b> y comuniquese con el administrador.</h5>',
-                    6000  
-                   );
+                  mostrarError('NO SE PUDO REGISTRAR EL MATERIAL. Intente nuevamente o contacte al administrador.', 6);
                  }
              })
              .catch(error => {
                // Manejar errores si la promesa se rechaza
                //console.error(error);
-                   sAlertAutoClose(
-                    'error',                  
-                    '<h3 class="text-danger"><b>NO SE PUDO REGISTRAR EL MATERIAL<b></h3>',
-                    '<h5>Vuelva a intentarlo en unos minutos.<br> Si persiste este mensaje oprima <b>cancelar</b> y comuniquese con el administrador.</h5>',
-                    6000  
-                   );
+               mostrarError('NO SE PUDO REGISTRAR EL MATERIAL. Intente nuevamente o contacte al administrador.', 6);
              });
 
       }else{
@@ -398,43 +383,23 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                 '../06-funciones_php/funciones.php',
                 'materiales',
                 serializeForm('currentForm'),
-                {columna: 'id_material', condicion: '=', valorCompara: $(".v-id").val()}
+                [{columna: 'id_material', condicion: '=', valorCompara: $(".v-id").val()}]
              ).then(data => {
              // Manejar los datos obtenidos cuando la promesa se resuelva con éxito
              //   //console.log(data);
                if(data == true)
                  {
-                   sAlertDialog(
-                       'success',   
-                       '<h3 class="text-success"><b>EL MATERIAL SE MODIFICO CORRECTAMENTE<b></h3>',
-                       '<h5>¿Desea seguir modificando este material?</h5>', 
-                       'SI',            
-                       'success',         
-                       'NO',
-                       'dark',
-                       function(){},
-                       function(){ window.location.href = "../01-views/materiales_listado.php"; }
-                   );
+                  mostrarExito('EL MATERIAL SE MODIFICÓ CORRECTAMENTE');
                  }
                else
                  {
-                   sAlertAutoClose(
-                    'error',                  
-                    '<h3 class="text-danger"><b>NO SE PUDO MODIFICAR EL MATERIAL<b></h3>',
-                    '<h5>Vuelva a intentarlo en unos minutos.<br> Si persiste este mensaje oprima <b>cancelar</b> y comuniquese con el administrador.</h5>',
-                    6000  
-                   );
+                  mostrarError('NO SE PUDO MODIFICAR EL MATERIAL. Intente nuevamente o contacte al administrador.', 6);
                  }
              })
              .catch(error => {
                // Manejar errores si la promesa se rechaza
                //console.error(error);
-                   sAlertAutoClose(
-                    'error',                  
-                    '<h3 class="text-danger"><b>NO SE PUDO REGISTRAR EL MATERIAL<b></h3>',
-                    '<h5>Vuelva a intentarlo en unos minutos.<br> Si persiste este mensaje oprima <b>cancelar</b> y comuniquese con el administrador.</h5>',
-                    6000  
-                   );
+               mostrarError('NO SE PUDO REGISTRAR EL MATERIAL. Intente nuevamente o contacte al administrador.', 6);
              });
 
       }
@@ -660,15 +625,7 @@ document.addEventListener('DOMContentLoaded', function () {
           var file = this.files[0];
           if (file && file.size > 5 * 1024 * 1024) {
 
-            Swal.fire({
-              icon: 'error',
-              title: 'Error',
-              text: 'El archivo no puede ser mayor a 5 Mb',
-              timer: 3500, // Duración de 10 segundos
-              timerProgressBar: true,
-              position: 'center',
-              showConfirmButton: false
-            });
+            mostrarError('El archivo no puede ser mayor a 5 Mb', 3.5);
 
             this.value = '';
             $(this).next('.custom-file-label').html('Seleccionar archivo');
@@ -691,30 +648,14 @@ $('input[type="file"]').change(function() {
            navigator.clipboard.writeText('');                  
           }
         else
-          { Swal.fire({
-              icon: 'error',
-              title: 'El link no fue copiado',
-              text: 'Seguramente olvidaste copiar el link con el botón derecho, intentalo de nuevo.',
-              timer: 5000, // Duración de 10 segundos
-              timerProgressBar: true,
-              position: 'center',
-              showConfirmButton: false
-            });
+          { mostrarError('El link no fue copiado. Posiblemente olvidaste usar el botón derecho. Intentá de nuevo.', 5);
             campoV.next('.custom-file-label').html('Seleccionar archivo');
             campoV.val('');          
           }  
 
         })
         .catch(function(error) {
-          Swal.fire({
-              icon: 'error',
-              title: 'Error',
-              text: 'Al copiar el link del archivo, intentalo de nuevo',
-              timer: 4000, // Duración de 10 segundos
-              timerProgressBar: true,
-              position: 'center',
-              showConfirmButton: false
-            });        
+          mostrarError('Ocurrió un error al copiar el link del archivo. Intentalo de nuevo.', 4);
         });
 
 });
