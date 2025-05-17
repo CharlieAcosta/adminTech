@@ -251,20 +251,21 @@ $(document).ready(function() {
 
   // Función para eliminar mano de obra
   $(document).on('click', '.eliminar-mano-obra', function () {
-      const fila = $(this).closest('tr');
-      fila.remove();
+    const fila = $(this).closest('tr');
+    const tabla = fila.closest('tbody'); // 🔧 ahora es relativa
+    fila.remove();
 
-      const tabla = $('.mano-obra-table tbody');
-      const filasRestantes = tabla.find('tr');
+    const filasRestantes = tabla.find('tr');
 
-      if (filasRestantes.length === 0) {
-          tabla.append(`
-              <tr class="fila-vacia-mano-obra">
-                <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
-              </tr>
-          `);
-      }
+    if (filasRestantes.length === 0) {
+        tabla.append(`
+            <tr class="fila-vacia-mano-obra">
+              <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
+            </tr>
+        `);
+    }
   });
+
 
   $(document).on('change', '.tarea-fotos', function (e) {
       const input = e.target;
@@ -517,7 +518,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
                                           </thead>
                                           <tbody>
                                               <tr class="fila-vacia-mano-obra">
-                                                  <td colspan="5" class="text-center text-muted">Sin mano de obra asociada</td>
+                                                  <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
                                               </tr>
                                           </tbody>
                                       </table>
