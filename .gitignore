@@ -17,6 +17,7 @@ node_modules/
 *.tmp
 *.swp
 .DS_Store
+.tmp.driveupload/
 
 # ─── Carpeta de uploads (excepto .gitkeep) ─
 uploads/
