@@ -443,7 +443,7 @@ if(isset($usuario_datos['0']['id_usuario']) && $visualiza == ""){
                         <div class="input-group-prepend">
                           <span class="input-group-text"><i class="fas fa-key"></i></span>
                         </div>
-                        <input type="password" class="form-control" placeholder="Contraseña" autocomplete="new-password" id="password" name="password" value="<?php if(isset($usuario_datos['0']['password'])){echo $usuario_datos['0']['password'];}?>">
+                        <input type="password" class="form-control" placeholder="Contraseña" autocomplete="new-password" id="password" name="password" value="">
                           <div class="input-group-append">
                                <span class="input-group-text"><i class="fas fa-eye-slash v-icon-accion v-ver-pass" data-accion="passOnOff" data-estado="off"></i></span>
                           </div>
