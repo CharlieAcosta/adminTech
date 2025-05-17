@@ -1,16 +1,28 @@
-# ignora la carpeta completa y su contenido
-.tmp.driveupload/
+# ─── Archivos del entorno del servidor ─────
+.htaccess
+.user.ini
+error-php.log
+
+# ─── Archivos de configuración/editor ──────
 .vscode/
+*.log
+
+# ─── Dependencias ──────────────────────────
 vendor/
+node_modules/
 
-# visitas: ignora todo dentro de visitas, menos el .gitkeep
-uploads/visitas/
-!uploads/visitas/.gitkeep
+# ─── Archivos temporales/locales ───────────
+*.zip
+*.bak
+*.tmp
+*.swp
+.DS_Store
 
-# log: ignora la carpeta entera
+# ─── Carpeta de uploads (excepto .gitkeep) ─
+uploads/
+!uploads/.gitkeep
+uploads/**/*
+!uploads/**/.gitkeep
+
+# ─── Logs de tu sistema ────────────────────
 log/
-
-
-
-
-
