@@ -1,10 +1,45 @@
 $(document).ready(function() {
     let modoVisualizacion = false;
-    let snapshotFormulario = '';
 
+    function controlarBotonGenerarPresupuesto() {
+      // Chequea si hay tareas
+      let tieneTareas = $('#accordionTareas > .card').length > 0;
+      let todasTienenMaterial = true;
+      let todasTienenManoObra = true;
+    
+      // Chequea que cada tarea tenga al menos un material y una mano de obra
+      $('#accordionTareas > .card').each(function () {
+        const materiales = $(this).find('.materiales-table tbody tr').not('.fila-vacia-materiales').length;
+        if (materiales === 0) todasTienenMaterial = false;
+    
+        const manoObra = $(this).find('.mano-obra-table tbody tr').not('.fila-vacia-mano-obra').length;
+        if (manoObra === 0) todasTienenManoObra = false;
+      });
+    
+      // 💡 SOLO se habilita si:
+      // - Hay tareas
+      // - Todas tienen materiales y mano de obra
+      // - No hay cambios pendientes (hayCambios === false)
+      // - No estamos en modo visualización (modoVisualizacion === false)
+      // - **No existe presupuesto generado** (!presupuestoGenerado)
+    
+      const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado;
+    
+      const $btn = $('#btn-generar-presupuesto');
+      if ($btn.length) {
+        if (habilitado) {
+          $btn.prop('disabled', false).removeClass('btn-secondary').addClass('btn-info');
+        } else {
+          $btn.prop('disabled', true).removeClass('btn-info').addClass('btn-secondary');
+        }
+      }
+    }
+    
+  
   // Objeto global donde vamos guardando imágenes por tarea
   const imagenesPorTarea = {};
   let hayCambios = false;
+  controlarBotonGenerarPresupuesto();
   const fotosEliminadasPorTarea = {};
   const fotos = {};
 
@@ -27,20 +62,24 @@ $(document).ready(function() {
   // 1) Cualquier input, select o textarea modificado dispara el flag
   $(document).on('change input', 'input, textarea, select', function() {
     if (!modoVisualizacion) hayCambios = true;
+    controlarBotonGenerarPresupuesto();
   });
 
   // 2) Añadir o eliminar materiales / mano de obra también cuenta
   $(document).on('click', '.agregar-material, .eliminar-material, .agregar-mano-obra, .eliminar-mano-obra', function() {
-    if (!modoVisualizacion) hayCambios = true;;
+    if (!modoVisualizacion) hayCambios = true;
+    controlarBotonGenerarPresupuesto();
   });
 
   // 3) Subir o eliminar fotos marca cambios
   $(document).on('change', '.tarea-fotos', function() {
-    if (!modoVisualizacion) hayCambios = true;;
+    if (!modoVisualizacion) hayCambios = true;
+    controlarBotonGenerarPresupuesto();
   });
 
   $(document).on('click', '.eliminar-imagen', function() {
     if (!modoVisualizacion) hayCambios = true;
+    controlarBotonGenerarPresupuesto();
     const $thumb = $(this).closest('.preview-img-container');
     const nombre = $thumb.data('nombre-archivo');
     const idx = parseInt($thumb.closest('.preview-fotos').attr('id').split('_').pop(), 10);
@@ -343,6 +382,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
   $(document).on('click', '#btn-agregar-tarea', function () {
       //console.log('Agregar nueva tarea clickeado');
         if (!modoVisualizacion) hayCambios = true;
+        controlarBotonGenerarPresupuesto();
         let hayDescripcionIncompleta = false;
 
           $('.tarea-descripcion').each(function () {
@@ -596,7 +636,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
 
     mostrarConfirmacion('Se va a eliminar una tarea, confirma', () => {
         if (!modoVisualizacion) hayCambios = true;
-
+        controlarBotonGenerarPresupuesto();
         // Eliminar la tarea actual
         $boton.closest('.card').remove();
 
@@ -637,8 +677,8 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
   });
 
 
-// Guardar visita
-$(document).on('click', '.btn-guardar-visita', function () {
+  // Guardar visita
+  $(document).on('click', '.btn-guardar-visita', function () {
     $('#accordionTareas > .card').each(function() {
         const idx = parseInt($(this)
           .find('.preview-fotos')
@@ -756,6 +796,7 @@ $(document).on('click', '.btn-guardar-visita', function () {
             }
           });
           hayCambios = false;
+          controlarBotonGenerarPresupuesto();
           mostrarExito('Visita guardada correctamente', 4);
         } else {
           mostrarError(resp.mensaje || 'Error al guardar.', 4);
@@ -787,7 +828,46 @@ $(document).on('click', '.btn-guardar-visita', function () {
     }
   });
   
-  
+// Botón: Generar Presupuesto
+$(document).on('click', '.btn-generar-presupuesto', function() {
+  // 1. Si no existe el accordion, lo crea usando el template
+  if ($('#accordionPresupuesto').length === 0) {
+      const tpl = document.getElementById('tpl-accordion-presupuesto');
+      if (tpl) {
+          const clone = tpl.content.cloneNode(true);
+          // Insertarlo después del accordion de Visita
+          $('#accordionVisita').after(clone);
+      }
+  }
+
+  // 2. Colapsar Visita y expandir Presupuesto
+  $('#collapseVisita').collapse('hide');
+  setTimeout(() => {
+      $('#collapsePresupuesto').collapse('show');
+  }, 150);
+
+  // 3. Mensaje de éxito
+  $('#contenedorPresupuestoGenerado').html(`
+      <div class="alert alert-success text-center mb-3">
+          <i class="fa fa-check-circle mr-2"></i> ¡Presupuesto generado exitosamente!<br>
+          Aquí aparecerá el detalle una vez implementada la lógica completa.
+      </div>
+  `);
+
+  // 4. Cambiar color de encabezado Visita a verde
+  $('.accordion_2').removeClass('card-danger').addClass('card-success');
+
+  // 5. Deshabilitar el botón para evitar doble click
+  $(this).prop('disabled', true);
+
+  // 6. Scroll suave al Presupuesto
+  setTimeout(() => {
+      $('html, body').animate({
+          scrollTop: $("#headingPresupuesto").offset().top - 80
+      }, 600);
+  }, 300);
+});
+
 // ======= POBLAR DESDE EL BACKEND =======
 if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
     modoVisualizacion = $('form').find('.v-id').data('visualiza') === 'on';
@@ -937,8 +1017,8 @@ if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
 
 }
 // ======= FIN POBLACIÓN BACKEND =======
-  
-
+hayCambios = false;
+controlarBotonGenerarPresupuesto(); 
   
 
 });

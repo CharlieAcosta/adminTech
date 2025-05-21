@@ -168,9 +168,24 @@ $opcionesManoDeObra = arrayToOptionsV2(
 );
 // END PHP - Visita
 
+// START PRESUPUESTO
+$presupuestoGenerado = false; // Cambia a true para probar el otro caso
+$visita_card = 'card-danger';
+if ($presupuestoGenerado) {
+  $visita_show = '';
+  $presupuesto_show = 'show';
+  $visita_card = 'card-success';
+} else {
+  $visita_show = 'show';
+  $presupuesto_show = '';
+}
+
+// END PRESUPUESTO
 
 ?>
-
+<script>
+  let presupuestoGenerado = <?php echo $presupuestoGenerado ? 'true' : 'false'; ?>;
+</script>
 
 <!DOCTYPE html>
 <html lang="es">
@@ -619,13 +634,13 @@ $opcionesManoDeObra = arrayToOptionsV2(
     <div class="card <?php echo $visita_card; ?> accordion_2">
       <div class="card-header" id="headingVisita">
         <h2 class="mb-0">
-          <button class="btn btn-link btn-block text-left text-white p-0 card-title" type="button" data-toggle="collapse" data-target="#collapseVisita" aria-expanded="true" aria-controls="collapseVisita">
+          <button class="btn btn-link btn-block text-left text-white p-0 card-title" type="button" data-toggle="collapse" data-target="#collapseVisita" aria-expanded="<?php echo $visita_show === 'show' ? 'true' : 'false'; ?>" aria-controls="collapseVisita">
             Visita<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
           </button>
         </h2>
       </div>
 
-      <div id="collapseVisita" class="collapse show" aria-labelledby="headingVisita" data-parent="#accordionVisita">
+      <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
         <div class="card-body">
 
           <!-- start accordion tareas -->
@@ -790,7 +805,8 @@ $opcionesManoDeObra = arrayToOptionsV2(
           <!-- Botones generales -->
           <div class="text-center">
             <button type="button" class="btn btn-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
-            <button type="button" class="btn btn-info mr-2 btn-uniform btn-generar-presupuesto">Generar Presupuesto</button>
+            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
+            <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
           </div>
 
@@ -810,33 +826,50 @@ $opcionesManoDeObra = arrayToOptionsV2(
   <?= $opcionesManoDeObra ?>
 </select>
 
-<!-- start accordion 3 -->
-<div class="accordion" id="accordionExample3">
-  <div class="card <?php echo $presupuesto_card; ?> accordion 3">
-    <div class="card-header" id="heading3">
-      <h2 class="mb-0">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title" type="button" data-toggle="collapse" data-target="#collapse3" aria-expanded="true" aria-controls="collapse3">
-          Presupuesto<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
-        </button>
-      </h2>
+<!-- /accordion presupuesto -->
+<?php if ($presupuestoGenerado): ?>
+  <div class="accordion" id="accordionPresupuesto">
+    <div class="card <?php echo $presupuesto_card; ?> accordion_3">
+      <div class="card-header" id="headingPresupuesto">
+        <h2 class="mb-0 d-flex justify-content-between align-items-center">
+          <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+                  type="button" 
+                  data-toggle="collapse" 
+                  data-target="#collapsePresupuesto" 
+                  aria-expanded="<?php echo $presupuesto_show === 'show' ? 'true' : 'false'; ?>" 
+                  aria-controls="collapsePresupuesto">
+            Presupuesto
+          </button>
+          <small>
+            <span>
+              <i class="fas fa-edit fa-xs v-icon-pointer v-icon-accion" 
+                data-accion="editar-presupuesto" 
+                data-toggle="tooltip" 
+                data-placement="top" 
+                title="Editar presupuesto"
+                style="color: #ffffff;">
+              </i>
+            </span>
+          </small>
+        </h2>
+      </div>
+      <div id="collapsePresupuesto" class="collapse <?php echo $presupuesto_show; ?>" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
+        <div class="card-body" id="presupuesto-card-body">
+          <!-- Aquí se insertará el contenido dinámico generado -->
+          <div id="contenedorPresupuestoGenerado" class="mt-3">
+            <?php if($presupuestoGenerado): ?>
+              <div class="alert alert-info text-center mb-3">
+                  Aquí aparecerá el presupuesto generado con los datos traídos del backend.
+              </div>
+            <?php endif; ?>
+            </div>
+        </div>
+      </div>
     </div>
-
-    <!-- start collapse accordion 3 -->
-    <div id="collapse3" class="collapse <?php echo !isset($cliente_datos['0']['id_cliente']) ? '' : ''; ?>" aria-labelledby="headingOne" data-parent="#accordionExample3">
-
-          <!-- start card body accordion 3-->
-          <div id="presupuesto-card-body" class="card-body">
-            EN DESARROLLO
-          </div>
-          <!-- end card accordion 3 -->
-
-    </div>
-    <!-- end collapse accordion 3-->
-
   </div>
-  <!-- end card accordion 3 -->
-</div>
-<!-- end accordion 3 -->
+<?php endif; ?>
+<!-- /accordion presupuesto -->
+
 
 <!-- start accordion 4 - Orden de compra -->
 <div class="accordion" id="accordionExample4">
@@ -1561,6 +1594,46 @@ const tareasVisitadas = <?php
 
 <!-- funciones js -->
 <script src="../07-funciones_js/scripts_list.js"></script>
+
+<template id="tpl-accordion-presupuesto">
+  <div class="accordion" id="accordionPresupuesto">
+    <div class="card card-success accordion_3">
+      <div class="card-header" id="headingPresupuesto">
+        <h2 class="mb-0 d-flex justify-content-between align-items-center">
+          <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+                  type="button" 
+                  data-toggle="collapse" 
+                  data-target="#collapsePresupuesto" 
+                  aria-expanded="true" 
+                  aria-controls="collapsePresupuesto">
+            Presupuesto
+          </button>
+          <small>
+            <span>
+              <i class="fas fa-edit fa-xs v-icon-pointer v-icon-accion" 
+                 data-accion="editar-presupuesto" 
+                 data-toggle="tooltip" 
+                 data-placement="top" 
+                 title="Editar presupuesto"
+                 style="color: #ffffff;">
+              </i>
+            </span>
+          </small>
+        </h2>
+      </div>
+      <div id="collapsePresupuesto" class="collapse show" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
+        <div class="card-body" id="presupuesto-card-body">
+          <div id="contenedorPresupuestoGenerado" class="mt-3">
+            <div class="alert alert-success text-center mb-3">
+                <i class="fa fa-check-circle mr-2"></i> ¡Presupuesto generado exitosamente!<br>
+                Aquí aparecerá el detalle una vez implementada la lógica completa.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
 
 </body>
 </html>
