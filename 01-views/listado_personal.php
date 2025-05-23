@@ -135,7 +135,7 @@ registrarNavegacion('AGENTES - Listado');
       "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
       "responsive": true, "lengthChange": true, "autoWidth": false,
       "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
+      "language": {"url": "../05-plugins/datatables/es-ES.json"},
       "columns": [{ "width": "3%" }, { "width": "5%" }, null, null, { "width": "10%" }, { "width": "10%" }, { "width": "10%" }, { "width": "11%" }, { "width": "10%" }, { "width": "10%" }]
     }).buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
   });

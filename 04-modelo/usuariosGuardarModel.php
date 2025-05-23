@@ -8,6 +8,7 @@ if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
     if (isset($_POST['accion']) && $_POST['accion'] == "alta") {
         addUser('ajax');
     } else {
+        die($_POST['accion']);        
         saveUser('ajax');
     }
 }
