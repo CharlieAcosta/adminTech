@@ -184,21 +184,21 @@
         "close": "Cerrar",
         "create": {
             "button": "Nuevo",
-            "title": "Crear Nuevo Registro",
+            "title": "Crear Nueva Actuación",
             "submit": "Crear"
         },
         "edit": {
             "button": "Editar",
-            "title": "Editar Registro",
+            "title": "Editar Actuación",
             "submit": "Actualizar"
         },
         "remove": {
             "button": "Eliminar",
-            "title": "Eliminar Registro",
+            "title": "Eliminar Actuación",
             "submit": "Eliminar",
             "confirm": {
-                "_": "¿Está seguro que desea eliminar %d filas?",
-                "1": "¿Está seguro que desea eliminar 1 fila?"
+                "_": "¿Está seguro que desea eliminar %d actuaciones?",
+                "1": "¿Está seguro que desea eliminar 1 actuación?"
             }
         },
         "error": {
@@ -206,12 +206,12 @@
         },
         "multi": {
             "title": "Múltiples Valores",
-            "info": "Los elementos seleccionados contienen diferentes valores para este registro. Para editar y establecer todos los elementos de este registro con el mismo valor, hacer click o tap aquí, de lo contrario conservarán sus valores individuales.",
+            "info": "Los elementos seleccionados contienen diferentes valores para esta actuación. Para editar y establecer todos los elementos de esta actuación con el mismo valor, hacer click o tap aquí, de lo contrario conservarán sus valores individuales.",
             "restore": "Deshacer Cambios",
-            "noMulti": "Este registro puede ser editado individualmente, pero no como parte de un grupo."
+            "noMulti": "Esta actuación puede ser editada individualmente, pero no como parte de un grupo."
         }
     },
-    "info": "Mostrando _START_ a _END_ de _TOTAL_ registros",
+    "info": "Mostrando _START_ a _END_ de _TOTAL_ actuaciones",
     "stateRestore": {
         "creationModal": {
             "button": "Crear",
@@ -229,7 +229,7 @@
         },
         "emptyError": "El nombre no puede estar vacio",
         "removeConfirm": "¿Seguro que quiere eliminar este %s?",
-        "removeError": "Error al eliminar el registro",
+        "removeError": "Error al eliminar la actuación",
         "removeJoiner": "y",
         "removeSubmit": "Eliminar",
         "renameButton": "Cambiar Nombre",

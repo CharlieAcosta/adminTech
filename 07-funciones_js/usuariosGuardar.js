@@ -1,80 +1,24 @@
-// // funcion ajax guardar los usuarios
-// function usuariosGuardar(){
-//         if($(".v-id").val() != ""){
-//             var accion = "edicion&log_accion=editar";
-//             var leyenda = "¿Quieres continuar editando este usuario?";
-//         }else{
-//             var accion = "alta&log_accion=alta";
-//             var leyenda = "¿Quieres ingresar otra alta?";
-//         }
-
-//         $.ajax({
-//             url: '../04-modelo/usuariosGuardarModel.php',
-//             type: 'POST',
-//             dataType: 'json',
-//             data: $('#currentForm').serialize()+"&ajax=on&accion="+accion,
-//             // data: {
-//             //    'ajax'	: 'on',	
-//             //    'accion' : "alta",
-//             // },
-//             success: function (data) {
-//             	//console.log('success: '+(data));
-
-//                 Swal.fire({
-//                     icon: 'success',
-//                     title: 'Los datos se han registrado correctamente',
-//                     text: leyenda,
-//                     showDenyButton: true,
-//                     confirmButtonText: 'Si',
-//                     denyButtonText: 'No',
-//                     allowOutsideClick: false,
-//                     allowEscapeKey: false
-//                 }).then((result) => {
-//                     /* Read more about isConfirmed, isDenied below */
-//                     if (result.isConfirmed) {
-//                         if(accion=="alta&log_accion=alta"){
-//                             $("#currentForm")[0].reset();
-//                             $(".v-select2").val('').trigger('change');
-//                              abm_detect();
-//                         }
-//                     } else if (result.isDenied) {
-//                         window.location.href='listado_personal.php';
-//                     }
-//                 })
-
-
-//             },
-//             error: function (data) {
-//                 Swal.fire({
-//                     icon: 'error',
-//                     title: 'Algó ha salido mal',
-//                     text: "Intentalo más tarde o comunicate con el administrador",
-//                     confirmButtonText: 'OK',
-//                     allowOutsideClick: false,
-//                     allowEscapeKey: false
-//                    }).then((result) => {
-//                     /* Read more about isConfirmed, isDenied below */
-//                     if (result.isConfirmed) {
-//                          window.location.href='listado_personal.php';
-//                     }
-//                 })
-//             }
-//         });   
-// }
-
-// funcion ajax guardar los usuarios
 function usuariosGuardar() {
+    var accion = "";
+    var leyenda = "";
     if ($(".v-id").val() != "") {
-        var accion = "edicion&log_accion=editar";
-        var leyenda = "¿Quieres continuar editando este usuario?";
+        accion = "editar"; // SOLO la palabra "editar"
+        leyenda = "¿Quieres continuar editando este usuario?";
     } else {
-        var accion = "alta&log_accion=alta";
-        var leyenda = "¿Quieres ingresar otra alta?";
+        accion = "alta"; // SOLO la palabra "alta"
+        leyenda = "¿Quieres ingresar otra alta?";
     }
 
     var formData = new FormData($('#currentForm')[0]);
     formData.append('ajax', 'on');
     formData.append('accion', accion);
+
+    // Opcional: para logs, agregá otro campo
+    if ($(".v-id").val() != "") {
+        formData.append('log_accion', 'editar');
+    } else {
+        formData.append('log_accion', 'alta');
+    }
 
     // Obtener los archivos seleccionados de cada campo de tipo file
     $('input[type="file"]').each(function() {
@@ -92,7 +36,6 @@ function usuariosGuardar() {
         processData: false,
         contentType: false,
         success: function (data) {
-            //console.log('success: '+(data));
             Swal.fire({
                 icon: 'success',
                 title: 'Los datos se han registrado correctamente',
@@ -103,19 +46,16 @@ function usuariosGuardar() {
                 allowOutsideClick: false,
                 allowEscapeKey: false
             }).then((result) => {
-                /* Read more about isConfirmed, isDenied below */
                 if (result.isConfirmed) {
-                    if(accion=="alta&log_accion=alta"){
+                    if(accion=="alta"){ // <--- CAMBIADO!
                         $("#currentForm")[0].reset();
                         $(".v-select2").val('').trigger('change');
-                         abm_detect();
+                        abm_detect();
                     }
                 } else if (result.isDenied) {
                     window.location.href='listado_personal.php';
                 }
-            })
-
-
+            });
         },
         error: function (data) {
             Swal.fire({
@@ -126,14 +66,14 @@ function usuariosGuardar() {
                 allowOutsideClick: false,
                 allowEscapeKey: false
                }).then((result) => {
-                /* Read more about isConfirmed, isDenied below */
                 if (result.isConfirmed) {
-                     window.location.href='listado_personal.php';
+                    window.location.href='listado_personal.php';
                 }
-            })
+            });
         }
-    });   
+    });
 }
+
 
 
 
