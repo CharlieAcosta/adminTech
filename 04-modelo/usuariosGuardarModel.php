@@ -1,14 +1,13 @@
 <?php
 session_start();
-
+// este es el inicio el 27/05/2022
 include_once '../06-funciones_php/cleanInput.php'; // limpia las variables input
 
 if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
     include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
     if (isset($_POST['accion']) && $_POST['accion'] == "alta") {
         addUser('ajax');
-    } else {
-        die($_POST['accion']);        
+    } else {       
         saveUser('ajax');
     }
 }
