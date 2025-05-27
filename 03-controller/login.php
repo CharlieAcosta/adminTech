@@ -51,10 +51,11 @@ if (!$db) {
 
             // Verificar contraseña y estado del usuario
             if ($password_md5_ext == $password_md5_int && $estado_int == "Activo") {
-                session_start(); // Inicia la sesión
 
                 // Establecer duración máxima de la sesión en segundos (3600 = 1 hora)
                 ini_set('session.gc_maxlifetime', SESION_TIME);
+
+                session_start(); // Inicia la sesión
 
                 // Establecer variables de sesión
                 $_SESSION["usuario"] = $rows[0];
