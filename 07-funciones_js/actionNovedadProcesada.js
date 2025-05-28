@@ -1,6 +1,3 @@
-// @ts-ignore
-const feriados = window.feriados;
-
 function normalizarFecha(fecha) {
     // Si ya está en formato ISO (YYYY-MM-DD), devolvés directo
     if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha;
@@ -123,7 +120,7 @@ function actionNovedadProcesada(rowNumber, agente, html, fecha, novedad, idAgent
 // Obtener el día de la semana y verificar si es feriado
 function obtenerCodigoNovedad(fecha, tipoNovedad) {
     const diaSemana = new Date(normalizarFecha(fecha) + 'T00:00:00').getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
-    const esFeriado = feriados.some(feriado => feriado[0] === normalizarFecha(fecha)); // Compara con los feriados cargados
+    const esFeriado = window.feriados.some(feriado => feriado[0] === normalizarFecha(fecha)); // Compara con los feriados cargados
 
     // Mapeo de códigos de novedad según el tipo y criterios definidos
     let codigoNovedad = null;
