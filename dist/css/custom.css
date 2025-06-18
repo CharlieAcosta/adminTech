@@ -746,11 +746,76 @@ textarea.is-invalid {
   min-width: 160px; /* ajustá este valor a tu gusto */
 }
 
-.custom-success-btn {
-    background-color: #1e7e34 !important;
-    color: #ffffff !important;
-    border: none;
-}
-  
 
+/* Presupuesto */
+.tarea-card {
+    border-radius: 8px;
+    border: 1px solid #bcc1c8;
+    background: #f6f8fa;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+  }
+  .tarea-header {
+    background: #6c757d;
+    color: #fff;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 25px 9px 20px;
+    font-size: 1.15rem;
+  }
+  .tarea-header .incluir-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .tarea-header input[type="checkbox"] {
+    width: 22px; height: 22px; accent-color: #007bff;
+    transform: scale(1.2);
+    cursor: pointer;
+  }
+  .tarea-header label { margin: 0; font-size: 1rem; }
+  .tarea-detalle { padding: 16px 24px 8px 24px; }
+  .tarea-detalle strong { font-size: 1.05rem; }
+  .tarea-detalle textarea {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 4px;
+    padding: 6px 8px; margin-top: 4px; font-size: .97rem;
+    resize: none; background: #fafdff; color: #212529;
+  }
+  .tarea-materiales, .tarea-manoobra { padding: 2px 24px 0 24px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 0.5rem;}
+  th, td { text-align: left; padding: 4px 7px; }
+  th { background: #17a2b8; color: #fff; font-weight: 500; }
+  tr:nth-child(odd) td { background: #f8f9fa; }
+  tr:nth-child(even) td { background: #fff; }
+  tr.subtotal-row td { background: #e9ecef !important; font-weight: bold; }
+  .table-sm td, .table-sm th { padding: 4px 7px; font-size: 0.97rem;}
+  .form-control-sm { font-size: .98rem; height: 1.7rem; padding: 1px 4px;}
+  .tarea-total { padding: 0 24px 12px 24px; }
+  .tarea-total button {
+    background: #28a745; color: #fff;
+    font-weight: bold; border: none; border-radius: 5px;
+    font-size: 1.07rem; padding: 4px 30px;
+    margin-top: 2px; margin-bottom: 2px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+  .total-general-row {
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 15px 35px 10px 35px; background: #f0f3f7;
+    border-radius: 8px;
+  }
+  .total-general-row .btn {
+    border-radius: 4px; border: 1px solid #adb5bd; background: #fff;
+    font-weight: 500; font-size: 1.01rem; padding: 6px 18px; margin-left: 8px; cursor: pointer;
+    transition: background .18s;
+  }
+  .total-general-row .btn-outline-secondary:hover { background: #f5f5f5; }
+  .total-general-row .btn-outline-primary { border-color: #0056b3; color: #0056b3;}
+  .total-general-row .btn-outline-primary:hover { background: #e7f1ff;}
+  @media (max-width: 900px) {
+    .tarea-header, .total-general-row { flex-direction: column; align-items: flex-start;}
+    .tarea-header .incluir-check { margin-top: 8px;}
+  }
 

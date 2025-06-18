@@ -848,11 +848,188 @@ $(document).on('click', '.btn-generar-presupuesto', function() {
 
   // 3. Mensaje de éxito
   $('#contenedorPresupuestoGenerado').html(`
-      <div class="alert alert-success text-center mb-3">
-          <i class="fa fa-check-circle mr-2"></i> ¡Presupuesto generado exitosamente!<br>
-          Aquí aparecerá el detalle una vez implementada la lógica completa.
-      </div>
-  `);
+  <!-- TAREA 1 -->
+  <div class="tarea-card">
+    <div class="tarea-header">
+      <span><strong>Tarea 1: Instalación de cableado eléctrico</strong></span>
+      <span class="incluir-check">
+        <input type="checkbox" id="incluir1" checked>
+        <label for="incluir1"><b>Incluir en presupuesto</b></label>
+      </span>
+    </div>
+    <div class="tarea-detalle">
+      <strong>Detalle de la tarea</strong>
+      <textarea rows="2" readonly>Tendido y conexionado de cableado eléctrico en oficina principal, incluyendo caños y accesorios.</textarea>
+    </div>
+    <div class="tarea-materiales">
+      <strong>Materiales</strong>
+      <table class="table-sm table-bordered">
+        <thead>
+          <tr>
+            <th>Material</th>
+            <th>Cantidad</th>
+            <th>Precio Unitario</th>
+            <th>% Extra</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cable 2x1,5mm</td>
+            <td>50 m</td>
+            <td>$100</td>
+            <td><input type="number" class="form-control-sm" value="5" min="0" style="width:55px;"></td>
+            <td>$5.250</td>
+          </tr>
+          <tr>
+            <td>Tubo PVC 3/4"</td>
+            <td>10 u</td>
+            <td>$450</td>
+            <td><input type="number" class="form-control-sm" value="0" min="0" style="width:55px;"></td>
+            <td>$4.500</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="4" class="text-right">Subtotal Materiales</td>
+            <td>$9.750</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tarea-manoobra">
+      <strong>Mano de Obra</strong>
+      <table class="table-sm table-bordered">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Cantidad</th>
+            <th>Valor Jornal</th>
+            <th>% Extra</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Oficial Electricista</td>
+            <td>2</td>
+            <td>$5.000</td>
+            <td><input type="number" class="form-control-sm" value="0" min="0" style="width:55px;"></td>
+            <td>$10.000</td>
+          </tr>
+          <tr>
+            <td>Ayudante</td>
+            <td>1</td>
+            <td>$5.500</td>
+            <td><input type="number" class="form-control-sm" value="10" min="0" style="width:55px;"></td>
+            <td>$6.050</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="4" class="text-right">Subtotal Mano de Obra</td>
+            <td>$16.050</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tarea-total d-flex justify-content-end">
+      <button disabled>Total Tarea 1: $25.800</button>
+    </div>
+  </div>
+
+  <!-- TAREA 2 -->
+  <div class="tarea-card">
+    <div class="tarea-header">
+      <span><strong>Tarea 2: Montaje de luminarias</strong></span>
+      <span class="incluir-check">
+        <input type="checkbox" id="incluir2" checked>
+        <label for="incluir2"><b>Incluir en presupuesto</b></label>
+      </span>
+    </div>
+    <div class="tarea-detalle">
+      <strong>Detalle de la tarea</strong>
+      <textarea rows="2" readonly>Colocación de 10 luminarias LED de 40W en oficinas, fijación y conexionado.</textarea>
+    </div>
+    <div class="tarea-materiales">
+      <strong>Materiales</strong>
+      <table class="table-sm table-bordered">
+        <thead>
+          <tr>
+            <th>Material</th>
+            <th>Cantidad</th>
+            <th>Precio Unitario</th>
+            <th>% Extra</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Luminaria LED 40W</td>
+            <td>10 u</td>
+            <td>$3.500</td>
+            <td><input type="number" class="form-control-sm" value="0" min="0" style="width:55px;"></td>
+            <td>$35.000</td>
+          </tr>
+          <tr>
+            <td>Chapa soporte</td>
+            <td>5 u</td>
+            <td>$250</td>
+            <td><input type="number" class="form-control-sm" value="2" min="0" style="width:55px;"></td>
+            <td>$1.275</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="4" class="text-right">Subtotal Materiales</td>
+            <td>$36.275</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tarea-manoobra">
+      <strong>Mano de Obra</strong>
+      <table class="table-sm table-bordered">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Cantidad</th>
+            <th>Valor Jornal</th>
+            <th>% Extra</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Montador</td>
+            <td>1</td>
+            <td>$6.200</td>
+            <td><input type="number" class="form-control-sm" value="0" min="0" style="width:55px;"></td>
+            <td>$6.200</td>
+          </tr>
+          <tr>
+            <td>Ayudante</td>
+            <td>1</td>
+            <td>$5.000</td>
+            <td><input type="number" class="form-control-sm" value="0" min="0" style="width:55px;"></td>
+            <td>$5.000</td>
+          </tr>
+          <tr class="subtotal-row">
+            <td colspan="4" class="text-right">Subtotal Mano de Obra</td>
+            <td>$11.200</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tarea-total d-flex justify-content-end">
+      <button disabled>Total Tarea 2: $47.475</button>
+    </div>
+  </div>
+
+  <!-- TOTAL GENERAL + BOTONES -->
+  <div class="total-general-row">
+    <span style="font-size:1.22rem; color:#222; margin-right:20px;">
+      <b>TOTAL GENERAL:</b>
+      <span style="color:#28a745; font-size:1.32rem; margin-left:7px;">$73.275</span>
+    </span>
+    <button class="btn btn-outline-secondary">🖨️ Imprimir presupuesto</button>
+    <button class="btn btn-outline-primary">✉️ Enviar por mail</button>
+  </div>
+`);
 
   // 4. Cambiar color de encabezado Visita a verde
   $('.accordion_2').removeClass('card-danger').addClass('card-success');
