@@ -143,28 +143,33 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
 $materiales = SelectAllDB('materiales', 'estado_material', '=', "'Activo'", 'php');
 
 // Preparamos las opciones
-$opcionesMateriales = arrayToOptionsV2(
-    $materiales,
-    'id_material',     // value
-    'descripcion_corta',        // text
-    'Seleccione un material', // leyenda
-    ' | ',             // separador
-    ['unidad_venta','contenido','unidad_medida'],  // concatena el campo 'codigo' si querés
-    null,              // no seleccionado inicialmente
-    null
+$opcionesMateriales = arrayToOptionsWithData(
+  $materiales,
+  'id_material',
+  'descripcion_corta',
+  'Seleccione un material',
+  ' | ',
+  ['unidad_venta', 'contenido', 'unidad_medida'],
+  [
+      'precio_unitario' => 'precio_unitario',
+      'unidad_venta'    => 'unidad_venta',
+      'contenido'       => 'contenido',
+      'unidad_medida'   => 'unidad_medida'
+  ]
 );
 
 $manoDeObra = SelectAllDB('tipo_jornales', 'jornal_estado', '=', "'activo'", 'php');
 
-$opcionesManoDeObra = arrayToOptionsV2(
-    $manoDeObra,
-    'jornal_id',              // value
-    'jornal_codigo',     // text
-    'Seleccione mano de obra', // leyenda
-    ' | ',             // separador
-    ['jornal_descripcion'],  // concatena el campo 'codigo' si querés
-    null,              // no seleccionado inicialmente
-    null
+$opcionesManoDeObra = arrayToOptionsWithData(
+  $manoDeObra,
+  'jornal_id',
+  'jornal_codigo',
+  'Seleccione mano de obra',
+  ' | ',
+  ['jornal_descripcion'],
+  [
+      'jornal_valor' => 'jornal_valor'
+  ]
 );
 // END PHP - Visita
 
