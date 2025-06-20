@@ -846,115 +846,143 @@ $(document).on('click', '.btn-generar-presupuesto', function() {
       $('#collapsePresupuesto').collapse('show');
   }, 150);
 
-  // 3. Mensaje de éxito
-  $('#contenedorPresupuestoGenerado').html(`
-  <div class="presupuesto-contenedor">
-  <div class="tarea-card">
-    <div class="tarea-encabezado">
-      <span>
-        <i class="fas fa-tasks"></i> 
-        <b>Tarea 1: Instalación de cableado eléctrico</b>
-      </span>
-      <label class="incluir-presupuesto-label">
-        <input type="checkbox" checked>
-        <span>Incluído en el presupuesto</span>
-      </label>
-    </div>
+  // 3. Recolección de datos y render dinámico
+  const datosExtraidos = recolectarDatosParaPresupuesto();
+  console.log('📦 Datos extraídos para presupuesto:', datosExtraidos);
+  renderizarPresupuestoDesdeDatos(datosExtraidos);
+  
+  //3. Mensaje de éxito
+//   $('#contenedorPresupuestoGenerado').html(`
+//   <div class="presupuesto-contenedor">
+//   <div class="tarea-card">
+//     <div class="tarea-encabezado">
+//       <span>
+//         <i class="fas fa-tasks"></i> 
+//         <b>Tarea 1: Instalación de cableado eléctrico</b>
+//       </span>
+//       <label class="incluir-presupuesto-label">
+//         <input type="checkbox" checked>
+//         <span>Incluído en el presupuesto</span>
+//       </label>
+//     </div>
 
-    <div class="tarea-detalle">
-      <label for="detalle-tarea-1"><b>Detalle de la tarea</b></label>
-      <textarea id="detalle-tarea-1">Tendido y conexionado de cableado eléctrico en oficina principal, incluyendo caños y accesorios.</textarea>
-    </div>
+//     <div class="container-fluid px-3 pt-3">
+//       <div class="row">
+//         <!-- Columna izquierda -->
+//         <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height: 100%;">
+//           <!-- Detalle -->
+//           <div class="mb-2">
+//             <label for="detalle-tarea-1" class="mb-0"><b>Detalle de la tarea</b></label>
+//             <textarea id="detalle-tarea-1" class="form-control form-control-sm" rows="5">Tendido y conexionado de cableado eléctrico en oficina principal, incluyendo caños y accesorios.</textarea>
+//           </div>
 
-    <div class="tarea-materiales">
-      <div class="bloque-titulo">Materiales</div>
-      <table class="tabla-presupuesto">
-        <thead>
-          <tr>
-            <th style="width:24%;">Material</th>
-            <th style="width:16%;">Cantidad</th>
-            <th style="width:20%;">Precio Unitario</th>
-            <th style="width:20%;">% Extra</th>
-            <th style="width:20%;">Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Cable 2x1,5mm</td>
-            <td>50 m</td>
-            <td>$100</td>
-            <td><input type="number" value="5" min="0" class="input-extra"></td>
-            <td>$5.250</td>
-          </tr>
-          <tr>
-            <td>Tubo PVC 3/4"</td>
-            <td>10 u</td>
-            <td>$450</td>
-            <td><input type="number" value="0" min="0" class="input-extra"></td>
-            <td>$4.500</td>
-          </tr>
-          <tr class="fila-subtotal">
-            <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
-            <td><b>$9.750</b></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+//           <!-- Futuras fotos -->
+//           <div class="mb-2 flex-grow-1">
+//             <label><b>Fotos (próximamente)</b></label>
+//             <div class="preview-fotos border rounded bg-light p-3 d-flex align-items-center justify-content-center text-muted" style="min-height: 100px;">
+//               <em>Aquí se mostrarán las imágenes</em>
+//             </div>
+//           </div>
+//         </div>
 
-    <div class="tarea-mano-obra">
-      <div class="bloque-titulo">Mano de Obra</div>
-      <table class="tabla-presupuesto">
-        <thead>
-          <tr>
-            <th style="width:24%;">Tipo</th>
-            <th style="width:16%;">Cantidad</th>
-            <th style="width:20%;">Valor Jornal</th>
-            <th style="width:20%;">% Extra</th>
-            <th style="width:20%;">Subtotal</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Oficial Electricista</td>
-            <td>2</td>
-            <td>$5.000</td>
-            <td><input type="number" value="0" min="0" class="input-extra"></td>
-            <td>$10.000</td>
-          </tr>
-          <tr>
-            <td>Ayudante</td>
-            <td>1</td>
-            <td>$5.500</td>
-            <td><input type="number" value="10" min="0" class="input-extra"></td>
-            <td>$6.050</td>
-          </tr>
-          <tr class="fila-subtotal">
-            <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
-            <td><b>$16.050</b></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+//         <!-- Columna derecha -->
+//         <div class="col-md-8 d-flex flex-column justify-content-start">
+//           <!-- Materiales -->
+//           <div class="tarea-materiales mb-0 mt-0 pt-0">
+//             <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+//             <table class="tabla-presupuesto tabla-presupuesto-sm">
+//               <thead>
+//                 <tr>
+//                   <th>Material</th>
+//                   <th>Cantidad</th>
+//                   <th>Precio Unitario</th>
+//                   <th>% Extra</th>
+//                   <th>Subtotal</th>
+//                 </tr>
+//               </thead>
+//               <tbody>
+//                 <tr>
+//                   <td>Cable 2x1,5mm</td>
+//                   <td>50 m</td>
+//                   <td>$100</td>
+//                   <td><input type="number" value="5" min="0" class="input-extra form-control form-control-sm"></td>
+//                   <td>$5.250</td>
+//                 </tr>
+//                 <tr>
+//                   <td>Tubo PVC 3/4"</td>
+//                   <td>10 u</td>
+//                   <td>$450</td>
+//                   <td><input type="number" value="0" min="0" class="input-extra form-control form-control-sm"></td>
+//                   <td>$4.500</td>
+//                 </tr>
+//                 <tr class="fila-subtotal">
+//                   <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
+//                   <td><b>$9.750</b></td>
+//                 </tr>
+//               </tbody>
+//             </table>
+//           </div>
 
-    <div class="tarea-total">
-      <button class="btn-total-tarea">Subtotal Tarea 1: $25.800</button>
-    </div>
-  </div>
+//           <!-- Mano de Obra -->
+//           <div class="tarea-mano-obra">
+//             <div class="bloque-titulo mt-0">Mano de Obra</div>
+//             <table class="tabla-presupuesto tabla-presupuesto-sm">
+//               <thead>
+//                 <tr>
+//                   <th>Tipo</th>
+//                   <th>Cantidad</th>
+//                   <th>Valor Jornal</th>
+//                   <th>% Extra</th>
+//                   <th>Subtotal</th>
+//                 </tr>
+//               </thead>
+//               <tbody>
+//                 <tr>
+//                   <td>Oficial Electricista</td>
+//                   <td>2</td>
+//                   <td>$5.000</td>
+//                   <td><input type="number" value="0" min="0" class="input-extra form-control form-control-sm"></td>
+//                   <td>$10.000</td>
+//                 </tr>
+//                 <tr>
+//                   <td>Ayudante</td>
+//                   <td>1</td>
+//                   <td>$5.500</td>
+//                   <td><input type="number" value="10" min="0" class="input-extra form-control form-control-sm"></td>
+//                   <td>$6.050</td>
+//                 </tr>
+//                 <tr class="fila-subtotal">
+//                   <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
+//                   <td><b>$16.050</b></td>
+//                 </tr>
+//               </tbody>
+//             </table>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
 
-  <!-- TOTAL GENERAL EN CARD -->
-  <div class="presupuesto-total-card">
-  <div class="presupuesto-total-row">
-    <div class="presupuesto-total-actions">
-      <button class="btn btn-primary"><i class="fas fa-print"></i> Imprimir</button>
-      <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
-    </div>
-    <div class="presupuesto-total-label">
-      <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
-      <span class="presupuesto-total-valor">$25.800</span>
-    </div>
-  </div>
-</div>
-`);
+//     <!-- Total por tarea -->
+//     <div class="tarea-total">
+//       <button class="btn-total-tarea">Subtotal Tarea 1: $25.800</button>
+//     </div>
+//   </div>
+
+//   <!-- TOTAL GENERAL -->
+//   <div class="presupuesto-total-card">
+//     <div class="presupuesto-total-row">
+//       <div class="presupuesto-total-actions">
+//         <button class="btn btn-primary"><i class="fas fa-print"></i> Imprimir</button>
+//         <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
+//       </div>
+//       <div class="presupuesto-total-label">
+//         <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+//         <span class="presupuesto-total-valor">$25.800</span>
+//       </div>
+//     </div>
+//   </div>
+// </div>
+// `);
 
   // 4. Cambiar color de encabezado Visita a verde
   $('.accordion_2').removeClass('card-danger').addClass('card-success');
@@ -1122,5 +1150,260 @@ if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
 hayCambios = false;
 controlarBotonGenerarPresupuesto(); 
   
+// ======= Obtiene los datos para el presupuesto =======
+function recolectarDatosParaPresupuesto() {
+  // === CLIENTE ===
+  const razon_social = $('#razon_social').val() || null;
+  const cuit = $('#cuit').val() || null;
+  const contacto = $('#contacto_obra').val() || null;
+  const email = $('#email_contacto_obra').val() || null;
+  const telefono = $('#tel_contacto_obra').val() || null;
+
+  // Dirección: calle + altura + localidad + partido + provincia + CP
+  const calle = $('#select2-calle_visita-container').text().trim();
+  const altura = $('#altura_visita').val()?.trim() || '';
+  const localidad = $('#select2-localidad_visita-container').text().trim();
+  const partido = $('#select2-partido_visita-container').text().trim();
+  const provincia = $('#select2-provincia_visita-container').text().trim();
+  const cp = $('#cp_visita').val()?.trim() || '';
+
+  const direccion = [calle, altura, localidad, partido, provincia, cp]
+    .filter(Boolean)
+    .join(', ');
+
+  const cliente = {
+    razon_social,
+    cuit,
+    direccion: direccion || null,
+    contacto,
+    email,
+    telefono
+  };
+
+  // === OBRA ===
+  const obra = {
+    titulo: $('#titulo_obra').val() || $('#nombre_obra').val() || null,
+    direccion: direccion || null,
+    fecha: $('#fecha_visita').val() || null,
+    descripcion: $('#descripcion_obra').val()
+              || $('#detalle_visita').val()
+              || $('#descripcion').val()
+              || null
+  };
+
+  // === PRESUPUESTO ===
+  const presupuesto = {
+    id_previsita: $('#id_previsita').val() || null,
+    id_visita: $('#id_visita').val() || null,
+    estado_visita: $('#estado_visita').val() || null,
+    agente: $('#agente_tecnico').val() || null
+  };
+
+  // === TAREAS ===
+  const tareas = [];
+
+  $('#accordionTareas > .card').each(function(index) {
+    const $card = $(this);
+    const idx = index + 1;
+
+    const tarea = {
+      id_tarea: $card.find('input[name="id_tarea[]"]').val() || null,
+      descripcion: $card.find('textarea.tarea-descripcion').val().trim(),
+      materiales: [],
+      mano_obra: []
+    };
+
+    // --- Materiales
+    $card.find('.materiales-table tbody tr').each(function() {
+      const $fila = $(this);
+      if ($fila.hasClass('fila-vacia-materiales')) return;
+
+      const id = $fila.data('material-id');
+      const nombre = $fila.find('td:nth-child(2)').text().trim();
+      const cantidad = parseFloat($fila.find('td:nth-child(3)').text().replace(',', '.')) || 0;
+
+      tarea.materiales.push({
+        id_material: id,
+        nombre: nombre,
+        cantidad: cantidad
+      });
+    });
+
+    // --- Mano de Obra
+    $card.find('.mano-obra-table tbody tr').each(function() {
+      const $fila = $(this);
+      if ($fila.hasClass('fila-vacia-mano-obra')) return;
+
+      const id = $fila.find('input[name="mano_obra_id[]"]').val();
+      const cantidad = parseFloat($fila.find('input[name="mano_obra_cantidad[]"]').val()) || 0;
+      const dias = parseFloat($fila.find('input[name="mano_obra_dias[]"]').val()) || 1;
+      const observacion = $fila.find('input[name="mano_obra_observacion[]"]').val().trim();
+      const nombre = $fila.find('td:nth-child(2) span').text().trim();
+
+      tarea.mano_obra.push({
+        id_jornal: id,
+        nombre: nombre,
+        cantidad: cantidad,
+        dias: dias,
+        observacion: observacion
+      });
+    });
+
+    tareas.push(tarea);
+  });
+
+  // === RETORNO FINAL ===
+  return {
+    cliente,
+    obra,
+    presupuesto,
+    tareas
+  };
+}
+
+function renderizarPresupuestoDesdeDatos(datos) {
+  const contenedor = $('#contenedorPresupuestoGenerado');
+  contenedor.empty();
+
+  datos.tareas.forEach((tarea, index) => {
+    const numeroTarea = index + 1;
+    const descripcion = tarea.descripcion || '';
+
+    // HTML dinámico de materiales
+    let htmlMateriales = '';
+    tarea.materiales.forEach((mat) => {
+      htmlMateriales += `
+        <tr>
+          <td>${mat.nombre || ''}</td>
+          <td>${mat.cantidad || ''}</td>
+          <td><input type="number" class="form-control form-control-sm" value="0"></td>
+          <td><input type="number" class="input-extra form-control form-control-sm" value="0" min="0"></td>
+          <td>$0.00</td>
+        </tr>`;
+    });
+
+    // HTML dinámico de mano de obra
+    let htmlManoObra = '';
+    tarea.mano_obra.forEach((mo) => {
+      htmlManoObra += `
+        <tr>
+          <td>${mo.nombre || ''}</td>
+          <td>${mo.cantidad || ''}</td>
+          <td><input type="number" class="form-control form-control-sm" value="0"></td>
+          <td><input type="number" class="input-extra form-control form-control-sm" value="0" min="0"></td>
+          <td>$0.00</td>
+        </tr>`;
+    });
+
+    const htmlTarea = `
+    <div class="tarea-card">
+      <div class="tarea-encabezado">
+        <span>
+          <i class="fas fa-tasks"></i> 
+          <b>Tarea ${numeroTarea}: ${descripcion}</b>
+        </span>
+        <label class="incluir-presupuesto-label">
+          <input type="checkbox" class="incluir-en-total" checked>
+          <span>Incluído en el presupuesto</span>
+        </label>
+      </div>
+
+      <div class="container-fluid px-3 pt-3">
+        <div class="row">
+          <!-- Columna izquierda -->
+          <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height: 100%;">
+            <!-- Detalle -->
+            <div class="mb-2">
+              <label class="mb-0"><b>Detalle de la tarea</b></label>
+              <textarea class="form-control form-control-sm" rows="5">${descripcion}</textarea>
+            </div>
+
+            <!-- Fotos -->
+            <div class="mb-2 flex-grow-1">
+              <label><b>Fotos (próximamente)</b></label>
+              <div class="preview-fotos border rounded bg-light p-3 d-flex align-items-center justify-content-center text-muted" style="min-height: 100px;">
+                <em>Aquí se mostrarán las imágenes</em>
+              </div>
+            </div>
+          </div>
+
+          <!-- Columna derecha -->
+          <div class="col-md-8 d-flex flex-column justify-content-start">
+            <!-- Materiales -->
+            <div class="tarea-materiales mb-0 mt-0 pt-0">
+              <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+              <table class="tabla-presupuesto tabla-presupuesto-sm">
+                <thead>
+                  <tr>
+                    <th>Material</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unitario</th>
+                    <th>% Extra</th>
+                    <th>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${htmlMateriales}
+                  <tr class="fila-subtotal">
+                    <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
+                    <td><b>$0.00</b></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Mano de Obra -->
+            <div class="tarea-mano-obra">
+              <div class="bloque-titulo mt-0">Mano de Obra</div>
+              <table class="tabla-presupuesto tabla-presupuesto-sm">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Valor Jornal</th>
+                    <th>% Extra</th>
+                    <th>Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${htmlManoObra}
+                  <tr class="fila-subtotal">
+                    <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
+                    <td><b>$0.00</b></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Total por tarea -->
+      <div class="tarea-total">
+        <button class="btn-total-tarea">Subtotal Tarea ${numeroTarea}: $0.00</button>
+      </div>
+    </div>`;
+
+    contenedor.append(htmlTarea);
+  });
+
+  // Agregar bloque de total general
+  const htmlTotal = `
+  <div class="presupuesto-total-card">
+    <div class="presupuesto-total-row">
+      <div class="presupuesto-total-actions">
+        <button class="btn btn-primary"><i class="fas fa-print"></i> Imprimir</button>
+        <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
+      </div>
+      <div class="presupuesto-total-label">
+        <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+        <span class="presupuesto-total-valor">$0.00</span>
+      </div>
+    </div>
+  </div>`;
+  contenedor.append(htmlTotal);
+}
+
+
 
 });

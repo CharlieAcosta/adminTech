@@ -1046,7 +1046,6 @@ $(document).ready(function() {
     console.log('Valor desenfocado:', $(this).val());
   });
 
-console.log($("#cp_visita").inputmask("option"));
     navigator.clipboard.writeText('');
     // current funtions
     abm_detect();

@@ -936,11 +936,52 @@ textarea.is-invalid {
     box-shadow: 0 2px 8px rgba(38,120,187,0.07);
     transition: background 0.2s;
   }
-  .btn.btn-primary:hover, .btn.btn-primary:focus {
+
+.btn.btn-primary:hover, .btn.btn-primary:focus {
     background: #205e94;
     color: #fff;
-  }
-  
+}
+
+.tabla-presupuesto-sm td,
+.tabla-presupuesto-sm th {
+  padding: 2px 6px !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+}
+
+.tabla-presupuesto th:nth-child(1),
+.tabla-presupuesto td:nth-child(1) {
+  width: 40%;
+}
+
+.tabla-presupuesto th:nth-child(2),
+.tabla-presupuesto td:nth-child(2) {
+  width: 10%;
+}
+.tabla-presupuesto th:nth-child(3),
+.tabla-presupuesto td:nth-child(3) {
+  width: 20%;
+}
+.tabla-presupuesto th:nth-child(4),
+.tabla-presupuesto td:nth-child(4) {
+  width: 15%;
+}
+.tabla-presupuesto th:nth-child(5),
+.tabla-presupuesto td:nth-child(5) {
+  width: 15%;
+}  
+
+.tabla-presupuesto td:nth-child(5),
+.tabla-presupuesto th:nth-child(5) {
+  text-align: right;
+}
+
+/* 4. Justificar el total de fila a la derecha (Subtotal materiales/mano de obra) */
+.fila-subtotal td:last-child {
+  text-align: right;
+}
+
+
   
   
 
