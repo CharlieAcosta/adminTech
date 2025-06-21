@@ -833,6 +833,7 @@ textarea.is-invalid {
     margin-bottom: 7px;
     table-layout: fixed;
   }
+
   .tabla-presupuesto thead th {
     background: #18a7c9;
     color: #fff;
@@ -841,6 +842,7 @@ textarea.is-invalid {
     font-weight: bold;
     border: 1px solid #dae2e6;
   }
+
   .tabla-presupuesto tbody tr:nth-child(even) { background: #f6fafd; }
   .tabla-presupuesto tbody tr:nth-child(odd) { background: #e9eef1; }
   .tabla-presupuesto td, .tabla-presupuesto th {
@@ -850,6 +852,7 @@ textarea.is-invalid {
     vertical-align: middle;
     word-break: break-word;
   }
+
   .tabla-presupuesto .input-extra {
     width: 70px;
     min-width: 30px;
@@ -860,6 +863,7 @@ textarea.is-invalid {
     font-size: 14px;
     text-align: right;
   }
+
   .fila-subtotal td {
     background: #f0f5f2 !important;
     font-weight: bold;
@@ -944,41 +948,46 @@ textarea.is-invalid {
 
 .tabla-presupuesto-sm td,
 .tabla-presupuesto-sm th {
-  padding: 2px 6px !important;
+  padding: 2px 12px !important; /* antes 2px 6px */
   font-size: 13px !important;
   line-height: 1.2 !important;
 }
 
+/* Anchos para 6 columnas (suman 100%) */
 .tabla-presupuesto th:nth-child(1),
-.tabla-presupuesto td:nth-child(1) {
-  width: 40%;
-}
-
+.tabla-presupuesto td:nth-child(1) { width: 40%; } /* Material/Tipo */
 .tabla-presupuesto th:nth-child(2),
-.tabla-presupuesto td:nth-child(2) {
-  width: 10%;
-}
+.tabla-presupuesto td:nth-child(2) { width: 10%; } /* Cantidad */
 .tabla-presupuesto th:nth-child(3),
-.tabla-presupuesto td:nth-child(3) {
-  width: 20%;
-}
+.tabla-presupuesto td:nth-child(3) { width: 15%; } /* Precio unitario / Valor jornal */
 .tabla-presupuesto th:nth-child(4),
-.tabla-presupuesto td:nth-child(4) {
-  width: 15%;
-}
+.tabla-presupuesto td:nth-child(4) { width: 15%; } /* Monto extra fijo */
 .tabla-presupuesto th:nth-child(5),
-.tabla-presupuesto td:nth-child(5) {
-  width: 15%;
-}  
-
-.tabla-presupuesto td:nth-child(5),
-.tabla-presupuesto th:nth-child(5) {
+.tabla-presupuesto td:nth-child(5) { width: 10%; } /* % Extra */
+.tabla-presupuesto th:nth-child(6),
+.tabla-presupuesto td:nth-child(6) {
+  width: 10%;       /* Subtotal */
   text-align: right;
 }
 
-/* 4. Justificar el total de fila a la derecha (Subtotal materiales/mano de obra) */
-.fila-subtotal td:last-child {
-  text-align: right;
+.tabla-presupuesto {
+  table-layout: fixed;  /* Fuerza a respetar los anchos */
+}
+.tabla-presupuesto th,
+.tabla-presupuesto td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+/* 2) Quédate con esta y dale un padding horizontal amplio */
+.tabla-presupuesto input[type="number"] {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;   /* 4px arriba/abajo, 8px izquierda/derecha */
+  margin: 0;          /* asegúrate de resetear cualquier margen */
 }
 
 

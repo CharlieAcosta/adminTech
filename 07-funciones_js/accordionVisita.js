@@ -120,69 +120,75 @@ $(document).ready(function() {
   });
 
 
-  // Función para agregar material
-  $(document).on('click', '.agregar-material', function() {
-    var $cardBody = $(this).closest('.card-body');
-    var $materialSelect = $cardBody.find('.material-select');
-    var $cantidadInput = $cardBody.find('.material-cantidad');
-    var $materialesTable = $cardBody.find('.materiales-table tbody');
+// Función para agregar material
+$(document).on('click', '.agregar-material', function() {
+  var $cardBody = $(this).closest('.card-body');
+  var $materialSelect = $cardBody.find('.material-select');
+  var $cantidadInput = $cardBody.find('.material-cantidad');
+  var $materialesTable = $cardBody.find('.materiales-table tbody');
 
-    var materialId = $materialSelect.val();
-    var materialText = $materialSelect.find('option:selected').text();
-    var cantidad = $cantidadInput.val();
+  var materialId = $materialSelect.val();
+  var materialText = $materialSelect.find('option:selected').text();
+  var cantidad = $cantidadInput.val();
 
-    // Validaciones
-    if (!materialId) {
-       mostrarAdvertencia('Debes seleccionar un material.', 4);
-      return;
+  if (!materialId) {
+    mostrarAdvertencia('Debes seleccionar un material.', 4);
+    return;
+  }
+
+  if (!cantidad || cantidad <= 0) {
+    mostrarAdvertencia('Debes ingresar una cantidad válida.', 4);
+    return;
+  }
+
+  // Verificar duplicados
+  var existe = false;
+  $materialesTable.find('tr').each(function() {
+    if ($(this).data('material-id') == materialId) {
+      existe = true;
+      return false;
     }
-
-    if (!cantidad || cantidad <= 0) {
-      mostrarAdvertencia('Debes ingresar una cantidad válida.', 4);
-      return;
-    }
-
-    // Verificar duplicados
-    var existe = false;
-    $materialesTable.find('tr').each(function() {
-      if ($(this).data('material-id') == materialId) {
-        existe = true;
-        return false; // salir del each
-      }
-    });
-
-    if (existe) {
-      mostrarError('Este material ya fue asociado a la tarea.', 4);
-      return;
-    }
-
-    // Si estaba la fila vacía, la sacamos
-    $materialesTable.find('.fila-vacia-materiales').remove();
-
-    // Número de fila
-    var rowCount = $materialesTable.find('tr').length + 1;
-
-    // Agregar fila
-    var nuevaFila = `
-      <tr data-material-id="${materialId}">
-        <td>${rowCount}</td>
-        <td>${materialText}</td>
-        <td>${cantidad}</td>
-        <td class="text-center">
-            <i class="fa fa-trash v-icon-pointer text-danger eliminar-material" title="Eliminar material" style="cursor: pointer; font-size: 1.2rem;"></i>
-        </td>
-      </tr>
-    `;
-
-    $materialesTable.append(nuevaFila);
-
-    // Limpiar campos
-    $materialSelect.val('').trigger('change');
-    $cantidadInput.val('');
   });
 
-  // Función para eliminar material
-  $(document).on('click', '.eliminar-material', function() {
+  if (existe) {
+    mostrarError('Este material ya fue asociado a la tarea.', 4);
+    return;
+  }
+
+  // Obtener data-* del option seleccionado
+  var $selected = $materialSelect.find('option:selected');
+  var precio = $selected.data('precio_unitario') || '';
+  var unidadMedida = $selected.data('unidad_medida') || '';
+  var unidadVenta = $selected.data('unidad_venta') || '';
+  var contenido = $selected.data('contenido') || '';
+  var logEdicion = $selected.data('log_edicion') || '';
+
+  // Agregar fila
+  var rowCount = $materialesTable.find('tr').length + 1;
+  var nuevaFila = `
+    <tr 
+      data-material-id="${materialId}"
+      data-precio_unitario="${precio}"
+      data-unidad_medida="${unidadMedida}"
+      data-unidad_venta="${unidadVenta}"
+      data-contenido="${contenido}"
+      data-log_edicion="${logEdicion}">
+      <td>${rowCount}</td>
+      <td>${materialText}</td>
+      <td>${cantidad}</td>
+      <td class="text-center">
+          <i class="fa fa-trash v-icon-pointer text-danger eliminar-material" title="Eliminar material" style="cursor: pointer; font-size: 1.2rem;"></i>
+      </td>
+    </tr>
+  `;
+
+  $materialesTable.append(nuevaFila);
+  $materialSelect.val('').trigger('change');
+  $cantidadInput.val('');
+});
+
+// Función para eliminar material
+$(document).on('click', '.eliminar-material', function() {
     var $fila = $(this).closest('tr');
     var $tabla = $fila.closest('tbody');
 
@@ -201,95 +207,88 @@ $(document).ready(function() {
         </tr>
       `);
     }
+});
+
+// Función para agregar mano de obra  
+$(document).on('click', '.agregar-mano-obra', function () {
+  const $cardBody = $(this).closest('.card-body');
+  const $select = $cardBody.find('.mano-obra-select');
+  const $cantidad = $cardBody.find('.mano-obra-cantidad');
+  const tabla = $cardBody.find('.mano-obra-table tbody');
+
+  const id = $select.val();
+  const texto = $select.find('option:selected').text();
+  const cantidad = $cantidad.val();
+
+  // Validar duplicado
+  let yaExiste = false;
+  tabla.find('tr').each(function () {
+    const idExistente = $(this).find('input[name="mano_obra_id[]"]').val();
+    if (idExistente == id) {
+      yaExiste = true;
+      return false;
+    }
   });
 
-  // Función para agregar mano de obra  
-  $(document).on('click', '.agregar-mano-obra', function () {
+  if (yaExiste) {
+    mostrarError('Esa mano de obra ya fue asociada a la tarea.', 3);
+    return;
+  }
 
-      // Recalcular jornales al modificar cantidad o días
-      $(document).on('input', '.mano-obra-cantidad, .mano-obra-dias', function () {
-        const $row = $(this).closest('tr');
-        const cantidad = parseInt($row.find('input[name="mano_obra_cantidad[]"]').val()) || 0;
-        const dias     = parseInt($row.find('input[name="mano_obra_dias[]"]').val()) || 0;
-        const jornales = cantidad * dias;
-        $row.find('.mano-obra-jornales').text(jornales);
-      });
+  if (!id || id === 'Seleccione mano de obra') {
+    mostrarAdvertencia('Debe seleccionar una opción de mano de obra.', 3);
+    return;
+  }
 
-      const $cardBody = $(this).closest('.card-body');
-      const $select = $cardBody.find('.mano-obra-select');
-      const $cantidad = $cardBody.find('.mano-obra-cantidad');
-      const tabla = $cardBody.find('.mano-obra-table tbody');
+  if (!cantidad || cantidad <= 0) {
+    mostrarAdvertencia('Debe ingresar una cantidad válida.', 3);
+    return;
+  }
 
-      const id = $select.val();
-      const texto = $select.find('option:selected').text();
-      const cantidad = $cantidad.val();
+  // Obtener data-* del option
+  const $opt = $select.find('option:selected');
+  const valor = $opt.data('jornal_valor') || '';
+  const updatedAt = $opt.data('updated_at') || '';
 
-      // Validar duplicado
-      let yaExiste = false;
-      tabla.find('tr').each(function () {
-          const idExistente = $(this).find('input[name="mano_obra_id[]"]').val();
-          if (idExistente == id) {
-              yaExiste = true;
-              return false;
-          }
-      });
+  // Eliminar fila vacía si existe
+  tabla.find('.fila-vacia-mano-obra').remove();
 
-      if (yaExiste) {
-          mostrarError('Esa mano de obra ya fue asociada a la tarea.', 3);
-          return;
-      }
+  const index = tabla.find('tr').length + 1;
 
-      if (!id || id === 'Seleccione mano de obra') {
-          mostrarAdvertencia('Debe seleccionar una opción de mano de obra.', 3);
-          return;
-      }
+  const fila = `
+    <tr data-jornal_valor="${valor}" data-updated_at="${updatedAt}">
+      <td>${index}</td>
+      <td>
+        <input type="hidden" name="mano_obra_id[]" value="${id}">
+        <span>${texto}</span>
+      </td>
+      <td>
+        <span>${cantidad}</span>
+        <input type="hidden" name="mano_obra_cantidad[]" value="${cantidad}">
+      </td>
+      <td class="text-center align-middle p-0">
+        <div style="width: 100%; display: flex; justify-content: center;">
+          <input type="number" class="form-control form-control-sm mano-obra-dias" name="mano_obra_dias[]" value="1" min="1" style="min-width: 60px; max-width: 60px;">
+        </div>
+      </td>
+      <td class="text-center mano-obra-jornales">${cantidad}</td>               
+      <td>
+        <input type="text" name="mano_obra_observacion[]" class="form-control form-control-sm" placeholder="Observaciones">
+      </td>
+      <td class="text-center">
+        <i class="fa fa-trash eliminar-mano-obra text-danger" title="Eliminar" style="cursor: pointer;"></i>
+      </td>
+    </tr>
+  `;
 
-      if (!cantidad || cantidad <= 0) {
-          mostrarAdvertencia('Debe ingresar una cantidad válida.', 3);
-          return;
-      }
-
-      // Eliminar fila vacía si existe
-      const filaVacia = tabla.find('.fila-vacia-mano-obra');
-      if (filaVacia.length) filaVacia.remove();
-
-      // Contador de filas
-      const index = tabla.find('tr').length + 1;
-
-      const fila = `
-        <tr>
-          <td>${index}</td>
-          <td>
-              <input type="hidden" name="mano_obra_id[]" value="${id}">
-              <span>${texto}</span>
-          </td>
-          <td>
-              <span>${cantidad}</span>
-              <input type="hidden" name="mano_obra_cantidad[]" value="${cantidad}">
-          </td>
-          <td class="text-center align-middle p-0">
-            <div style="width: 100%; display: flex; justify-content: center;">
-              <input type="number" class="form-control form-control-sm mano-obra-dias" name="mano_obra_dias[]" value="1" min="1" style="min-width: 60px; max-width: 60px;">
-            </div>
-          </td>
-          <td class="text-center mano-obra-jornales">${cantidad}</td>               
-          <td>
-              <input type="text" name="mano_obra_observacion[]" class="form-control form-control-sm" placeholder="Observaciones">
-          </td>
-          <td class="text-center">
-              <i class="fa fa-trash eliminar-mano-obra text-danger" title="Eliminar" style="cursor: pointer;"></i>
-          </td>
-        </tr>
-      `;
+  tabla.append(fila);
+  $select.val(null).trigger('change');
+  $cantidad.val('');
+});
 
 
-      tabla.append(fila);
-      $select.val(null).trigger('change');
-      $cantidad.val('');
-  });
-
-  // Función para eliminar mano de obra
-  $(document).on('click', '.eliminar-mano-obra', function () {
+// Función para eliminar mano de obra
+$(document).on('click', '.eliminar-mano-obra', function () {
     const fila = $(this).closest('tr');
     const tabla = fila.closest('tbody'); // 🔧 ahora es relativa
     fila.remove();
@@ -303,10 +302,10 @@ $(document).ready(function() {
             </tr>
         `);
     }
-  });
+});
 
 
-  $(document).on('change', '.tarea-fotos', function (e) {
+$(document).on('change', '.tarea-fotos', function (e) {
       const input = e.target;
       const index = $(input).data('index'); // índice de la tarea
       const previewContainer = $(`#preview_fotos_tarea_${index}`);
@@ -376,10 +375,10 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
           };
           reader.readAsDataURL(file);
       });
-  });
+});
 
-  // acciones y eventos
-  $(document).on('click', '#btn-agregar-tarea', function () {
+// acciones y eventos
+$(document).on('click', '#btn-agregar-tarea', function () {
       //console.log('Agregar nueva tarea clickeado');
         if (!modoVisualizacion) hayCambios = true;
         controlarBotonGenerarPresupuesto();
@@ -400,10 +399,10 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
             mostrarAdvertencia('Complete la descripción de la tarea antes de agregar otra.', 4);
             return;
         }
-  });
+});
 
 
-  $(document).on('input', '.tarea-descripcion', function () {
+$(document).on('input', '.tarea-descripcion', function () {
     const texto = $(this).val().trim();
 
     // Validación visual
@@ -418,11 +417,11 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
     const preview = texto.length > 100 ? texto.substring(0, 100) + '...' : texto;
 
     encabezado.html(`<strong>${encabezado.data('titulo-base')}:</strong> ${preview || 'Breve descripción'}`);
-  });
+});
 
 
-  // clonado de tarea
-  $(document).on('click', '#btn-agregar-tarea', function () {
+// clonado de tarea
+$(document).on('click', '#btn-agregar-tarea', function () {
       let hayDescripcionIncompleta = false;
 
       $('.tarea-descripcion').each(function () {
@@ -622,10 +621,10 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
       // 🔧 Reset visual del valor para que se vea el placeholder
       nuevaTarea.find('.material-select').val('').trigger('change');
       nuevaTarea.find('.mano-obra-select').val('').trigger('change');
-  });
+});
 
-  // eliminar tarea
-  $(document).on('click', '.eliminar-tarea', function () {
+// eliminar tarea
+$(document).on('click', '.eliminar-tarea', function () {
     const totalTareas = $('#accordionTareas > .card').length;
     const $boton = $(this); // capturamos el botón para usar en el callback
 
@@ -674,11 +673,11 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
             card.find('.preview-fotos').attr('id', `preview_fotos_tarea_${nuevoIndex}`);
         });
     });
-  });
+});
 
 
-  // Guardar visita
-  $(document).on('click', '.btn-guardar-visita', function () {
+// Guardar visita
+$(document).on('click', '.btn-guardar-visita', function () {
     $('#accordionTareas > .card').each(function() {
         const idx = parseInt($(this)
           .find('.preview-fotos')
@@ -806,9 +805,9 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
         mostrarError('Error al comunicar con el servidor.', 4);
       }
     });
-  });
+});
   
-  $(document).on('click', '.btn-cancelar-visita', function () {
+$(document).on('click', '.btn-cancelar-visita', function () {
     if (modoVisualizacion) {
       // En modo visualización, salir directamente sin preguntar
       window.location.href = 'seguimiento_de_obra_listado.php';
@@ -826,7 +825,7 @@ console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[inde
         null
       );
     }
-  });
+});
   
 // Botón: Generar Presupuesto
 $(document).on('click', '.btn-generar-presupuesto', function() {
@@ -1159,7 +1158,6 @@ function recolectarDatosParaPresupuesto() {
   const email = $('#email_contacto_obra').val() || null;
   const telefono = $('#tel_contacto_obra').val() || null;
 
-  // Dirección: calle + altura + localidad + partido + provincia + CP
   const calle = $('#select2-calle_visita-container').text().trim();
   const altura = $('#altura_visita').val()?.trim() || '';
   const localidad = $('#select2-localidad_visita-container').text().trim();
@@ -1167,9 +1165,7 @@ function recolectarDatosParaPresupuesto() {
   const provincia = $('#select2-provincia_visita-container').text().trim();
   const cp = $('#cp_visita').val()?.trim() || '';
 
-  const direccion = [calle, altura, localidad, partido, provincia, cp]
-    .filter(Boolean)
-    .join(', ');
+  const direccion = [calle, altura, localidad, partido, provincia, cp].filter(Boolean).join(', ');
 
   const cliente = {
     razon_social,
@@ -1222,10 +1218,21 @@ function recolectarDatosParaPresupuesto() {
       const nombre = $fila.find('td:nth-child(2)').text().trim();
       const cantidad = parseFloat($fila.find('td:nth-child(3)').text().replace(',', '.')) || 0;
 
+      const precio_unitario = parseFloat($fila.data('precio_unitario')) || 0;
+      const unidad_medida = $fila.data('unidad_medida') || '';
+      const unidad_venta = $fila.data('unidad_venta') || '';
+      const contenido = parseFloat($fila.data('contenido')) || 0;
+      const log_edicion = $fila.data('log_edicion') || null;
+
       tarea.materiales.push({
         id_material: id,
         nombre: nombre,
-        cantidad: cantidad
+        cantidad: cantidad,
+        precio_unitario: precio_unitario,
+        unidad_medida: unidad_medida,
+        unidad_venta: unidad_venta,
+        contenido: contenido,
+        log_edicion: log_edicion
       });
     });
 
@@ -1240,19 +1247,23 @@ function recolectarDatosParaPresupuesto() {
       const observacion = $fila.find('input[name="mano_obra_observacion[]"]').val().trim();
       const nombre = $fila.find('td:nth-child(2) span').text().trim();
 
+      const jornal_valor = parseFloat($fila.data('jornal_valor')) || 0;
+      const updated_at = $fila.data('updated_at') || null;
+
       tarea.mano_obra.push({
         id_jornal: id,
         nombre: nombre,
         cantidad: cantidad,
         dias: dias,
-        observacion: observacion
+        observacion: observacion,
+        jornal_valor: jornal_valor,
+        updated_at: updated_at
       });
     });
 
     tareas.push(tarea);
   });
 
-  // === RETORNO FINAL ===
   return {
     cliente,
     obra,
@@ -1272,26 +1283,96 @@ function renderizarPresupuestoDesdeDatos(datos) {
     // HTML dinámico de materiales
     let htmlMateriales = '';
     tarea.materiales.forEach((mat) => {
+      const precioUnitario = mat.precio_unitario ?? 0;
+      const cantidad = mat.cantidad ?? 0;
       htmlMateriales += `
         <tr>
           <td>${mat.nombre || ''}</td>
-          <td>${mat.cantidad || ''}</td>
-          <td><input type="number" class="form-control form-control-sm" value="0"></td>
-          <td><input type="number" class="input-extra form-control form-control-sm" value="0" min="0"></td>
-          <td>$0.00</td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm cantidad-material"
+              value="${cantidad}"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm precio-unitario"
+              value="${precioUnitario}"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm monto-extra-fijo"
+              value="0"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm porcentaje-extra"
+              value="0"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td class="text-right subtotal-material">$0.00</td>
         </tr>`;
     });
 
     // HTML dinámico de mano de obra
     let htmlManoObra = '';
     tarea.mano_obra.forEach((mo) => {
+      const valorJornal = mo.jornal_valor ?? 0;
+      const cantidadMo = mo.cantidad ?? 0;
       htmlManoObra += `
         <tr>
           <td>${mo.nombre || ''}</td>
-          <td>${mo.cantidad || ''}</td>
-          <td><input type="number" class="form-control form-control-sm" value="0"></td>
-          <td><input type="number" class="input-extra form-control form-control-sm" value="0" min="0"></td>
-          <td>$0.00</td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm cantidad-mano-obra"
+              value="${cantidadMo}"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm valor-jornal"
+              value="${valorJornal}"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm monto-extra-fijo"
+              value="0"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm porcentaje-extra"
+              value="0"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td class="text-right subtotal-mano">$0.00</td>
         </tr>`;
     });
 
@@ -1299,7 +1380,7 @@ function renderizarPresupuestoDesdeDatos(datos) {
     <div class="tarea-card">
       <div class="tarea-encabezado">
         <span>
-          <i class="fas fa-tasks"></i> 
+          <i class="fas fa-tasks"></i>
           <b>Tarea ${numeroTarea}: ${descripcion}</b>
         </span>
         <label class="incluir-presupuesto-label">
@@ -1317,7 +1398,6 @@ function renderizarPresupuestoDesdeDatos(datos) {
               <label class="mb-0"><b>Detalle de la tarea</b></label>
               <textarea class="form-control form-control-sm" rows="5">${descripcion}</textarea>
             </div>
-
             <!-- Fotos -->
             <div class="mb-2 flex-grow-1">
               <label><b>Fotos (próximamente)</b></label>
@@ -1338,6 +1418,7 @@ function renderizarPresupuestoDesdeDatos(datos) {
                     <th>Material</th>
                     <th>Cantidad</th>
                     <th>Precio Unitario</th>
+                    <th>Monto Extra Fijo</th>
                     <th>% Extra</th>
                     <th>Subtotal</th>
                   </tr>
@@ -1345,8 +1426,8 @@ function renderizarPresupuestoDesdeDatos(datos) {
                 <tbody>
                   ${htmlMateriales}
                   <tr class="fila-subtotal">
-                    <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
-                    <td><b>$0.00</b></td>
+                    <td colspan="5" class="text-right"><b>Subtotal Materiales</b></td>
+                    <td class="text-right"><b>$0.00</b></td>
                   </tr>
                 </tbody>
               </table>
@@ -1361,6 +1442,7 @@ function renderizarPresupuestoDesdeDatos(datos) {
                     <th>Tipo</th>
                     <th>Cantidad</th>
                     <th>Valor Jornal</th>
+                    <th>Monto Extra Fijo</th>
                     <th>% Extra</th>
                     <th>Subtotal</th>
                   </tr>
@@ -1368,8 +1450,8 @@ function renderizarPresupuestoDesdeDatos(datos) {
                 <tbody>
                   ${htmlManoObra}
                   <tr class="fila-subtotal">
-                    <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
-                    <td><b>$0.00</b></td>
+                    <td colspan="5" class="text-right"><b>Subtotal Mano de Obra</b></td>
+                    <td class="text-right"><b>$0.00</b></td>
                   </tr>
                 </tbody>
               </table>
@@ -1387,7 +1469,7 @@ function renderizarPresupuestoDesdeDatos(datos) {
     contenedor.append(htmlTarea);
   });
 
-  // Agregar bloque de total general
+  // Bloque total general
   const htmlTotal = `
   <div class="presupuesto-total-card">
     <div class="presupuesto-total-row">
@@ -1404,6 +1486,6 @@ function renderizarPresupuestoDesdeDatos(datos) {
   contenedor.append(htmlTotal);
 }
 
-
+// Aquí arrancamos 
 
 });

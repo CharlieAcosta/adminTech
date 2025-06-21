@@ -151,10 +151,11 @@ $opcionesMateriales = arrayToOptionsWithData(
   ' | ',
   ['unidad_venta', 'contenido', 'unidad_medida'],
   [
-      'precio_unitario' => 'precio_unitario',
-      'unidad_venta'    => 'unidad_venta',
-      'contenido'       => 'contenido',
-      'unidad_medida'   => 'unidad_medida'
+    'precio_unitario' => 'precio_unitario',
+    'unidad_medida'   => 'unidad_medida',
+    'unidad_venta'    => 'unidad_venta',
+    'contenido'       => 'contenido',
+    'log_edicion'     => 'log_edicion',
   ]
 );
 
@@ -168,7 +169,8 @@ $opcionesManoDeObra = arrayToOptionsWithData(
   ' | ',
   ['jornal_descripcion'],
   [
-      'jornal_valor' => 'jornal_valor'
+    'jornal_valor' => 'jornal_valor',
+    'updated_at'   => 'updated_at',
   ]
 );
 // END PHP - Visita
