@@ -306,6 +306,52 @@ function arrayToOptionsV2($array, $valor, $texto, $leyenda = null, $separador = 
     return $options;
 }
 
+/**
+ * Genera opciones <option> para un <select>, con soporte para atributos data-* personalizados.
+ * 
+ * @param array $array                Array de registros (asociativo)
+ * @param string $valor              Campo para el value=""
+ * @param string $texto              Campo principal visible en la opción
+ * @param string $leyenda            Primera opción vacía (por ejemplo: "Seleccione...")
+ * @param string $separador          Separador entre campos adicionales (usado en $extra)
+ * @param array $extra               Array de campos adicionales para concatenar al texto visible
+ * @param array $dataKeys            Array asociativo [nombreData => campo] para agregar data-*="valor"
+ * @return string                    HTML generado
+ */
+function arrayToOptionsWithData($array, $valor, $texto, $leyenda = "", $separador = " | ", $extra = [], $dataKeys = []) {
+    $html = "";
+
+    if ($leyenda !== "") {
+        $html .= "<option value=\"\">" . htmlspecialchars($leyenda, ENT_QUOTES) . "</option>";
+    }
+
+    foreach ($array as $item) {
+        $val = htmlspecialchars($item[$valor] ?? '', ENT_QUOTES);
+        $label = htmlspecialchars($item[$texto] ?? '', ENT_QUOTES);
+
+        foreach ($extra as $campo) {
+            if (isset($item[$campo])) {
+                $label .= $separador . htmlspecialchars($item[$campo], ENT_QUOTES);
+            }
+        }
+
+        // Agregar atributos data-*
+        $dataAttrs = "";
+        foreach ($dataKeys as $dataName => $campoDB) {
+            if (isset($item[$campoDB])) {
+                $valorCampo = htmlspecialchars($item[$campoDB], ENT_QUOTES);
+                $dataAttrs .= " data-$dataName=\"$valorCampo\"";
+            }
+        }
+
+        $html .= "<option value=\"$val\"$dataAttrs>$label</option>";
+    }
+
+    return $html;
+}
+
+
+
 // 8) arrayPrintValue(): Esta funcion devuelve el valor de un indice de un array envuelto en etiquetas. Se recomienda que las etiquetas sean palabras, pueden ser etiquetas html pero no se deberia usar embebida con otra funcion entonces. El array debe tener un formato indice => valor. Si el indice no esta seteado devuelve por defecto null, pero puede devolver otro valor si se indica.
 
 // referencia: arrayPrintValue([etiqueta de comienzo], [nombre del array], [indice del array], [etiqueta de fin], [salidad forzada por defecto null])

@@ -746,11 +746,251 @@ textarea.is-invalid {
   min-width: 160px; /* ajustá este valor a tu gusto */
 }
 
-.custom-success-btn {
-    background-color: #1e7e34 !important;
-    color: #ffffff !important;
-    border: none;
-}
-  
 
+/* CONTENEDOR PRINCIPAL */
+.presupuesto-contenedor {
+    width: 100%;
+    margin: 0 auto 25px auto;
+    padding: 0;
+  }
+  
+  /* CARD DE CADA TAREA */
+  .tarea-card {
+    background: #fff;
+    border-radius: 8px;
+    margin: 28px auto 0 auto;
+    box-shadow: 0 2px 16px rgba(44,44,44,0.07);
+    border: 1px solid #e0e0e0;
+    width: 100%;
+    padding-bottom: 12px;
+  }
+  
+  /* ENCABEZADO DE TAREA */
+  .tarea-encabezado {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #747d84;
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 18px 10px 12px;
+  }
+  
+  .incluir-presupuesto-label {
+    display: flex;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 500;
+    margin-left: 18px;
+  }
+  .incluir-presupuesto-label input[type="checkbox"] {
+    width: 19px;
+    height: 19px;
+    accent-color: #28c76f;
+    margin-right: 8px;
+  }
+  
+  /* DETALLE Y BLOQUES DE TAREA */
+  .tarea-detalle {
+    padding: 12px 12px 0 12px;
+  }
+  .tarea-detalle label {
+    font-weight: bold;
+    margin-bottom: 2px;
+    display: inline-block;
+    line-height: 1.1;
+  }
+  .tarea-detalle textarea {
+    width: 100%;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    min-height: 38px;
+    font-size: 15px;
+    padding: 6px 8px;
+    margin-top: 3px;
+    resize: vertical;
+    background: #fcfcfc;
+  }
+  .bloque-titulo {
+    font-weight: bold;
+    font-size: 16px;
+    margin-bottom: 2px;
+    margin-top: 12px;
+    padding: 4px 0 2px 0;
+    line-height: 1.15;
+  }
+  .tarea-materiales, .tarea-mano-obra {
+    padding: 7px 12px 0 12px;
+  }
+  
+  /* TABLAS DE PRESUPUESTO */
+  .tabla-presupuesto {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+    margin-bottom: 7px;
+    table-layout: fixed;
+  }
+
+  .tabla-presupuesto thead th {
+    background: #18a7c9;
+    color: #fff;
+    padding: 7px 3px 7px 10px;
+    text-align: left;
+    font-weight: bold;
+    border: 1px solid #dae2e6;
+  }
+
+  .tabla-presupuesto tbody tr:nth-child(even) { background: #f6fafd; }
+  .tabla-presupuesto tbody tr:nth-child(odd) { background: #e9eef1; }
+  .tabla-presupuesto td, .tabla-presupuesto th {
+    border: 1px solid #dae2e6;
+    padding: 6px 9px 5px 9px;
+    text-align: left;
+    vertical-align: middle;
+    word-break: break-word;
+  }
+
+  .tabla-presupuesto .input-extra {
+    width: 70px;
+    min-width: 30px;
+    max-width: 85px;
+    padding: 3px 5px;
+    border-radius: 3px;
+    border: 1px solid #bdbdbd;
+    font-size: 14px;
+    text-align: right;
+  }
+
+  .fila-subtotal td {
+    background: #f0f5f2 !important;
+    font-weight: bold;
+    color: #212a21;
+  }
+  
+  /* TOTAL POR TAREA */
+  .tarea-total {
+    text-align: right;
+    padding: 7px 18px 0 0;
+  }
+  .btn-total-tarea {
+    background: #28c76f;
+    color: #fff;
+    font-size: 17px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 20px;
+    margin-top: 6px;
+    margin-bottom: 0;
+    cursor: default;
+  }
+  
+  /* CARD DE TOTAL GENERAL DE PRESUPUESTO */
+  .presupuesto-total-card {
+    width: 100%;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(50,50,50,0.07);
+    padding: 20px 24px 16px 24px;
+    margin: 28px 0 8px 0;
+    border: 1.5px solid #ededed;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .presupuesto-total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+  .presupuesto-total-actions {
+    display: flex;
+    gap: 16px;
+  }
+  .presupuesto-total-label {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .presupuesto-total-title {
+    font-size: 1.25rem;
+    color: #18a664;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .presupuesto-total-valor {
+    font-size: 1.4rem;
+    color: #18a664;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+  
+  /* BOTONES DE TOTAL */
+  .btn.btn-primary {
+    background: #2678bb;
+    color: #fff;
+    font-weight: 500;
+    border: none;
+    border-radius: 7px;
+    font-size: 1rem;
+    padding: 10px 28px 10px 22px;
+    box-shadow: 0 2px 8px rgba(38,120,187,0.07);
+    transition: background 0.2s;
+  }
+
+.btn.btn-primary:hover, .btn.btn-primary:focus {
+    background: #205e94;
+    color: #fff;
+}
+
+.tabla-presupuesto-sm td,
+.tabla-presupuesto-sm th {
+  padding: 2px 12px !important; /* antes 2px 6px */
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+}
+
+/* Anchos para 6 columnas (suman 100%) */
+.tabla-presupuesto th:nth-child(1),
+.tabla-presupuesto td:nth-child(1) { width: 40%; } /* Material/Tipo */
+.tabla-presupuesto th:nth-child(2),
+.tabla-presupuesto td:nth-child(2) { width: 10%; } /* Cantidad */
+.tabla-presupuesto th:nth-child(3),
+.tabla-presupuesto td:nth-child(3) { width: 15%; } /* Precio unitario / Valor jornal */
+.tabla-presupuesto th:nth-child(4),
+.tabla-presupuesto td:nth-child(4) { width: 15%; } /* Monto extra fijo */
+.tabla-presupuesto th:nth-child(5),
+.tabla-presupuesto td:nth-child(5) { width: 10%; } /* % Extra */
+.tabla-presupuesto th:nth-child(6),
+.tabla-presupuesto td:nth-child(6) {
+  width: 10%;       /* Subtotal */
+  text-align: right;
+}
+
+.tabla-presupuesto {
+  table-layout: fixed;  /* Fuerza a respetar los anchos */
+}
+.tabla-presupuesto th,
+.tabla-presupuesto td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+/* 2) Quédate con esta y dale un padding horizontal amplio */
+.tabla-presupuesto input[type="number"] {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;   /* 4px arriba/abajo, 8px izquierda/derecha */
+  margin: 0;          /* asegúrate de resetear cualquier margen */
+}
+
+
+  
+  
 
