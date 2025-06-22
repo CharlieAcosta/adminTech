@@ -1133,6 +1133,40 @@ $(document).ready(function() {
     };
   }
 
+/* -------------------------------------------------
+   CÁLCULO DE SUBTOTALES POR FILA (Material / Mano)
+   ------------------------------------------------- */
+
+/**
+ * Calcula y actualiza el subtotal de una fila de materiales.
+ * subtotal = cantidad×precio + extraFijo + %extra sobre el resultado.
+ */
+function calcularFilaMaterial($tr) {
+  const cantidad   = parseFloat($tr.find('.cantidad-material').val())    || 0;
+  const precio     = parseFloat($tr.find('.precio-unitario').val())      || 0;
+  const extraFijo  = parseFloat($tr.find('.monto-extra-fijo').val())     || 0;
+  const porcentaje = parseFloat($tr.find('.porcentaje-extra').val())     || 0;
+  let subtotal     = cantidad * precio + extraFijo;
+  subtotal        += subtotal * (porcentaje / 100);
+  $tr.find('.subtotal-material')
+     .text('$' + subtotal.toFixed(2));
+}
+
+/**
+ * Calcula y actualiza el subtotal de una fila de mano de obra.
+ * subtotal = cantidad×valorJornal + extraFijo + %extra sobre el resultado.
+ */
+function calcularFilaManoObra($tr) {
+  const cantidad   = parseFloat($tr.find('.cantidad-mano-obra').val())  || 0;
+  const jornal     = parseFloat($tr.find('.valor-jornal').val())       || 0;
+  const extraFijo  = parseFloat($tr.find('.monto-extra-fijo').val())   || 0;
+  const porcentaje = parseFloat($tr.find('.porcentaje-extra').val())   || 0;
+  let subtotal     = cantidad * jornal + extraFijo;
+  subtotal        += subtotal * (porcentaje / 100);
+  $tr.find('.subtotal-mano')
+     .text('$' + subtotal.toFixed(2));
+}
+  
   function renderizarPresupuestoDesdeDatos(datos) {
     const contenedor = $('#contenedorPresupuestoGenerado');
     contenedor.empty();
@@ -1332,20 +1366,44 @@ $(document).ready(function() {
 
     // Bloque total general
     const htmlTotal = `
-    <div class="presupuesto-total-card">
-      <div class="presupuesto-total-row">
-        <div class="presupuesto-total-actions">
-          <button class="btn btn-primary"><i class="fas fa-print"></i> Imprimir</button>
-          <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
+      <div class="presupuesto-total-card">
+        <div class="presupuesto-total-row">
+          <div class="presupuesto-total-actions">
+            <button class="btn btn-primary"><i class="fas fa-print"></i> Imprimir</button>
+            <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
+          </div>
+          <div class="presupuesto-total-label">
+            <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+            <span class="presupuesto-total-valor">$0.00</span>
+          </div>
         </div>
-        <div class="presupuesto-total-label">
-          <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
-          <span class="presupuesto-total-valor">$0.00</span>
-        </div>
-      </div>
-    </div>`;
+      </div>`;
     contenedor.append(htmlTotal);
-  }
+
+    // 1) Subtotales iniciales en cada fila de materiales y mano de obra
+    contenedor.find('tr').each(function() {
+      const $tr = $(this);
+      if ($tr.find('.cantidad-material').length) {
+        calcularFilaMaterial($tr);
+      }
+      if ($tr.find('.cantidad-mano-obra').length) {
+        calcularFilaManoObra($tr);
+      }
+    });
+
+    // 2) Recalcular en tiempo real al cambiar cualquier input dentro del presupuesto
+    contenedor.on('input change', 'input', function() {
+      const $tr = $(this).closest('tr');
+      if ($tr.find('.cantidad-material').length) {
+        calcularFilaMaterial($tr);
+      }
+      if ($tr.find('.cantidad-mano-obra').length) {
+        calcularFilaManoObra($tr);
+      }
+    });
+
+  }  // <-- cierre de renderizarPresupuestoDesdeDatos
+
 
   // Aquí arrancamos 
 
