@@ -1738,16 +1738,6 @@ const tareasVisitadas = <?php
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          <small>
-            <span>
-              <i class="fas fa-edit fa-xs v-icon-pointer v-icon-accion" 
-                 data-accion="editar-presupuesto" 
-                 data-toggle="tooltip" 
-                 data-placement="top" 
-                 title="Editar presupuesto"
-                 style="color: #ffffff;">
-              </i>
-            </span>
           </small>
         </h2>
       </div>
