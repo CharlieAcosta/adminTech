@@ -1222,17 +1222,23 @@ $(document).ready(function() {
    */
    function actualizarTotalGeneral() {
     let total = 0;
-    $('.btn-total-tarea').each(function() {
-      const texto = $(this).text();
-      // Capturamos “20.561.100,12” en dos grupos
-      const match = texto.match(/\$([\d\.]+),(\d{2})/);
+    // Recorremos cada tarjeta de tarea
+    $('.tarea-card').each(function() {
+      const $card = $(this);
+      // Solo si está tildado lo incluimos
+      if (!$card.find('input.incluir-en-total').is(':checked')) return;
+      // Extraemos el subtotal de tarea (formatado "$20.561.100,12")
+      const txt = $card.find('.btn-total-tarea').text();
+      const match = txt.match(/\$([\d\.]+),(\d{2})/);
       if (match) {
-        const intPart = match[1].replace(/\./g, '');
-        const decPart = match[2];
-        const val = parseFloat(`${intPart}.${decPart}`);
-        total += isNaN(val) ? 0 : val;
+        // match[1] = "20.561.100" ; match[2] = "12"
+        const integer = match[1].replace(/\./g, '');
+        const decimal = match[2];
+        const val = parseFloat(`${integer}.${decimal}`) || 0;
+        total += val;
       }
     });
+    // Formateamos y volcamos al widget de Total General
     $('.presupuesto-total-valor').text(formatMoney(total));
   }
   
@@ -1481,11 +1487,13 @@ $(document).ready(function() {
   });
 
 
+    // Bloque total general con botón Guardar
     const htmlTotal = `
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
-            <button class="btn btn-primary"><i class="fas fa-print"></i> Imprimir</button>
+            <button class="btn btn-success mr-2"><i class="fas fa-save"></i> Guardar</button>
+            <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
             <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
           </div>
           <div class="presupuesto-total-label">
