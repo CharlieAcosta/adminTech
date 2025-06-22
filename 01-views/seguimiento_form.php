@@ -25,6 +25,19 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   $datos = modGetPresupuestoById($id, 'php');
   $datos = $datos[0];
 
+  //dd($datos);
+
+  $intervino_previsita_agente = db_select_with_filters_V2(
+    'usuarios',                // tabla
+    ['id_usuario'],            // columnas a filtrar
+    ['='],                     // comparaciones
+    [$datos['log_usuario_id']],              // valores
+    [],                        // ordenamiento (vacío)
+    'php'                      // devuelve array en PHP
+  );
+
+  $intervino_previsita_apenom = $intervino_previsita_agente[0]['apellidos']." ".$intervino_previsita_agente[0]['nombres']." | ".strToDateFormat($datos['log_edicion'], 'd/m/Y H:i:s');
+
   $tareas_visitadas = [];
 
   if ($datos['estado_visita'] == 'Ejecutada' && isset($datos['id_previsita'])) {
@@ -173,21 +186,76 @@ $opcionesManoDeObra = arrayToOptionsWithData(
     'updated_at'   => 'updated_at',
   ]
 );
+
+// intervinientes visita
+$intervinientes_visita_ids = db_select_with_filters_V2(
+  'seguimiento_guardados',              // tabla
+  ['id_previsita', 'modulo'],           // columnas a filtrar
+  ['=','='],                            // comparaciones
+  [$datos['id_previsita'], '2'],        // valores
+  [['created_at', 'DESC']],                                   // ordenamiento (vacío)
+  'php'                                 // devuelve array en PHP
+);
+
+$intervinientes_visita_nombres = intervinientes_names($intervinientes_visita_ids);
+
+// --- Nuevo: construyo aquí el HTML del popover sin incluir al primero ---
+$otros = array_slice($intervinientes_visita_nombres, 1);
+
+$popoverIntervinientes = '<table class="table table-sm mb-0">'
+                       . '<thead><tr><th>Agente</th><th>Fecha</th></tr></thead>'
+                       . '<tbody>';
+
+if (count($otros) > 0) {
+    foreach ($otros as $item) {
+        list($agente, $fecha) = explode(' | ', $item);
+        $popoverIntervinientes .= "<tr><td>{$agente}</td><td>{$fecha}</td></tr>";
+    }
+} else {
+    // opcional: mensaje si no queda ninguno
+    $popoverIntervinientes .= '<tr><td colspan="2" class="text-center text-muted">'
+                           . 'Sin otros intervinientes'
+                           . '</td></tr>';
+}
+
+$popoverIntervinientes .= '</tbody></table>';
+
+
+// El primer elemento (más reciente) para mostrar “en reposo”
+$ultimo = $intervinientes_visita_nombres[0] ?? '';
+// intervinientes visita
+
+if (empty($tareas_visitadas)){$visita_card = 'card-danger';}else{$visita_card = 'card-success';}
 // END PHP - Visita
 
 // START PRESUPUESTO
 $presupuestoGenerado = false; // Cambia a true para probar el otro caso
-$visita_card = 'card-danger';
 if ($presupuestoGenerado) {
   $visita_show = '';
   $presupuesto_show = 'show';
-  $visita_card = 'card-success';
 } else {
   $visita_show = 'show';
   $presupuesto_show = '';
 }
 
 // END PRESUPUESTO
+function intervinientes_names($b_array){
+  $intervinieron_agentes = [];
+  foreach ($b_array as $key => $value) {
+               
+        $intervino_agente = db_select_with_filters_V2(
+          'usuarios',                // tabla
+          ['id_usuario'],            // columnas a filtrar
+          ['='],                     // comparaciones
+          [$value['id_usuario']],    // valores
+          [],                        // ordenamiento (vacío)
+          'php'                      // devuelve array en PHP
+        );     
+
+        array_push($intervinieron_agentes, $intervino_agente[0]['apellidos']." ".$intervino_agente[0]['nombres']." | ".strToDateFormat($value['created_at'], 'd/m/Y H:i:s'));
+    }
+     return $intervinieron_agentes;
+}
 
 ?>
 <script>
@@ -261,7 +329,7 @@ if ($presupuestoGenerado) {
   <div class="card <?php echo $previsita_card; ?> accordion 1">
     <div class="card-header" id="headingOne">
       <h2 class="mb-0 d-flex justify-content-between align-items-center">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+        <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
         Pre-visita <?php 
           echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>');
           if (!empty($datos['razon_social'])) {
@@ -269,7 +337,7 @@ if ($presupuestoGenerado) {
           }
         ?>
         </button>
-        <small><span><i class="fas fa-print fa-xs v-icon-pointer v-icon-accion" data-accion="pdf-previsita" data-toggle="tooltip" data-placement="top" title="Imprimir" style="color: #ffffff;"></i></span></small>
+        <span class="col-3 card-title text-right"><?php echo "<strong>Intervino: </strong>".$intervino_previsita_apenom; ?></span>
       </h2>
     </div>
 
@@ -639,15 +707,42 @@ if ($presupuestoGenerado) {
   <!-- start accordion visita -->
   <div class="accordion" id="accordionVisita">
     <div class="card <?php echo $visita_card; ?> accordion_2">
-      <div class="card-header" id="headingVisita">
-        <h2 class="mb-0">
-          <button class="btn btn-link btn-block text-left text-white p-0 card-title" type="button" data-toggle="collapse" data-target="#collapseVisita" aria-expanded="<?php echo $visita_show === 'show' ? 'true' : 'false'; ?>" aria-controls="collapseVisita">
-            Visita<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
-          </button>
-        </h2>
-      </div>
+    <div class="card-header" id="headingVisita">
+      <h2 class="mb-0 d-flex align-items-center">
+        <!-- Botón collapse -->
+        <button
+          class="col-9 btn btn-link btn-block text-left text-white p-0 card-title"
+          type="button"
+          data-toggle="collapse"
+          data-target="#collapseVisita"
+          aria-expanded="<?php echo $visita_show === 'show' ? 'true' : 'false'; ?>"
+          aria-controls="collapseVisita"
+        >
+          Visita
+          <?php echo isset($datos['0']['id_previsita'])
+            ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>'
+            : '';
+          ?>
+        </button>
 
-      <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
+        <!-- Span con el popover -->
+        <span class="col-3 card-title text-right">
+          <strong>Intervino: </strong>
+          <span
+            tabindex="0"
+            role="button"
+            data-toggle="popover"
+            data-html="true"
+            data-placement="bottom"
+            data-content='<?php echo htmlspecialchars($popoverIntervinientes, ENT_QUOTES); ?>'
+          >
+            <?php echo htmlspecialchars($ultimo, ENT_QUOTES); ?>
+          </span>
+        </span>
+      </h2>
+    </div>
+
+    <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
         <div class="card-body">
 
           <!-- start accordion tareas -->
@@ -988,6 +1083,35 @@ if ($presupuestoGenerado) {
 <script src="../05-plugins/jquery/jquery.min.js"></script>
 <!-- Bootstrap 4 -->
 <script src="../05-plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+<!-- contenedor oculto -->
+<div id="popover-content-visita" style="display:none">
+  <?= $popoverIntervinientes ?>
+</div>
+
+<script>
+$(function(){
+  // inicializa sobre el mismo selector que ya usas
+  $('#headingVisita [data-toggle="popover"]').popover({
+    trigger: 'hover focus',
+    container: 'body',
+    html:     true,
+    sanitize: false,  // desactiva saneamiento para que no borre <table>
+    // inyecta un template con clase propia
+    template: `
+      <div class="popover popover-wide" role="tooltip">
+        <div class="arrow"></div>
+        <h3 class="popover-header"></h3>
+        <div class="popover-body"></div>
+      </div>
+    `,
+    content: function(){
+      return $('#popover-content-visita').html();
+    }
+  });
+});
+</script>
+
 <!-- Select2 -->
 <script src="../05-plugins/select2/js/select2.full.min.js"></script>
 <script src="../05-plugins/select2/js/i18n/es.js"></script>
@@ -1020,7 +1144,7 @@ if ($presupuestoGenerado) {
 <script src="../05-plugins/bs-custom-file-input/bs-custom-file-input.min.js"></script>
 
 <!-- popper -->
-<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script> -->
 
 <!-- funciones customizadas -->
 <script src="../07-funciones_js/funciones.js"></script>
@@ -1640,6 +1764,10 @@ const tareasVisitadas = <?php
     </div>
   </div>
 </template>
+<!-- Aquí, justo antes de tus <script> que inicializan el popover: -->
+<div id="popover-content-visita" style="display:none">
+  <?= $popoverIntervinientes /* contiene la tabla completa */ ?>
+</div>
 
 </body>
 </html>
