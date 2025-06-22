@@ -317,12 +317,7 @@ $(document).ready(function() {
         }
 
         // Inicializar array de eliminadas si no existe
-        if (!window.fotosEliminadasPorTarea) {
-            window.fotosEliminadasPorTarea = {};
-        }
-        if (!window.fotosEliminadasPorTarea[index]) {
-            window.fotosEliminadasPorTarea[index] = [];
-        }
+        if (!fotosEliminadasPorTarea[index]) fotosEliminadasPorTarea[index] = [];
 
         archivos.forEach((file) => {
             const reader = new FileReader();
@@ -362,11 +357,9 @@ $(document).ready(function() {
 
                 // Eliminar visual y registrar
                 contenedor.find('.eliminar-imagen').on('click', () => {
-                    imagenesPorTarea[index] = imagenesPorTarea[index].filter(img => img.nombre !== nombreArchivo);
-                    fotosEliminadasPorTarea[index].push(nombreArchivo);
-  console.log(`🗑️ Imagen eliminada en tarea ${index}:`, nombreArchivo);
-  console.log(`🧮 Imágenes restantes en tarea ${index}:`, imagenesPorTarea[index]);
-                    contenedor.remove();
+                  imagenesPorTarea[index] = imagenesPorTarea[index].filter(img => img.nombre !== nombreArchivo);
+                  fotosEliminadasPorTarea[index].push(nombreArchivo);
+                  contenedor.remove();
                 });
 
                 previewContainer.append(contenedor);
@@ -766,7 +759,9 @@ $(document).ready(function() {
           }
         });
       });
-    
+
+
+
       // 4) Envío AJAX
       $.ajax({
         url: '../06-funciones_php/guardar_visita.php',
