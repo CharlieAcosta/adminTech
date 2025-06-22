@@ -1133,39 +1133,108 @@ $(document).ready(function() {
     };
   }
 
-/* -------------------------------------------------
-   CÁLCULO DE SUBTOTALES POR FILA (Material / Mano)
-   ------------------------------------------------- */
+  /* -------------------------------------------------
+    CÁLCULO DE SUBTOTALES POR FILA (Material / Mano)
+    ------------------------------------------------- */
 
-/**
- * Calcula y actualiza el subtotal de una fila de materiales.
- * subtotal = cantidad×precio + extraFijo + %extra sobre el resultado.
- */
-function calcularFilaMaterial($tr) {
-  const cantidad   = parseFloat($tr.find('.cantidad-material').val())    || 0;
-  const precio     = parseFloat($tr.find('.precio-unitario').val())      || 0;
-  const extraFijo  = parseFloat($tr.find('.monto-extra-fijo').val())     || 0;
-  const porcentaje = parseFloat($tr.find('.porcentaje-extra').val())     || 0;
-  let subtotal     = cantidad * precio + extraFijo;
-  subtotal        += subtotal * (porcentaje / 100);
-  $tr.find('.subtotal-material')
-     .text('$' + subtotal.toFixed(2));
-}
+  /**
+   * Calcula y actualiza el subtotal de una fila de materiales.
+   * subtotal = cantidad×precio + extraFijo + %extra sobre el resultado.
+   */
+  function calcularFilaMaterial($tr) {
+    const cantidad   = parseFloat($tr.find('.cantidad-material').val())    || 0;
+    const precio     = parseFloat($tr.find('.precio-unitario').val())      || 0;
+    const extraFijo  = parseFloat($tr.find('.monto-extra-fijo').val())     || 0;
+    const porcentaje = parseFloat($tr.find('.porcentaje-extra').val())     || 0;
+    let subtotal     = cantidad * precio + extraFijo;
+    subtotal        += subtotal * (porcentaje / 100);
+    $tr.find('.subtotal-material')
+      .text(formatMoney(subtotal));
+  }
+  
+  /**
+   * Calcula y actualiza el subtotal de una fila de mano de obra.
+   * subtotal = cantidad×valorJornal + extraFijo + %extra sobre el resultado.
+   */
+  function calcularFilaManoObra($tr) {
+    const cantidad   = parseFloat($tr.find('.cantidad-mano-obra').val())  || 0;
+    const jornal     = parseFloat($tr.find('.valor-jornal').val())       || 0;
+    const extraFijo  = parseFloat($tr.find('.monto-extra-fijo').val())   || 0;
+    const porcentaje = parseFloat($tr.find('.porcentaje-extra').val())   || 0;
+    let subtotal     = cantidad * jornal + extraFijo;
+    subtotal        += subtotal * (porcentaje / 100);
+    $tr.find('.subtotal-mano')
+      .text(formatMoney(subtotal));
+  }
+  
+  /**
+   * Formatea un número como moneda en formato español:
+   * miles con punto, decimales con coma.
+   * @param {number} valor - El valor numérico a formatear.
+   * @returns {string} - Ejemplo: "$20.561.100,12"
+   */
+  function formatMoney(valor) {
+    const [intPart, decPart] = valor.toFixed(2).split('.');
+    const intWithSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return '$' + intWithSep + ',' + decPart;
+  }
 
-/**
- * Calcula y actualiza el subtotal de una fila de mano de obra.
- * subtotal = cantidad×valorJornal + extraFijo + %extra sobre el resultado.
- */
-function calcularFilaManoObra($tr) {
-  const cantidad   = parseFloat($tr.find('.cantidad-mano-obra').val())  || 0;
-  const jornal     = parseFloat($tr.find('.valor-jornal').val())       || 0;
-  const extraFijo  = parseFloat($tr.find('.monto-extra-fijo').val())   || 0;
-  const porcentaje = parseFloat($tr.find('.porcentaje-extra').val())   || 0;
-  let subtotal     = cantidad * jornal + extraFijo;
-  subtotal        += subtotal * (porcentaje / 100);
-  $tr.find('.subtotal-mano')
-     .text('$' + subtotal.toFixed(2));
-}
+  /**
+   * Actualiza los subtotales de materiales, mano de obra y total de una tarjeta de tarea.
+   * @param {jQuery} $card El contenedor .tarea-card correspondiente.
+   */
+  function actualizarSubtotalesBloque($card) {
+    // 1) Subtotal Materiales
+    let sumaMat = 0;
+    $card.find('.tarea-materiales tbody tr').not('.fila-subtotal').each(function() {
+      // quitamos puntos y reemplazamos coma por punto para parsear
+      const txt = $(this).find('.subtotal-material').text()
+                    .replace('$','')
+                    .replace(/\./g,'')
+                    .replace(',','.') || 0;
+      sumaMat += parseFloat(txt) || 0;
+    });
+    $card.find('.tarea-materiales .fila-subtotal td:last b')
+         .text(formatMoney(sumaMat));
+  
+    // 2) Subtotal Mano de Obra
+    let sumaMan = 0;
+    $card.find('.tarea-mano-obra tbody tr').not('.fila-subtotal').each(function() {
+      const txt = $(this).find('.subtotal-mano').text()
+                    .replace('$','')
+                    .replace(/\./g,'')
+                    .replace(',','.') || 0;
+      sumaMan += parseFloat(txt) || 0;
+    });
+    $card.find('.tarea-mano-obra .fila-subtotal td:last b')
+         .text(formatMoney(sumaMan));
+  
+    // 3) Total por tarea (Materiales + Mano de Obra)
+    const totalTarea = sumaMat + sumaMan;
+    const num = $card.find('.tarea-encabezado b').text().match(/\d+/)[0] || '';
+    $card.find('.btn-total-tarea')
+         .text(`Subtotal Tarea ${num}: ${formatMoney(totalTarea)}`);
+  }
+  
+   /**
+   * Recorre todos los botones de subtotal de tarea y suma sus valores,
+   * luego actualiza el span .presupuesto-total-valor.
+   */
+   function actualizarTotalGeneral() {
+    let total = 0;
+    $('.btn-total-tarea').each(function() {
+      const texto = $(this).text();
+      // Capturamos “20.561.100,12” en dos grupos
+      const match = texto.match(/\$([\d\.]+),(\d{2})/);
+      if (match) {
+        const intPart = match[1].replace(/\./g, '');
+        const decPart = match[2];
+        const val = parseFloat(`${intPart}.${decPart}`);
+        total += isNaN(val) ? 0 : val;
+      }
+    });
+    $('.presupuesto-total-valor').text(formatMoney(total));
+  }
   
   function renderizarPresupuestoDesdeDatos(datos) {
     const contenedor = $('#contenedorPresupuestoGenerado');
@@ -1365,6 +1434,53 @@ function calcularFilaManoObra($tr) {
     });
 
     // Bloque total general
+
+      // ——————————————————————————————
+  // 4) Inicializar subtotales de fila y bloque
+  // ——————————————————————————————
+
+  // 4.1) Subtotales por fila
+  contenedor.find('tr').each(function() {
+    const $tr = $(this);
+    if ($tr.find('.cantidad-material').length) {
+      calcularFilaMaterial($tr);
+    }
+    if ($tr.find('.cantidad-mano-obra').length) {
+      calcularFilaManoObra($tr);
+    }
+  });
+
+  // 4.2) Subtotales de bloque (Materiales, Mano y Tarea)
+  contenedor.find('.tarea-card').each(function() {
+    actualizarSubtotalesBloque($(this));
+  });
+
+  // ——————————————————————————————
+  // 5) Delegado: recálculo en tiempo real
+  // ——————————————————————————————
+  // Primero limpiamos cualquier handler previo
+  contenedor.off('input change', 'input');
+  // Luego delegamos uno solo
+  contenedor.on('input change', 'input', function() {
+    const $tr   = $(this).closest('tr');
+    const $card = $(this).closest('.tarea-card');
+
+    // 5.1) Recalcular esta fila
+    if ($tr.find('.cantidad-material').length) {
+      calcularFilaMaterial($tr);
+    }
+    if ($tr.find('.cantidad-mano-obra').length) {
+      calcularFilaManoObra($tr);
+    }
+
+    // 5.2) Recalcular subtotales del bloque
+    actualizarSubtotalesBloque($card);
+
+    // 5.3) Recalcular Total General
+    actualizarTotalGeneral();
+  });
+
+
     const htmlTotal = `
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
@@ -1379,6 +1495,9 @@ function calcularFilaManoObra($tr) {
         </div>
       </div>`;
     contenedor.append(htmlTotal);
+
+    // 6) Inicializar Total General
+    actualizarTotalGeneral();
 
     // 1) Subtotales iniciales en cada fila de materiales y mano de obra
     contenedor.find('tr').each(function() {
