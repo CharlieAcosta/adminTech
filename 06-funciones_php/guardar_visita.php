@@ -1,4 +1,5 @@
 <?php
+session_start();
 // —————————————————————————————
 //  guardar_visita.php
 // —————————————————————————————
@@ -9,6 +10,7 @@ file_put_contents('../log/log_fotos.txt', "--- NUEVO INGRESO ---\n", FILE_APPEND
 file_put_contents('../log/log_fotos.txt', "🟠 _POST:\n" . print_r($_POST, true), FILE_APPEND);
 file_put_contents('../log/log_fotos.txt', "🔵 _FILES:\n" . print_r($_FILES, true), FILE_APPEND);
 
+include_once '../06-funciones_php/funciones.php';
 include_once '../04-modelo/conectDB.php';
 $db = conectDB();
 if (!$db) {
@@ -246,6 +248,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
 } // fin POST
+
+
+if (isset($_SESSION['usuario']['id_usuario'])) {
+    $usuarioId   = intval($_SESSION['usuario']['id_usuario']);
+    $modulo      = 2;                     // 2 = Visita
+    $idPrevisita = intval($id_visita);    // proviene de arriba
+
+    simpleInsertInDB(
+        'seguimiento_guardados',
+        ['id_usuario', 'modulo', 'id_previsita'],
+        [$usuarioId,    $modulo,    $idPrevisita],
+        'php'
+    );
+}
 
 ob_end_clean();
 echo json_encode($response);

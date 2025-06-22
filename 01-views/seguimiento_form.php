@@ -25,6 +25,19 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   $datos = modGetPresupuestoById($id, 'php');
   $datos = $datos[0];
 
+  //dd($datos);
+
+  $intervino_previsita_agente = db_select_with_filters_V2(
+    'usuarios',                // tabla
+    ['id_usuario'],            // columnas a filtrar
+    ['='],                     // comparaciones
+    [$datos['log_usuario_id']],              // valores
+    [],                        // ordenamiento (vacío)
+    'php'                      // devuelve array en PHP
+  );
+
+  $intervino_previsita_apenom = $intervino_previsita_agente[0]['apellidos']." ".$intervino_previsita_agente[0]['nombres']." | ".strToDateFormat($datos['log_edicion'], 'd/m/Y H:i:s');
+
   $tareas_visitadas = [];
 
   if ($datos['estado_visita'] == 'Ejecutada' && isset($datos['id_previsita'])) {
@@ -143,34 +156,111 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
 $materiales = SelectAllDB('materiales', 'estado_material', '=', "'Activo'", 'php');
 
 // Preparamos las opciones
-$opcionesMateriales = arrayToOptionsV2(
-    $materiales,
-    'id_material',     // value
-    'descripcion_corta',        // text
-    'Seleccione un material', // leyenda
-    ' | ',             // separador
-    ['unidad_venta','contenido','unidad_medida'],  // concatena el campo 'codigo' si querés
-    null,              // no seleccionado inicialmente
-    null
+$opcionesMateriales = arrayToOptionsWithData(
+  $materiales,
+  'id_material',
+  'descripcion_corta',
+  'Seleccione un material',
+  ' | ',
+  ['unidad_venta', 'contenido', 'unidad_medida'],
+  [
+    'precio_unitario' => 'precio_unitario',
+    'unidad_medida'   => 'unidad_medida',
+    'unidad_venta'    => 'unidad_venta',
+    'contenido'       => 'contenido',
+    'log_edicion'     => 'log_edicion',
+  ]
 );
 
 $manoDeObra = SelectAllDB('tipo_jornales', 'jornal_estado', '=', "'activo'", 'php');
 
-$opcionesManoDeObra = arrayToOptionsV2(
-    $manoDeObra,
-    'jornal_id',              // value
-    'jornal_codigo',     // text
-    'Seleccione mano de obra', // leyenda
-    ' | ',             // separador
-    ['jornal_descripcion'],  // concatena el campo 'codigo' si querés
-    null,              // no seleccionado inicialmente
-    null
+$opcionesManoDeObra = arrayToOptionsWithData(
+  $manoDeObra,
+  'jornal_id',
+  'jornal_codigo',
+  'Seleccione mano de obra',
+  ' | ',
+  ['jornal_descripcion'],
+  [
+    'jornal_valor' => 'jornal_valor',
+    'updated_at'   => 'updated_at',
+  ]
 );
+
+// intervinientes visita
+$intervinientes_visita_ids = db_select_with_filters_V2(
+  'seguimiento_guardados',              // tabla
+  ['id_previsita', 'modulo'],           // columnas a filtrar
+  ['=','='],                            // comparaciones
+  [$datos['id_previsita'], '2'],        // valores
+  [['created_at', 'DESC']],                                   // ordenamiento (vacío)
+  'php'                                 // devuelve array en PHP
+);
+
+$intervinientes_visita_nombres = intervinientes_names($intervinientes_visita_ids);
+
+// --- Nuevo: construyo aquí el HTML del popover sin incluir al primero ---
+$otros = array_slice($intervinientes_visita_nombres, 1);
+
+$popoverIntervinientes = '<table class="table table-sm mb-0">'
+                       . '<thead><tr><th>Agente</th><th>Fecha</th></tr></thead>'
+                       . '<tbody>';
+
+if (count($otros) > 0) {
+    foreach ($otros as $item) {
+        list($agente, $fecha) = explode(' | ', $item);
+        $popoverIntervinientes .= "<tr><td>{$agente}</td><td>{$fecha}</td></tr>";
+    }
+} else {
+    // opcional: mensaje si no queda ninguno
+    $popoverIntervinientes .= '<tr><td colspan="2" class="text-center text-muted">'
+                           . 'Sin otros intervinientes'
+                           . '</td></tr>';
+}
+
+$popoverIntervinientes .= '</tbody></table>';
+
+
+// El primer elemento (más reciente) para mostrar “en reposo”
+$ultimo = $intervinientes_visita_nombres[0] ?? '';
+// intervinientes visita
+
+if (empty($tareas_visitadas)){$visita_card = 'card-danger';}else{$visita_card = 'card-success';}
 // END PHP - Visita
 
+// START PRESUPUESTO
+$presupuestoGenerado = false; // Cambia a true para probar el otro caso
+if ($presupuestoGenerado) {
+  $visita_show = '';
+  $presupuesto_show = 'show';
+} else {
+  $visita_show = 'show';
+  $presupuesto_show = '';
+}
+
+// END PRESUPUESTO
+function intervinientes_names($b_array){
+  $intervinieron_agentes = [];
+  foreach ($b_array as $key => $value) {
+               
+        $intervino_agente = db_select_with_filters_V2(
+          'usuarios',                // tabla
+          ['id_usuario'],            // columnas a filtrar
+          ['='],                     // comparaciones
+          [$value['id_usuario']],    // valores
+          [],                        // ordenamiento (vacío)
+          'php'                      // devuelve array en PHP
+        );     
+
+        array_push($intervinieron_agentes, $intervino_agente[0]['apellidos']." ".$intervino_agente[0]['nombres']." | ".strToDateFormat($value['created_at'], 'd/m/Y H:i:s'));
+    }
+     return $intervinieron_agentes;
+}
 
 ?>
-
+<script>
+  let presupuestoGenerado = <?php echo $presupuestoGenerado ? 'true' : 'false'; ?>;
+</script>
 
 <!DOCTYPE html>
 <html lang="es">
@@ -239,7 +329,7 @@ $opcionesManoDeObra = arrayToOptionsV2(
   <div class="card <?php echo $previsita_card; ?> accordion 1">
     <div class="card-header" id="headingOne">
       <h2 class="mb-0 d-flex justify-content-between align-items-center">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+        <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
         Pre-visita <?php 
           echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>');
           if (!empty($datos['razon_social'])) {
@@ -247,7 +337,7 @@ $opcionesManoDeObra = arrayToOptionsV2(
           }
         ?>
         </button>
-        <small><span><i class="fas fa-print fa-xs v-icon-pointer v-icon-accion" data-accion="pdf-previsita" data-toggle="tooltip" data-placement="top" title="Imprimir" style="color: #ffffff;"></i></span></small>
+        <span class="col-3 card-title text-right"><?php echo "<strong>Intervino: </strong>".$intervino_previsita_apenom; ?></span>
       </h2>
     </div>
 
@@ -617,15 +707,42 @@ $opcionesManoDeObra = arrayToOptionsV2(
   <!-- start accordion visita -->
   <div class="accordion" id="accordionVisita">
     <div class="card <?php echo $visita_card; ?> accordion_2">
-      <div class="card-header" id="headingVisita">
-        <h2 class="mb-0">
-          <button class="btn btn-link btn-block text-left text-white p-0 card-title" type="button" data-toggle="collapse" data-target="#collapseVisita" aria-expanded="true" aria-controls="collapseVisita">
-            Visita<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
-          </button>
-        </h2>
-      </div>
+    <div class="card-header" id="headingVisita">
+      <h2 class="mb-0 d-flex align-items-center">
+        <!-- Botón collapse -->
+        <button
+          class="col-9 btn btn-link btn-block text-left text-white p-0 card-title"
+          type="button"
+          data-toggle="collapse"
+          data-target="#collapseVisita"
+          aria-expanded="<?php echo $visita_show === 'show' ? 'true' : 'false'; ?>"
+          aria-controls="collapseVisita"
+        >
+          Visita
+          <?php echo isset($datos['0']['id_previsita'])
+            ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>'
+            : '';
+          ?>
+        </button>
 
-      <div id="collapseVisita" class="collapse show" aria-labelledby="headingVisita" data-parent="#accordionVisita">
+        <!-- Span con el popover -->
+        <span class="col-3 card-title text-right">
+          <strong>Intervino: </strong>
+          <span
+            tabindex="0"
+            role="button"
+            data-toggle="popover"
+            data-html="true"
+            data-placement="bottom"
+            data-content='<?php echo htmlspecialchars($popoverIntervinientes, ENT_QUOTES); ?>'
+          >
+            <?php echo htmlspecialchars($ultimo, ENT_QUOTES); ?>
+          </span>
+        </span>
+      </h2>
+    </div>
+
+    <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
         <div class="card-body">
 
           <!-- start accordion tareas -->
@@ -790,7 +907,8 @@ $opcionesManoDeObra = arrayToOptionsV2(
           <!-- Botones generales -->
           <div class="text-center">
             <button type="button" class="btn btn-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
-            <button type="button" class="btn btn-info mr-2 btn-uniform btn-generar-presupuesto">Generar Presupuesto</button>
+            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
+            <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
           </div>
 
@@ -810,33 +928,50 @@ $opcionesManoDeObra = arrayToOptionsV2(
   <?= $opcionesManoDeObra ?>
 </select>
 
-<!-- start accordion 3 -->
-<div class="accordion" id="accordionExample3">
-  <div class="card <?php echo $presupuesto_card; ?> accordion 3">
-    <div class="card-header" id="heading3">
-      <h2 class="mb-0">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title" type="button" data-toggle="collapse" data-target="#collapse3" aria-expanded="true" aria-controls="collapse3">
-          Presupuesto<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
-        </button>
-      </h2>
+<!-- /accordion presupuesto -->
+<?php if ($presupuestoGenerado): ?>
+  <div class="accordion" id="accordionPresupuesto">
+    <div class="card <?php echo $presupuesto_card; ?> accordion_3">
+      <div class="card-header" id="headingPresupuesto">
+        <h2 class="mb-0 d-flex justify-content-between align-items-center">
+          <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+                  type="button" 
+                  data-toggle="collapse" 
+                  data-target="#collapsePresupuesto" 
+                  aria-expanded="<?php echo $presupuesto_show === 'show' ? 'true' : 'false'; ?>" 
+                  aria-controls="collapsePresupuesto">
+            Presupuesto
+          </button>
+          <small>
+            <span>
+              <i class="fas fa-edit fa-xs v-icon-pointer v-icon-accion" 
+                data-accion="editar-presupuesto" 
+                data-toggle="tooltip" 
+                data-placement="top" 
+                title="Editar presupuesto"
+                style="color: #ffffff;">
+              </i>
+            </span>
+          </small>
+        </h2>
+      </div>
+      <div id="collapsePresupuesto" class="collapse <?php echo $presupuesto_show; ?>" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
+        <div class="card-body" id="presupuesto-card-body">
+          <!-- Aquí se insertará el contenido dinámico generado -->
+          <div id="contenedorPresupuestoGenerado" class="mt-3">
+            <?php if($presupuestoGenerado): ?>
+              <div class="alert alert-info text-center mb-3">
+                  Aquí aparecerá el presupuesto generado con los datos traídos del backend.
+              </div>
+            <?php endif; ?>
+            </div>
+        </div>
+      </div>
     </div>
-
-    <!-- start collapse accordion 3 -->
-    <div id="collapse3" class="collapse <?php echo !isset($cliente_datos['0']['id_cliente']) ? '' : ''; ?>" aria-labelledby="headingOne" data-parent="#accordionExample3">
-
-          <!-- start card body accordion 3-->
-          <div id="presupuesto-card-body" class="card-body">
-            EN DESARROLLO
-          </div>
-          <!-- end card accordion 3 -->
-
-    </div>
-    <!-- end collapse accordion 3-->
-
   </div>
-  <!-- end card accordion 3 -->
-</div>
-<!-- end accordion 3 -->
+<?php endif; ?>
+<!-- /accordion presupuesto -->
+
 
 <!-- start accordion 4 - Orden de compra -->
 <div class="accordion" id="accordionExample4">
@@ -948,6 +1083,35 @@ $opcionesManoDeObra = arrayToOptionsV2(
 <script src="../05-plugins/jquery/jquery.min.js"></script>
 <!-- Bootstrap 4 -->
 <script src="../05-plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+<!-- contenedor oculto -->
+<div id="popover-content-visita" style="display:none">
+  <?= $popoverIntervinientes ?>
+</div>
+
+<script>
+$(function(){
+  // inicializa sobre el mismo selector que ya usas
+  $('#headingVisita [data-toggle="popover"]').popover({
+    trigger: 'hover focus',
+    container: 'body',
+    html:     true,
+    sanitize: false,  // desactiva saneamiento para que no borre <table>
+    // inyecta un template con clase propia
+    template: `
+      <div class="popover popover-wide" role="tooltip">
+        <div class="arrow"></div>
+        <h3 class="popover-header"></h3>
+        <div class="popover-body"></div>
+      </div>
+    `,
+    content: function(){
+      return $('#popover-content-visita').html();
+    }
+  });
+});
+</script>
+
 <!-- Select2 -->
 <script src="../05-plugins/select2/js/select2.full.min.js"></script>
 <script src="../05-plugins/select2/js/i18n/es.js"></script>
@@ -980,7 +1144,7 @@ $opcionesManoDeObra = arrayToOptionsV2(
 <script src="../05-plugins/bs-custom-file-input/bs-custom-file-input.min.js"></script>
 
 <!-- popper -->
-<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script> -->
 
 <!-- funciones customizadas -->
 <script src="../07-funciones_js/funciones.js"></script>
@@ -1013,7 +1177,6 @@ $(document).ready(function() {
     console.log('Valor desenfocado:', $(this).val());
   });
 
-console.log($("#cp_visita").inputmask("option"));
     navigator.clipboard.writeText('');
     // current funtions
     abm_detect();
@@ -1561,6 +1724,40 @@ const tareasVisitadas = <?php
 
 <!-- funciones js -->
 <script src="../07-funciones_js/scripts_list.js"></script>
+
+<template id="tpl-accordion-presupuesto">
+  <div class="accordion" id="accordionPresupuesto">
+    <div class="card card-success accordion_3">
+      <div class="card-header" id="headingPresupuesto">
+        <h2 class="mb-0 d-flex justify-content-between align-items-center">
+          <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+                  type="button" 
+                  data-toggle="collapse" 
+                  data-target="#collapsePresupuesto" 
+                  aria-expanded="true" 
+                  aria-controls="collapsePresupuesto">
+            Presupuesto
+          </button>
+          </small>
+        </h2>
+      </div>
+      <div id="collapsePresupuesto" class="collapse show" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
+        <div class="card-body" id="presupuesto-card-body">
+          <div id="contenedorPresupuestoGenerado" class="mt-3">
+            <div class="alert alert-success text-center mb-3">
+                <i class="fa fa-check-circle mr-2"></i> ¡Presupuesto generado exitosamente!<br>
+                Aquí aparecerá el detalle una vez implementada la lógica completa.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<!-- Aquí, justo antes de tus <script> que inicializan el popover: -->
+<div id="popover-content-visita" style="display:none">
+  <?= $popoverIntervinientes /* contiene la tabla completa */ ?>
+</div>
 
 </body>
 </html>
