@@ -1,5 +1,6 @@
 $(document).ready(function() {
     let modoVisualizacion = false;
+    let presupuestoGenerado = false;
 
   function controlarBotonGenerarPresupuesto() {
       // Chequea si hay tareas
@@ -826,6 +827,7 @@ $(document).ready(function() {
   
   // Botón: Generar Presupuesto
   $(document).on('click', '.btn-generar-presupuesto', function() {
+    presupuestoGenerado = true; 
     // 1. Si no existe el accordion, lo crea usando el template
     if ($('#accordionPresupuesto').length === 0) {
         const tpl = document.getElementById('tpl-accordion-presupuesto');
