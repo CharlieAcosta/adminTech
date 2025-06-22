@@ -990,6 +990,12 @@ textarea.is-invalid {
   margin: 0;          /* asegúrate de resetear cualquier margen */
 }
 
+/* Solo para el popover que tenga la clase .popover-wide */
+.popover-wide {
+  max-width: none;
+  width: 400px;   /* ajústalo al ancho que necesites */
+}
+
 
   
   
