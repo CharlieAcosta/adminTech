@@ -36,6 +36,17 @@ function novedadAutomatica($registros, $feriados_js) {
     $fechaActual = '';
     $usuarioActual = '';
 
+    // --- NORMALIZACIÓN DE FECHAS DE FERIADOS ---
+    foreach ($feriados_js as &$feriado) {
+         if (preg_match('/^\d{2}-\d{2}-\d{4}$/', $feriado[0])) {
+             $partes = explode('-', $feriado[0]);
+             $feriado[0] = $partes[2] . '-' . $partes[1] . '-' . $partes[0];
+         }
+    }
+    unset($feriado); // buena práctica con referencias en PHP
+    // --- FIN NORMALIZACIÓN ---
+    
+
     foreach ($registros as $registro) {
         $fecha = date('Y-m-d', strtotime($registro['obas_fecha']));
         $usuario = $registro['obas_id_usuario'];
