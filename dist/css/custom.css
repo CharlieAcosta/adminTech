@@ -1012,6 +1012,14 @@ textarea.is-invalid {
   background: darken(#28a745, 10%);
 }
 
+.btn-toggle-utilidades,
+.btn-toggle-utilidades:focus,
+.btn-toggle-utilidades:hover,
+.btn-toggle-utilidades:active {
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
   
   
 
