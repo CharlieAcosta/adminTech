@@ -875,11 +875,10 @@ textarea.is-invalid {
     text-align: right;
     padding: 7px 18px 0 0;
   }
-  .btn-total-tarea {
-    background: #28c76f;
+  .btn-total-tarea, .btn-porcentaje-tarea  {
+    background: #6c757d;
     color: #fff;
     font-size: 17px;
-    font-weight: bold;
     border: none;
     border-radius: 6px;
     padding: 6px 20px;
@@ -918,7 +917,6 @@ textarea.is-invalid {
   .presupuesto-total-title {
     font-size: 1.25rem;
     color: #18a664;
-    font-weight: 700;
     letter-spacing: 0.03em;
   }
   .presupuesto-total-valor {
@@ -1020,6 +1018,28 @@ textarea.is-invalid {
   box-shadow: none !important;
   outline: none !important;
 }
+
+.util-inaceptable {
+  background-color: #ff0000 !important;
+  color: white !important;
+}
+
+.util-aceptable {
+  background-color: #ffff00 !important;
+  color: black !important;
+}
+
+.util-muy {
+  background-color: #99cc66 !important;
+  color: black !important;
+}
+
+.util-margen {
+  background-color: #ffaa00 !important;
+  color: black !important;
+}
+
+
   
   
 
