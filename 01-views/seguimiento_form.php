@@ -906,7 +906,7 @@ function intervinientes_names($b_array){
 
           <!-- Botones generales -->
           <div class="text-center">
-            <button type="button" class="btn btn-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
+            <button type="button" class="btn bg-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
             <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
             <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
