@@ -1353,7 +1353,8 @@ $(document).ready(function() {
   function renderizarPresupuestoDesdeDatos(datos) {
     const contenedor = $('#contenedorPresupuestoGenerado');
     contenedor.empty();
-  
+    const hoy = new Date();
+    
     datos.tareas.forEach((tarea, index) => {
       const numeroTarea = index + 1;
       const descripcion = tarea.descripcion || '';
@@ -1363,6 +1364,20 @@ $(document).ready(function() {
       tarea.materiales.forEach((mat) => {
         const precioUnitario = mat.precio_unitario ?? 0;
         const cantidad = mat.cantidad ?? 0;
+
+        let claseAlerta = '';
+        let fechaRef = null;
+
+        if (mat.log_edicion) {
+          fechaRef = new Date(mat.log_edicion);
+        } else if (mat.log_alta) {
+          fechaRef = new Date(mat.log_alta);
+        }
+
+        if (fechaRef && (hoy - fechaRef) > (30 * 24 * 60 * 60 * 1000)) {
+          claseAlerta = 'bg-danger';
+        }
+
         htmlMateriales += `
           <tr>
             <td>${mat.nombre || ''}</td>
@@ -1378,7 +1393,7 @@ $(document).ready(function() {
             <td>
               <input
                 type="number"
-                class="form-control form-control-sm precio-unitario"
+                class="form-control form-control-sm precio-unitario ${claseAlerta}"
                 value="${precioUnitario}"
                 min="0"
                 step="any"
@@ -1404,6 +1419,15 @@ $(document).ready(function() {
       tarea.mano_obra.forEach((mo) => {
         const valorJornal = mo.jornal_valor ?? 0;
         const cantidadMo = mo.cantidad ?? 0;
+
+        let claseAlerta = '';
+        if (mo.updated_at) {
+          const fechaMO = new Date(mo.updated_at);
+          if ((hoy - fechaMO) > (30 * 24 * 60 * 60 * 1000)) {
+            claseAlerta = 'bg-danger';
+          }
+        }
+
         htmlManoObra += `
           <tr>
             <td>${mo.nombre || ''}</td>
@@ -1419,7 +1443,7 @@ $(document).ready(function() {
             <td>
               <input
                 type="number"
-                class="form-control form-control-sm valor-jornal"
+                class="form-control form-control-sm valor-jornal ${claseAlerta}"
                 value="${valorJornal}"
                 min="0"
                 step="any"
@@ -1617,6 +1641,7 @@ $(document).ready(function() {
         </div>
       </div>`;
     contenedor.append(htmlTotal);
+    verificarDatosVencidos();
   
     // === INICIALIZACIÓN DE SUBTOTALES Y EVENTOS ===
   
@@ -1644,6 +1669,7 @@ $(document).ready(function() {
   
     // 4) Calcular total general
     actualizarTotalGeneral();
+    verificarDatosVencidos();
   
     // 5) Delegado de eventos (único y correcto)
     contenedor.off('input change', 'input').on('input change', 'input', function() {
@@ -1665,6 +1691,7 @@ $(document).ready(function() {
     
       // Total general
       actualizarTotalGeneral();
+      verificarDatosVencidos();
     });
     
      
@@ -1720,5 +1747,25 @@ $(document).ready(function() {
       actualizarTotalGeneral();
     }
   });
+
+  function verificarDatosVencidos() {
+    const hayVencidos = $('.precio-unitario.bg-danger, .valor-jornal.bg-danger').length > 0;
+  
+    const $botones = $('.presupuesto-total-actions button');
+  
+    if (hayVencidos) {
+      $botones.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success btn-primary');
+    } else {
+      $botones.prop('disabled', false).each(function() {
+        const $btn = $(this);
+        if ($btn.text().includes('Guardar')) {
+          $btn.addClass('btn-success').removeClass('btn-secondary');
+        } else {
+          $btn.addClass('btn-primary').removeClass('btn-secondary');
+        }
+      });
+    }
+  }
+  
 
 });

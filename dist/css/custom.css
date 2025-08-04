@@ -664,12 +664,12 @@ background-color: #708bd3 !important;
 }
 
 .materiales-table th,
-.mano-obra-table th, {
+.mano-obra-table th {
     font-size: 0.85rem; /* Encabezado más pequeño */
 }
 
 .materiales-table td,
-.mano-obra-table td, {
+.mano-obra-table td {
     font-size: 0.85rem; /* Celdas más chicas */
 }
 
