@@ -168,7 +168,8 @@ $opcionesMateriales = arrayToOptionsWithData(
     'unidad_medida'   => 'unidad_medida',
     'unidad_venta'    => 'unidad_venta',
     'contenido'       => 'contenido',
-    'log_edicion'     => 'log_edicion',
+    'log_alta'        => 'log_alta',
+    'log_edicion'     => 'log_edicion'
   ]
 );
 
