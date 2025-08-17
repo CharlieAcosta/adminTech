@@ -1150,7 +1150,7 @@ $(function(){
 
 <!-- funciones customizadas -->
 <script src="../07-funciones_js/funciones.js"></script>
-<script src="../07-funciones_js/sAlertconfirmV2.js"></script>
+<script src="../07-funciones_js/sAlertConfirmV2.js"></script>
 
 <!-- Page specific script -->
 <script>
