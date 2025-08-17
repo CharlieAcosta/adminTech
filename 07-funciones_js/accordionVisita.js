@@ -48,7 +48,8 @@ $(document).ready(function() {
   controlarBotonGenerarPresupuesto();
   const fotosEliminadasPorTarea = {};
   const fotos = {};
-
+  // Flag para no spamear el alerta de valores desactualizados
+  let alertaDesactualizadosMostrada = false;
 
   // Inicializar select2 para Materiales
   $('.material-select').select2({
@@ -253,7 +254,8 @@ $(document).ready(function() {
     }
 
     // Obtener data-* del option
-    const $opt = $select.find('option:selected');
+    const $opt = $select.find('option:selected'); 
+    const idJornal = $opt.data('jornal_id') || '';
     const valor = $opt.data('jornal_valor') || '';
     const updatedAt = $opt.data('updated_at') || '';
 
@@ -263,7 +265,7 @@ $(document).ready(function() {
     const index = tabla.find('tr').length + 1;
 
     const fila = `
-      <tr data-jornal_valor="${valor}" data-updated_at="${updatedAt}">
+      <tr data-jornal_id="${idJornal}" data-jornal_valor="${valor}" data-updated_at="${updatedAt}">
         <td>${index}</td>
         <td>
           <input type="hidden" name="mano_obra_id[]" value="${id}">
@@ -1119,6 +1121,8 @@ $(document).ready(function() {
 
         const jornal_valor = parseFloat($fila.data('jornal_valor')) || 0;
         const updated_at = $fila.data('updated_at') || null;
+        const jornal_id = $fila.data('jornal_id') || null;
+
 
         tarea.mano_obra.push({
           id_jornal: id,
@@ -1127,7 +1131,8 @@ $(document).ready(function() {
           dias: dias,
           observacion: observacion,
           jornal_valor: jornal_valor,
-          updated_at: updated_at
+          updated_at: updated_at,
+          jornal_id: jornal_id
         });
       });
 
@@ -1379,7 +1384,7 @@ $(document).ready(function() {
         }
 
         htmlMateriales += `
-          <tr>
+          <tr data-material-id="${mat.id_material ?? ''}">
             <td>${mat.nombre || ''}</td>
             <td>
               <input
@@ -1429,7 +1434,7 @@ $(document).ready(function() {
         }
 
         htmlManoObra += `
-          <tr>
+          <tr data-jornal_id="${mo.jornal_id ?? ''}">
             <td>${mo.nombre || ''}</td>
             <td>
               <input
@@ -1672,28 +1677,78 @@ $(document).ready(function() {
     verificarDatosVencidos();
   
     // 5) Delegado de eventos (único y correcto)
-    contenedor.off('input change', 'input').on('input change', 'input', function() {
+    //    + Si cambia un precio/jornal que estaba en rojo, persistimos en BD y quitamos la alerta
+    contenedor.off('input change', 'input').on('input change', 'input', function (e) {
       const $el   = $(this);
       const $card = $el.closest('.tarea-card');
       const $tr   = $el.closest('tr');
-    
-      // Recalcular fila si corresponde
+
+      const esMaterial = $el.hasClass('precio-unitario');
+      const esJornal   = $el.hasClass('valor-jornal');
+      const estabaRojo = $el.hasClass('bg-danger');
+
+      // --- A) Si se trata de precio/jornal y estaba en rojo, en 'change' persistimos en BD
+      if ((esMaterial || esJornal) && estabaRojo && e.type === 'change') {
+        const valorNuevo = parseFloat(String($el.val()).replace(',', '.')) || 0;
+
+        if (esMaterial) {
+          // La <tr> del presupuesto debe traer data-material-id="<id_material>"
+          const idMaterial = $tr.data('material-id');
+          if (idMaterial) {
+            simpleUpdateInDB(
+              '../06-funciones_php/funciones.php', // urlDestino
+              'materiales',                  // tabla
+              { precio_unitario: valorNuevo }, // SET
+              [                              // WHERE (array de condiciones)
+                { columna: 'id_material', condicion: '=', valorCompara: String(idMaterial) }
+              ],
+              'ajax'
+            ).then(() => {
+              $el.removeClass('bg-danger');
+              verificarDatosVencidos();
+              mostrarExito('PRECIO DE MATERIAL ACTUALIZADO');
+            }).catch(() => {
+              mostrarError('NO SE PUDO ACTUALIZAR EL PRECIO DEL MATERIAL');
+            });
+          }
+        } else if (esJornal) {
+          // La <tr> del presupuesto debe traer data-jornal_id="<jornal_id>"
+          const idJornal = $tr.data('jornal_id');
+          if (idJornal) {
+            simpleUpdateInDB(
+              '../06-funciones_php/funciones.php', // urlDestino
+              'tipo_jornales',               // tabla (según tu estructura real)
+              { jornal_valor: valorNuevo },  // SET
+              [                              // WHERE (array de condiciones)
+                { columna: 'jornal_id', condicion: '=', valorCompara: String(idJornal) }
+              ],
+              'ajax'
+            ).then(() => {
+              $el.removeClass('bg-danger');
+              verificarDatosVencidos();
+              mostrarExito('VALOR DE JORNAL ACTUALIZADO');
+            }).catch(() => {
+              mostrarError('NO SE PUDO ACTUALIZAR EL VALOR DEL JORNAL');
+            });
+          }
+        }
+      }
+
+      // --- B) Recalcular (tu lógica existente)
       if ($tr.find('.cantidad-material').length) calcularFilaMaterial($tr);
       if ($tr.find('.cantidad-mano-obra').length) calcularFilaManoObra($tr);
-    
-      // Siempre actualizar subtotales y totales
+
       actualizarSubtotalesBloque($card);
-    
-      // Subtotal por tarea
+
       const idBtn = $card.find('.btn-total-tarea').last().attr('id');
       const numeroTarea = parseInt(idBtn?.split('-').pop(), 10);
       actualizarTotalesPorTarea(numeroTarea, $card);
-    
-      // Total general
+
       actualizarTotalGeneral();
+
+      // --- C) Revalidar botones/alertas (si el usuario solo tipea, sin “change”, también se controla)
       verificarDatosVencidos();
     });
-    
      
   }
   
@@ -1749,23 +1804,56 @@ $(document).ready(function() {
   });
 
   function verificarDatosVencidos() {
+    // ¿Hay inputs en rojo?
     const hayVencidos = $('.precio-unitario.bg-danger, .valor-jornal.bg-danger').length > 0;
   
+    // Botones de acciones del bloque total
     const $botones = $('.presupuesto-total-actions button');
   
     if (hayVencidos) {
-      $botones.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success btn-primary');
+      // Deshabilitar e indicar visualmente estado bloqueado
+      $botones
+        .prop('disabled', true)
+        .addClass('btn-secondary')
+        .removeClass('btn-success btn-primary');
+  
+      // Mostrar alerta una sola vez hasta que se corrija la situación
+      if (!alertaDesactualizadosMostrada) {
+        alertaDesactualizadosMostrada = true;
+
+        const alertDanger = [
+          false, // icono
+          '<H3><strong>VALORES DESACTUALIZADOS</H3>', // título
+          'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.', // html
+          'OK', // texto del botón
+          false, // pie
+          false, // clic fuera
+          true, // permitir Escape
+          '#dc3545', // color de fondo
+          '#fff',    // 8 - color del texto general
+          '#198754', // 9 - color de fondo del botón (default azul SweetAlert)
+          '#fff'// 10 - color del texto del botón
+        ];
+
+        sAlertConfirmV2(alertDanger);
+
+      }
     } else {
-      $botones.prop('disabled', false).each(function() {
+      // No hay vencidos: habilitar botones y resetear el flag para futuros alerts
+      $botones.prop('disabled', false).each(function () {
         const $btn = $(this);
+        // Restaurar estilos coherentes
         if ($btn.text().includes('Guardar')) {
           $btn.addClass('btn-success').removeClass('btn-secondary');
         } else {
           $btn.addClass('btn-primary').removeClass('btn-secondary');
         }
       });
+  
+      alertaDesactualizadosMostrada = false;
     }
   }
+  
   
 
 });

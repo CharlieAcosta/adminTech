@@ -183,6 +183,7 @@ $opcionesManoDeObra = arrayToOptionsWithData(
   ' | ',
   ['jornal_descripcion'],
   [
+    'jornal_id' => 'jornal_id',
     'jornal_valor' => 'jornal_valor',
     'updated_at'   => 'updated_at',
   ]
@@ -1149,7 +1150,7 @@ $(function(){
 
 <!-- funciones customizadas -->
 <script src="../07-funciones_js/funciones.js"></script>
-
+<script src="../07-funciones_js/sAlertConfirmV2.js"></script>
 
 <!-- Page specific script -->
 <script>
