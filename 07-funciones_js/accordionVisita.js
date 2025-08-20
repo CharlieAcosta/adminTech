@@ -1364,110 +1364,131 @@ $(document).ready(function() {
       const numeroTarea = index + 1;
       const descripcion = tarea.descripcion || '';
   
-      // HTML dinámico de materiales
-      let htmlMateriales = '';
-      tarea.materiales.forEach((mat) => {
-        const precioUnitario = mat.precio_unitario ?? 0;
-        const cantidad = mat.cantidad ?? 0;
+// HTML dinámico de materiales
+let htmlMateriales = '';
+tarea.materiales.forEach((mat) => {
+  const precioUnitario = mat.precio_unitario ?? 0;
+  const cantidad = mat.cantidad ?? 0;
 
-        let claseAlerta = '';
-        let fechaRef = null;
+  let claseAlerta = '';
+  let fechaRef = null;
+  let readonly = '';
 
-        if (mat.log_edicion) {
-          fechaRef = new Date(mat.log_edicion);
-        } else if (mat.log_alta) {
-          fechaRef = new Date(mat.log_alta);
-        }
+  if (mat.log_edicion) {
+    fechaRef = new Date(mat.log_edicion);
+  } else if (mat.log_alta) {
+    fechaRef = new Date(mat.log_alta);
+  }
 
-        if (fechaRef && (hoy - fechaRef) > (30 * 24 * 60 * 60 * 1000)) {
-          claseAlerta = 'bg-danger';
-        }
+  // Si está vencido (>30 días) → bg-danger (editable)
+  // Si NO está vencido → bg-success + readonly
+  if (fechaRef && (hoy - fechaRef) > (30 * 24 * 60 * 60 * 1000)) {
+    claseAlerta = 'bg-danger';
+  } else {
+    claseAlerta = 'bg-success';
+    readonly = 'readonly';
+  }
 
-        htmlMateriales += `
-          <tr data-material-id="${mat.id_material ?? ''}">
-            <td>${mat.nombre || ''}</td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm cantidad-material"
-                value="${cantidad}"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm precio-unitario ${claseAlerta}"
-                value="${precioUnitario}"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td>
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm porcentaje-extra"
-                value="0"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td class="text-right subtotal-material">$0.00</td>
-          </tr>`;
-      });
+  htmlMateriales += `
+    <tr data-material-id="${mat.id_material ?? ''}">
+      <td>${mat.nombre || ''}</td>
+      <td>
+        <input
+          type="number"
+          class="form-control form-control-sm cantidad-material"
+          value="${cantidad}"
+          min="0"
+          step="any"
+        >
+      </td>
+      <td>
+        <input
+          type="number"
+          class="form-control form-control-sm precio-unitario ${claseAlerta}"
+          value="${precioUnitario}"
+          min="0"
+          step="any"
+          ${readonly}
+        >
+      </td>
+      <td>
+      </td>
+      <td>
+        <input
+          type="number"
+          class="form-control form-control-sm porcentaje-extra"
+          value="0"
+          min="0"
+          step="any"
+        >
+      </td>
+      <td class="text-right subtotal-material">$0.00</td>
+    </tr>`;
+});
+
   
-      // HTML dinámico de mano de obra
-      let htmlManoObra = '';
-      tarea.mano_obra.forEach((mo) => {
-        const valorJornal = mo.jornal_valor ?? 0;
-        const cantidadMo = mo.cantidad ?? 0;
+// HTML dinámico de mano de obra
+let htmlManoObra = '';
+tarea.mano_obra.forEach((mo) => {
+  const valorJornal = mo.jornal_valor ?? 0;
+  const cantidadMo = mo.cantidad ?? 0;
 
-        let claseAlerta = '';
-        if (mo.updated_at) {
-          const fechaMO = new Date(mo.updated_at);
-          if ((hoy - fechaMO) > (30 * 24 * 60 * 60 * 1000)) {
-            claseAlerta = 'bg-danger';
-          }
-        }
+  let claseAlerta = '';
+  let readonly = '';
 
-        htmlManoObra += `
-          <tr data-jornal_id="${mo.jornal_id ?? ''}">
-            <td>${mo.nombre || ''}</td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm cantidad-mano-obra"
-                value="${cantidadMo}"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm valor-jornal ${claseAlerta}"
-                value="${valorJornal}"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td>
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm porcentaje-extra"
-                value="0"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td class="text-right subtotal-mano">$0.00</td>
-          </tr>`;
-      });
+  if (mo.updated_at) {
+    const fechaMO = new Date(mo.updated_at);
+    // Si está vencido (>30 días) → bg-danger (editable)
+    // Si NO está vencido → bg-success + readonly
+    if ((hoy - fechaMO) > (30 * 24 * 60 * 60 * 1000)) {
+      claseAlerta = 'bg-danger';
+    } else {
+      claseAlerta = 'bg-success';
+      readonly = 'readonly';
+    }
+  } else {
+    // Si no hay updated_at, lo consideramos vigente por defecto
+    claseAlerta = 'bg-success';
+    readonly = 'readonly';
+  }
+
+  htmlManoObra += `
+    <tr data-jornal_id="${mo.jornal_id ?? ''}">
+      <td>${mo.nombre || ''}</td>
+      <td>
+        <input
+          type="number"
+          class="form-control form-control-sm cantidad-mano-obra"
+          value="${cantidadMo}"
+          min="0"
+          step="any"
+        >
+      </td>
+      <td>
+        <input
+          type="number"
+          class="form-control form-control-sm valor-jornal ${claseAlerta}"
+          value="${valorJornal}"
+          min="0"
+          step="any"
+          ${readonly}
+        >
+      </td>
+      <td>
+      </td>
+      <td>
+        <input
+          type="number"
+          class="form-control form-control-sm porcentaje-extra"
+          value="0"
+          min="0"
+          step="any"
+        >
+      </td>
+      <td class="text-right subtotal-mano">$0.00</td>
+    </tr>`;
+});
+
   
       const htmlTarea = `
       <div class="tarea-card">
@@ -1677,7 +1698,8 @@ $(document).ready(function() {
     verificarDatosVencidos();
   
     // 5) Delegado de eventos (único y correcto)
-    //    + Si cambia un precio/jornal que estaba en rojo, persistimos en BD y quitamos la alerta
+    //    + Si cambia un precio/jornal que estaba en rojo, persistimos en BD y, si es exitoso,
+    //      reemplazamos bg-danger → bg-success, seteamos readonly y revalidamos.
     contenedor.off('input change', 'input').on('input change', 'input', function (e) {
       const $el   = $(this);
       const $card = $el.closest('.tarea-card');
@@ -1697,14 +1719,15 @@ $(document).ready(function() {
           if (idMaterial) {
             simpleUpdateInDB(
               '../06-funciones_php/funciones.php', // urlDestino
-              'materiales',                  // tabla
-              { precio_unitario: valorNuevo }, // SET
-              [                              // WHERE (array de condiciones)
+              'materiales',                         // tabla
+              { precio_unitario: valorNuevo },      // SET
+              [                                      // WHERE
                 { columna: 'id_material', condicion: '=', valorCompara: String(idMaterial) }
               ],
               'ajax'
             ).then(() => {
-              $el.removeClass('bg-danger');
+              // ✅ Éxito: pasar a vigente (verde) y bloquear edición
+              $el.removeClass('bg-danger').addClass('bg-success').prop('readonly', true);
               verificarDatosVencidos();
               mostrarExito('PRECIO DE MATERIAL ACTUALIZADO');
             }).catch(() => {
@@ -1717,14 +1740,15 @@ $(document).ready(function() {
           if (idJornal) {
             simpleUpdateInDB(
               '../06-funciones_php/funciones.php', // urlDestino
-              'tipo_jornales',               // tabla (según tu estructura real)
-              { jornal_valor: valorNuevo },  // SET
-              [                              // WHERE (array de condiciones)
+              'tipo_jornales',                      // tabla
+              { jornal_valor: valorNuevo },         // SET
+              [                                      // WHERE
                 { columna: 'jornal_id', condicion: '=', valorCompara: String(idJornal) }
               ],
               'ajax'
             ).then(() => {
-              $el.removeClass('bg-danger');
+              // ✅ Éxito: pasar a vigente (verde) y bloquear edición
+              $el.removeClass('bg-danger').addClass('bg-success').prop('readonly', true);
               verificarDatosVencidos();
               mostrarExito('VALOR DE JORNAL ACTUALIZADO');
             }).catch(() => {
@@ -1749,6 +1773,7 @@ $(document).ready(function() {
       // --- C) Revalidar botones/alertas (si el usuario solo tipea, sin “change”, también se controla)
       verificarDatosVencidos();
     });
+
      
   }
   
