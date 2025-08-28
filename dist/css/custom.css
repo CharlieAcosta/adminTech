@@ -1019,25 +1019,12 @@ textarea.is-invalid {
   outline: none !important;
 }
 
-.util-inaceptable {
-  background-color: #ff0000 !important;
-  color: white !important;
-}
+/* === nuevo codigo 24: colores de utilidad con prioridad === */
+.util-inaceptable { background-color: #dc3545 !important; color: #fff !important; }  /* rojo */
+.util-aceptable   { background-color: #ffc107 !important; color: #212529 !important; }/* ámbar */
+.util-muy         { background-color: #28a745 !important; color: #fff !important; }  /* verde */
+.util-margen      { background-color: #198754 !important; color: #fff !important; }  /* verde intenso */
 
-.util-aceptable {
-  background-color: #ffff00 !important;
-  color: black !important;
-}
-
-.util-muy {
-  background-color: #99cc66 !important;
-  color: black !important;
-}
-
-.util-margen {
-  background-color: #ffaa00 !important;
-  color: black !important;
-}
 
 
   

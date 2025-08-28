@@ -13,6 +13,9 @@ $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $auditoria = array('Super Administrador');
 ?>
+<script>
+  window.ACTIVE_USER_ID = <?= (int) $usuario['id_usuario'] ?>;
+</script>
 
 <nav class="main-header navbar navbar-expand navbar-dark navbar-navy">
     <!-- Ícono de ayuda a la izquierda con tooltip -->
