@@ -10,7 +10,7 @@ $(document).ready(function() {
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
-    const vistaDetallada = [38];
+    const vistaDetallada = [2, 38];
 
     // Helper robusto para obtener el id del usuario activo desde el DOM/ventana
     function obtenerUsuarioIdActivo() {
