@@ -200,29 +200,29 @@ $(document).ready(function() {
       var logAlta = $selected.data('log_alta') || '';
 
 
-// Agregar fila (y quitar placeholder si existe)
-$materialesTable.find('.fila-vacia-materiales').remove();
+      // Agregar fila (y quitar placeholder si existe)
+      $materialesTable.find('.fila-vacia-materiales').remove();
 
-// calcular el # de fila luego de quitar el placeholder
-var rowCount = $materialesTable.find('tr').length + 1;
+      // calcular el # de fila luego de quitar el placeholder
+      var rowCount = $materialesTable.find('tr').length + 1;
 
-var nuevaFila = `
-  <tr 
-    data-material-id="${materialId}"
-    data-precio_unitario="${precio}"
-    data-unidad_medida="${unidadMedida}"
-    data-unidad_venta="${unidadVenta}"
-    data-contenido="${contenido}"
-    data-log_edicion="${logEdicion}"
-    data-log_alta="${logAlta}">
-    <td>${rowCount}</td>
-    <td>${materialText}</td>
-    <td>${cantidad}</td>
-    <td class="text-center">
-        <i class="fa fa-trash v-icon-pointer text-danger eliminar-material" title="Eliminar material" style="cursor: pointer; font-size: 1.2rem;"></i>
-    </td>
-  </tr>
-`;
+      var nuevaFila = `
+        <tr 
+          data-material-id="${materialId}"
+          data-precio_unitario="${precio}"
+          data-unidad_medida="${unidadMedida}"
+          data-unidad_venta="${unidadVenta}"
+          data-contenido="${contenido}"
+          data-log_edicion="${logEdicion}"
+          data-log_alta="${logAlta}">
+          <td>${rowCount}</td>
+          <td>${materialText}</td>
+          <td>${cantidad}</td>
+          <td class="text-center">
+              <i class="fa fa-trash v-icon-pointer text-danger eliminar-material" title="Eliminar material" style="cursor: pointer; font-size: 1.2rem;"></i>
+          </td>
+        </tr>
+      `;
 
 
       $materialesTable.append(nuevaFila);
@@ -1254,80 +1254,73 @@ var nuevaFila = `
      * @param {jQuery} $card El contenedor .tarea-card correspondiente.
      */
     function actualizarSubtotalesBloque($card) {
-      // === 1) Subtotal Materiales ===
-      // Suma de filas (cada fila ya incluye su % Extra propio)
+      // --- Materiales: suma de filas (excluye Subtotal y Otros) ---
       let sumaMat = 0;
-      $card.find('.tarea-materiales tbody tr').not('.fila-subtotal, .fila-otros-materiales').each(function () {
-        const txt = $(this).find('.subtotal-material').text().trim();
-        if (!txt) return;
-        const v = parseFloat(txt.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
-        sumaMat += v;
-      });
+      $card.find('.tarea-materiales tbody tr')
+        .not('.fila-subtotal, .fila-otros-materiales')
+        .each(function () {
+          const raw = $(this).find('.subtotal-material').text().trim();
+          if (!raw) return;
+          const v = parseFloat(raw.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+          sumaMat += v;
+        });
     
-      // % utilidad global (si está vacío usa default)
-      const utilMatPct = parseFloat($card.find('.tarea-materiales .fila-subtotal input.utilidad-global-materiales').val()) || porcentajesPorDefecto.materiales;
-      const utilMatMonto = sumaMat * (utilMatPct / 100);
-    
-      // ➕ Otros (monto plano que se SUMA al subtotal final; no genera utilidad)
       const otrosMat = parseFloat(String($card.find('.input-otros-materiales').val()).replace(',', '.')) || 0;
     
-      // Subtotal mostrado en la fila: filas + utilidad + otros
-      const subtotalMatFinal = sumaMat + utilMatMonto + otrosMat;
+      // % utilidad materiales (si está vacío usa default)
+      const utilMatPct = parseFloat(
+        $card.find('.tarea-materiales .fila-subtotal input.utilidad-global-materiales').val()
+      ) || porcentajesPorDefecto.materiales;
     
-      // Pintar fila de Subtotal Materiales (última celda en la fila-subtotal)
-      $card.find('.tarea-materiales .fila-subtotal td:last-child b').text(formatMoney(subtotalMatFinal));
-      // Botón "Subtotal Util. Mat."
-      $card.find('.subt-util-materiales').text('Subtotal Util. Mat.: ' + formatMoney(utilMatMonto));
+      // Utilidad contable (base × %)
+      const utilMatBase = sumaMat * (utilMatPct / 100);
     
-      // === 2) Subtotal Mano de Obra ===
+      // Lo que muestra el botón "Subtotal Util. Mat." = (base × %) + otros
+      const utilMatParaMostrar = utilMatBase + otrosMat;
+    
+      // Subtotal mostrado en la fila de la tabla: base + utilidad + otros
+      const subtotalMatMostrado = sumaMat + utilMatBase + otrosMat;
+    
+      // Pintar
+      $card.find('.tarea-materiales .fila-subtotal td:last-child b').text(formatMoney(subtotalMatMostrado));
+      $card.find('.subt-util-materiales').text('Subtotal Util. Mat.: ' + formatMoney(utilMatParaMostrar));
+    
+      // --- Mano de Obra ---
       let sumaMan = 0;
-      $card.find('.tarea-mano-obra tbody tr').not('.fila-subtotal, .fila-otros-mano').each(function () {
-        const txt = $(this).find('.subtotal-mano').text().trim();
-        if (!txt) return;
-        const v = parseFloat(txt.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
-        sumaMan += v;
-      });
+      $card.find('.tarea-mano-obra tbody tr')
+        .not('.fila-subtotal, .fila-otros-mano')
+        .each(function () {
+          const raw = $(this).find('.subtotal-mano').text().trim();
+          if (!raw) return;
+          const v = parseFloat(raw.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+          sumaMan += v;
+        });
     
-      const utilMoPct   = parseFloat($card.find('.tarea-mano-obra .fila-subtotal input.utilidad-global-mano-obra').val()) || porcentajesPorDefecto.mano_obra;
-      const utilMoMonto = sumaMan * (utilMoPct / 100);
-    
-      // ➕ Otros MO (monto plano)
       const otrosMo = parseFloat(String($card.find('.input-otros-mano').val()).replace(',', '.')) || 0;
     
-      // Subtotal mostrado: filas + utilidad + otros
-      const subtotalMoFinal = sumaMan + utilMoMonto + otrosMo;
+      const utilMoPct = parseFloat(
+        $card.find('.tarea-mano-obra .fila-subtotal input.utilidad-global-mano-obra').val()
+      ) || porcentajesPorDefecto.mano_obra;
     
-      // Pintar fila de Subtotal Mano de Obra
-      $card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text(formatMoney(subtotalMoFinal));
-      // Botón "Subtotal Util. MO."
-      $card.find('.subt-util-manoobra').text('Subtotal Util. MO.: ' + formatMoney(utilMoMonto));
+      const utilMoBase = sumaMan * (utilMoPct / 100);
+      const utilMoParaMostrar = utilMoBase + otrosMo;      // (base × %) + otros
+      const subtotalMoMostrado = sumaMan + utilMoBase + otrosMo;
     
-      // === 3) Utilidades combinadas (solo suma de utilidades, sin “otros”) ===
-      const utilTotal = utilMatMonto + utilMoMonto;
-      $card.find('.subt-util-total').text('Sub Util. Mat.+MO.: ' + formatMoney(utilTotal));
+      $card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text(formatMoney(subtotalMoMostrado));
+      $card.find('.subt-util-manoobra').text('Subtotal Util. MO.: ' + formatMoney(utilMoParaMostrar));
     
-      // === 4) Subtotal por tarea (lo que se usará para impuestos y Total Presupuesto) ===
-      // Toma los dos subtotales finales (cada uno ya incluye su “otros”)
-      const totalTarea = subtotalMatFinal + subtotalMoFinal;
-    
-      // Detectar número de tarea para setear el botón
-      const num = $card.find('.tarea-encabezado b').text().match(/\d+/)?.[0] || '';
-    
-      $card
-        .find(`#subt-tarea-${num}`)
-        .data('monto', totalTarea)
-        .text(`Subtotal Tarea ${num}: ${formatMoney(totalTarea)}`);
+      // 🔹 NUEVO: “Sub Util. Mat.+MO.” debe ser la suma visible (cada util + sus “otros”)
+      const utilTotalParaMostrar = utilMatParaMostrar + utilMoParaMostrar;
+      $card.find('.subt-util-total').text('Sub Util. Mat.+MO.: ' + formatMoney(utilTotalParaMostrar));
     }
-    
-    
-    
+         
     /**
      * Calcula y actualiza los botones de utilidades y subtotal de tarea para una tarjeta de tarea.
      * @param {number} numeroTarea - El índice de la tarea (1-based).
      * @param {jQuery} $card - El contenedor .tarea-card correspondiente.
      */
     function actualizarTotalesPorTarea(numeroTarea, $card) {
-      // 1) Sumas base de FILAS (sin “Otros”)
+      // 1) Sumas base de filas (sin "Otros")
       let sumaMatFilas = 0;
       $card.find('.tarea-materiales tbody tr')
         .not('.fila-subtotal,.fila-otros-materiales')
@@ -1348,46 +1341,57 @@ var nuevaFila = `
           if (!isNaN(v)) sumaMoFilas += v;
         });
     
-      // 2) Otros (montos planos) — solo para mostrar, NO para cálculos
+      // 2) Otros (montos planos)
       const otrosMat = parseFloat(String($card.find('.input-otros-materiales').val()).replace(',', '.')) || 0;
       const otrosMo  = parseFloat(String($card.find('.input-otros-mano').val()).replace(',', '.')) || 0;
     
-      // 3) % utilidad global (defaults si están vacíos)
+      // 3) % utilidad global
       const utilMatPct = parseFloat($card.find('.tarea-materiales .fila-subtotal input.utilidad-global-materiales').val()) || porcentajesPorDefecto.materiales;
       const utilMoPct  = parseFloat($card.find('.tarea-mano-obra .fila-subtotal input.utilidad-global-mano-obra').val())   || porcentajesPorDefecto.mano_obra;
     
-      // 4) Montos de utilidad (solo sobre FILAS)
-      const utilMat   = sumaMatFilas * (utilMatPct / 100);
-      const utilMO    = sumaMoFilas  * (utilMoPct  / 100);
-      const utilTotal = utilMat + utilMO;
+      // 4) Utilidades contables (base × %) — se usan para impuestos y util real
+      const utilMatContable = sumaMatFilas * (utilMatPct / 100);
+      const utilMOContable  = sumaMoFilas  * (utilMoPct  / 100);
+      const utilTotal       = utilMatContable + utilMOContable;
     
-      // 5) Totales de tarea
-      //    - Base (sin otros): se usa para cálculos
-      //    - Mostrado (con otros): sólo UI
-      const totalBase     = (sumaMatFilas + utilMat) + (sumaMoFilas + utilMO);
-      const totalMostrado = (sumaMatFilas + utilMat + otrosMat) + (sumaMoFilas + utilMO + otrosMo);
+      // 🔹 Lo que muestran los botones de utilidades (visible)
+      const matUtilParaMostrar = utilMatContable + otrosMat; // (base × %) + otros
+      const moUtilParaMostrar  = utilMOContable  + otrosMo;  // (base × %) + otros
+      const utilTotalParaMostrar = matUtilParaMostrar + moUtilParaMostrar;
     
-      // 6) Refrescar botones de utilidades y Subtotal Tarea
-      $(`#subt-util-materiales-${numeroTarea}`).html(`Subtotal Util. Mat.: <strong>${formatMoney(utilMat)}</strong>`);
-      $(`#subt-util-manoobra-${numeroTarea}`).html(`Subtotal Util. MO.: <strong>${formatMoney(utilMO)}</strong>`);
-      $(`#subt-util-total-${numeroTarea}`).html(`Sub Util. Mat.+MO.: <strong>${formatMoney(utilTotal)}</strong>`);
+      // 5) Totales de tarea (base para cálculos y UI)
+      const totalBase     = (sumaMatFilas + utilMatContable) + (sumaMoFilas + utilMOContable); // cálculos/impuestos
+      const totalMostrado = (sumaMatFilas + utilMatContable + otrosMat) + (sumaMoFilas + utilMOContable + otrosMo); // UI
     
-      //  💡 Importante:
-      //  - data('monto') guarda el TOTAL BASE (sin “Otros”) → lo usa Total General y los cálculos.
-      //  - El texto del botón muestra el TOTAL CON “Otros”.
+      // 6) Refrescar botones
+      $(`#subt-util-materiales-${numeroTarea}`).html(`Subtotal Util. Mat.: <strong>${formatMoney(matUtilParaMostrar)}</strong>`);
+      $(`#subt-util-manoobra-${numeroTarea}`).html(`Subtotal Util. MO.: <strong>${formatMoney(moUtilParaMostrar)}</strong>`);
+      $(`#subt-util-total-${numeroTarea}`).html(`Sub Util. Mat.+MO.: <strong>${formatMoney(utilTotalParaMostrar)}</strong>`);
+    
       $(`#subt-tarea-${numeroTarea}`)
-      .data('monto', totalBase)        // ← se usa para cálculos, % utilidad, impuestos, etc.
-      .data('mostrado', totalMostrado) // ← lo usamos para TOTAL PRESUPUESTO en pantalla
-      .html(`Subtotal Tarea ${numeroTarea}: <strong>${formatMoney(totalMostrado)}</strong>`);
+        .data('monto', totalBase)        // cálculos (impuestos, % util, total general)
+        .data('mostrado', totalMostrado) // total “visible” con Otros
+        .html(`Subtotal Tarea ${numeroTarea}: <strong>${formatMoney(totalMostrado)}</strong>`);
     
-      // 7) Impuestos / costos — SIEMPRE sobre el TOTAL BASE
-      const iibb       = totalBase * 1.21 * 0.03;  // 3% sobre total con IVA
-      const ganancia35 = utilTotal * 0.35;         // 35% sobre utilidad
-      const costoInv3  = totalBase * 0.03;         // 3% sobre total
-      const impCheque  = totalBase * 0.012;        // 1.2% sobre total
+        // 7) Impuestos / costos
+        // IIBB sobre el Subtotal Tarea mostrado (incluye “Otros”) con IVA 21%
+        const iibb = totalMostrado * 1.21 * 0.03;
+
+        // Ganancias 35%: 35% de la suma de utilidades visibles (Mat.+Otros + MO.+Otros)
+        const ganancia35 = utilTotalParaMostrar * 0.35;
+
+        // Costo inv. 3% sobre base contable
+        const costoInv3  = totalMostrado * 0.03;
+
+        // 🔹 Impuesto al cheque: Subtotal Tarea mostrado × 0,0012 (0,12%)
+        const impCheque  = totalMostrado * 0.012;
     
-      const utilRealFinal = utilTotal - (iibb + ganancia35 + impCheque + costoInv3);
-      const porcentajeUtilidad = (totalBase > 0) ? (utilRealFinal / totalBase) * 100 : 0;
+      const utilRealFinal = utilTotalParaMostrar - (iibb + ganancia35 + impCheque + costoInv3);
+    
+      // % utilidad (reflejando “Otros” en el denominador)
+      const porcentajeUtilidad = (totalMostrado > 0)
+        ? (utilRealFinal / totalMostrado) * 100
+        : 0;
     
       $(`#iibb-${numeroTarea}`).html(`IIBB:<strong> ${formatMoney(iibb)}</strong>`);
       $(`#ganancias-${numeroTarea}`).html(`Ganancias 35%:<strong> ${formatMoney(ganancia35)}</strong>`);
@@ -1396,16 +1400,15 @@ var nuevaFila = `
       $(`#utilfinal-${numeroTarea}`).html(`Util real final:<strong> ${formatMoney(utilRealFinal)}</strong>`);
       $(`#porcentajetarea-${numeroTarea}`).html(`% Utilidad:<strong> ${porcentajeUtilidad.toFixed(2)}%</strong>`);
     
-      // 8) Colores por % utilidad (limpia + aplica)
+      // 8) Colores
       const $targets = $(`#porcentajetarea-${numeroTarea}, #subt-tarea-${numeroTarea}`);
       $targets.removeClass('util-inaceptable util-aceptable util-muy util-margen');
       if (porcentajeUtilidad <= 12)      $targets.addClass('util-inaceptable');
       else if (porcentajeUtilidad <= 17) $targets.addClass('util-aceptable');
       else if (porcentajeUtilidad <= 23) $targets.addClass('util-muy');
-      else $targets.addClass('util-margen');
+      else                               $targets.addClass('util-margen');
     }
-    
-  
+       
     /**
      * Recorre todos los botones de subtotal de tarea y suma sus valores,
      * luego actualiza el span .presupuesto-total-valor.
@@ -1436,8 +1439,6 @@ var nuevaFila = `
       window.__TOTAL_MOSTRADO__ = totalMostrar;
     }
     
-    
-  
     function renderizarPresupuestoDesdeDatos(datos) {
       const contenedor = $('#contenedorPresupuestoGenerado');
       contenedor.empty();
