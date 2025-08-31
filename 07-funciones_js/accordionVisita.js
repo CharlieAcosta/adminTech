@@ -10,7 +10,7 @@ $(document).ready(function() {
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
-    const vistaDetallada = [2, 38];
+    const vistaDetallada = [38];
 
     // Helper robusto para obtener el id del usuario activo desde el DOM/ventana
     function obtenerUsuarioIdActivo() {
@@ -1647,11 +1647,12 @@ $(document).ready(function() {
                       <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
                       <td>
                         <input
-                          type="number"
-                          class="form-control form-control-sm utilidad-global-materiales"
-                          min="0"
-                          value="${tarea.utilidad_materiales ?? ''}"
-                        >
+                        type="number"
+                        class="form-control form-control-sm utilidad-global-materiales"
+                        min="0"
+                        value="${tarea.utilidad_materiales ?? ''}"
+                        placeholder="%"
+                        />                   
                       </td>
                       <td class="text-right"><b>$0.00</b></td>
                     </tr>
@@ -1695,12 +1696,12 @@ $(document).ready(function() {
                     <tr class="fila-subtotal">
                       <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
                       <td>
-                        <input
-                          type="number"
-                          class="form-control form-control-sm utilidad-global-mano-obra"
-                          min="0"
-                          value="${tarea.utilidad_mano_obra ?? ''}"
-                        >
+                      <input
+                        type="number"
+                        class="form-control form-control-sm utilidad-global-mano-obra"
+                        min="0"
+                        value="${tarea.utilidad_mano_obra ?? ''}"
+                        placeholder="%"/>                    
                       </td>
                       <td class="text-right"><b>$0.00</b></td>
                     </tr>
@@ -1763,6 +1764,24 @@ $(document).ready(function() {
         
         contenedor.append(htmlTarea);
 
+        // === bloquear/permitir edición de % de utilidad global por vistaDetallada ===
+        // referencia a la card recién inyectada
+        const $cardRecienAgregada = contenedor.find('.tarea-card').last();
+
+        // inputs a controlar
+        const $utilMat = $cardRecienAgregada.find('.utilidad-global-materiales');
+        const $utilMO  = $cardRecienAgregada.find('.utilidad-global-mano-obra');
+
+        // si NO tiene vista detallada -> solo lectura + estilo gris
+        if (!mostrarVistaDetallada) {
+          $utilMat.prop('readonly', true).addClass('input-sololectura');
+          $utilMO.prop('readonly', true).addClass('input-sololectura');
+        } else {
+          // si tiene vista detallada -> editable normal
+          $utilMat.prop('readonly', false).removeClass('input-sololectura');
+          $utilMO.prop('readonly', false).removeClass('input-sololectura');
+        }
+        
         if (!mostrarVistaDetallada) {
           // oculta solo los impuestos, deja visible "Subtotal Tarea"
           $(`#iibb-${numeroTarea}, #ganancias-${numeroTarea}, #cheque-${numeroTarea}, #inversion-${numeroTarea}, #retiva-${numeroTarea}`)
