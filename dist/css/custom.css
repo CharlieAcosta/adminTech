@@ -1025,6 +1025,14 @@ textarea.is-invalid {
 .util-muy         { background-color: #28a745 !important; color: #fff !important; }  /* verde */
 .util-margen      { background-color: #198754 !important; color: #fff !important; }  /* verde intenso */
 
+/* === inputs de utilidad solo lectura para usuarios SIN vistaDetallada === */
+.input-sololectura {
+  background-color: #f1f3f5 !important; /* gris tenue */
+  color: #6c757d !important;            /* texto gris */
+  pointer-events: none !important;      /* bloquea scroll en inputs number */
+}
+
+
 
 
   
