@@ -889,7 +889,14 @@ $(document).ready(function() {
       const datosExtraidos = recolectarDatosParaPresupuesto();
       console.log('📦 Datos extraídos para presupuesto:', datosExtraidos);
       renderizarPresupuestoDesdeDatos(datosExtraidos);
-      
+
+      PresupuestoFotos.refresh();
+
+      // 🔗 NUEVO: preparar bloque de fotos para drag&drop y selección
+      if (window.PresupuestoFotos && typeof PresupuestoFotos.refresh === 'function') {
+        PresupuestoFotos.refresh();
+      }
+
       // 5. Deshabilitar el botón para evitar doble click
       $(this).prop('disabled', true);
 
@@ -1601,9 +1608,9 @@ $(document).ready(function() {
               </div>
               <!-- Fotos -->
               <div class="mb-2 flex-grow-1">
-                <label><b>Fotos (próximamente)</b></label>
+                <label class="mb-0"><b>Imagenes</b></label>
                 <div class="preview-fotos border rounded bg-light p-3 d-flex align-items-center justify-content-center text-muted" style="min-height: 100px;">
-                  <em>Aquí se mostrarán las imágenes</em>
+                  <em>Arrastre aquí las imagenes que desea ajuntar al presupuesto de esta tarea.</em>
                 </div>
               </div>
             </div>

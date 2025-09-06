@@ -1704,7 +1704,7 @@ const tareasVisitadas = <?php
 ?>;
 </script>
 <script src="../07-funciones_js/accordionVisita.js"></script>
-
+<script src="../07-funciones_js/accordionPresupuesto.js"></script>
 <!-- funcion para saber si es un alta, visualización, edición // formatea la vista -->
 <script src="../07-funciones_js/abm_detect.js"></script>
 <!-- funcion para traer los partidos de una provincia -->
