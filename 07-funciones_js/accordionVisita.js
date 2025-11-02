@@ -1798,22 +1798,178 @@ $(document).ready(function() {
 
       });
     
-      // Bloque total general con botón Guardar
-      const htmlTotal = `
-        <div class="presupuesto-total-card">
-          <div class="presupuesto-total-row">
-            <div class="presupuesto-total-actions">
-              <button class="btn btn-success mr-2"><i class="fas fa-save"></i> Guardar</button>
-              <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
-              <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
-            </div>
-            <div class="presupuesto-total-label">
-              <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
-              <span class="presupuesto-total-valor">$0.00</span>
-            </div>
+    // Bloque total general con botón Guardar
+    const htmlTotal = `
+      <div class="presupuesto-total-card">
+        <div class="presupuesto-total-row">
+          <div class="presupuesto-total-actions">
+            <button id="btn-guardar-presupuesto" class="btn btn-success mr-2">
+              <i class="fas fa-save"></i> Guardar
+            </button>
+            <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
+            <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
           </div>
-        </div>`;
+          <div class="presupuesto-total-label">
+            <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+            <span class="presupuesto-total-valor">$0.00</span>
+          </div>
+        </div>
+      </div>`;
       contenedor.append(htmlTotal);
+
+      // === Guardar presupuesto (delegado sobre el contenedor)
+      contenedor.off('click', '#btn-guardar-presupuesto').on('click', '#btn-guardar-presupuesto', async function (e) {
+        e.preventDefault();
+
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+
+        try {
+          const $root = $('#contenedorPresupuestoGenerado');
+
+          // Si cargamos desde BD, podés setear data-id_presupuesto en el contenedor.
+          // Si no existe (generado desde Visita), quedará null y el back INSERTA.
+          const id_presupuesto = Number($root.data('id_presupuesto')) || null;
+
+          // Tomamos ids de la página (ya existen en tu form)
+          const id_previsita = $('#id_previsita').val() || null;
+          const id_visita    = $('#id_visita').val() || null;
+
+          const tareas = [];
+
+          // Recorremos cada tarjeta de tarea en el Presupuesto
+          $root.find('.tarea-card').each(function (index) {
+            const $card = $(this);
+            const numeroTarea = index + 1;
+
+            // Descripción y flag de inclusión
+            const descripcion = $card.find('textarea').first().val()?.trim() || '';
+            const incluir_en_total = $card.find('.incluir-en-total').is(':checked') ? 1 : 0;
+
+            // Parámetros de bloque
+            const utilidad_materiales = parseFloat($card.find('.tarea-materiales .fila-subtotal input.utilidad-global-materiales').val()) || null;
+            const utilidad_mano_obra  = parseFloat($card.find('.tarea-mano-obra .fila-subtotal input.utilidad-global-mano-obra').val()) || null;
+            const otros_materiales    = parseFloat($card.find('.tarea-materiales .input-otros-materiales').val()) || 0;
+            const otros_mano_obra     = parseFloat($card.find('.tarea-mano-obra .input-otros-mano').val()) || 0;
+
+            // === Materiales de la tarea (tomamos filas "reales": excluye subtotal y otros)
+            const materiales = [];
+            $card.find('.tarea-materiales tbody tr')
+              .not('.fila-subtotal, .fila-otros-materiales')
+              .each(function () {
+                const $tr = $(this);
+                const nombre = $tr.find('td').eq(0).text().trim(); // columna "Material"
+                const cantidad = parseFloat($tr.find('.cantidad-material').val()) || 0;
+                const precio_unitario = parseFloat($tr.find('.precio-unitario').val()) || 0;
+                const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+
+                // Si en futuro agregás data-material-id a la fila, lo tomamos. Si no, queda null.
+                const id_material = $tr.data('material_id') || $tr.data('material-id') || null;
+
+                // Solo incluimos filas con nombre o algún valor cargado
+                if (nombre || cantidad || precio_unitario) {
+                  materiales.push({
+                    id_material,
+                    nombre,
+                    cantidad,
+                    precio_unitario,
+                    porcentaje_extra
+                  });
+                }
+              });
+
+            // === Mano de obra de la tarea (excluye subtotal y otros)
+            const mano_obra = [];
+            $card.find('.tarea-mano-obra tbody tr')
+              .not('.fila-subtotal, .fila-otros-mano')
+              .each(function () {
+                const $tr = $(this);
+                const nombre = $tr.find('td').eq(0).text().trim(); // columna "Tipo"
+                const cantidad = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0;
+                const jornal_valor = parseFloat($tr.find('.valor-jornal').val()) || 0;
+                const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+
+                // Si en futuro agregás data-jornal-id a la fila, lo tomamos. Si no, queda null.
+                const jornal_id = $tr.data('jornal_id') || $tr.data('jornal-id') || null;
+
+                if (nombre || cantidad || jornal_valor) {
+                  mano_obra.push({
+                    jornal_id,
+                    nombre,
+                    cantidad,
+                    jornal_valor,
+                    porcentaje_extra
+                  });
+                }
+              });
+
+            // === Fotos (si usás módulo de fotos de presupuesto)
+            let fotos = [];
+            if (window.PresupuestoFotos && typeof PresupuestoFotos.getImagenes === 'function') {
+              // getImagenes(numeroTarea) -> [{ file|null, nombre, src? }, ...]
+              fotos = (PresupuestoFotos.getImagenes(numeroTarea) || []).map(f => ({ nombre: f.nombre || null }));
+            }
+
+            tareas.push({
+              nro: numeroTarea,
+              descripcion,
+              incluir_en_total,
+              utilidad_materiales,
+              utilidad_mano_obra,
+              otros_materiales,
+              otros_mano_obra,
+              materiales,
+              mano_obra,
+              fotos
+            });
+          });
+
+          // Payload final para back (alineado a nuestras tablas)
+          const payload = {
+            id_presupuesto,   // si null => INSERT
+            id_previsita,
+            id_visita,
+            tareas
+          };
+
+          // === Llamada AJAX
+          // IMPORTANTE: Ajustá la URL al endpoint real del back (PHP).
+          // El "via/funcion" sigue el mismo esquema que usás en otros módulos.
+          const ENDPOINT = window.URL_GUARDAR_PRESUPUESTO || 'presupuestos_guardar.php';
+
+          const resp = await $.ajax({
+            url: ENDPOINT,
+            method: 'POST',
+            dataType: 'json',
+            data: {
+              via: 'ajax',
+              funcion: 'guardarPresupuesto',
+              payload: JSON.stringify(payload)
+            }
+          });
+
+          if (resp && resp.ok) {
+            // El back debería devolver: ok:true, id_presupuesto, version, estado (borrador), etc.
+            if (resp.id_presupuesto) {
+              $('#contenedorPresupuestoGenerado').data('id_presupuesto', resp.id_presupuesto);
+            }
+            // Marcar UI como "sin cambios" si ya llevás esa bandera;
+            // acá al menos avisamos visualmente.
+            toastr.success('Presupuesto guardado correctamente.');
+
+          } else {
+            toastr.warning(resp?.msg || 'No se pudo guardar el presupuesto.');
+          }
+
+        } catch (err) {
+          console.error('Error al guardar presupuesto:', err);
+          toastr.error('Error al guardar el presupuesto.');
+        } finally {
+          $btn.prop('disabled', false);
+        }
+      });
+
+
       if (!mostrarVistaDetallada) {
         contenedor.find('.fila-impuestos').addClass('d-none');
       }
