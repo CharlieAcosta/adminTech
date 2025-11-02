@@ -84,7 +84,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon bg-warning elevation-1"><i class="fas fa-users"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text">Agentes</h2>
+                    <h3 class="info-box-text">Agentes</h3>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -101,7 +101,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-calendar-check"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text">Novedades</h2>
+                    <h3 class="info-box-text">Novedades</h3>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -119,7 +119,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon bg-info elevation-1"><i class="fas fa-handshake"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text">Clientes</h2>
+                    <h3 class="info-box-text">Clientes</h3>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -136,7 +136,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon bg-success elevation-1"><i class="fa-solid fa-warehouse"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text d-flex align-items-center">Seguimiento de obra  
+                    <h3 class="info-box-text d-flex align-items-center">Seguimiento de obra  
                       
                       <?php if ($vencidas !== false && $vencidas['total'] > 0){ ?>
                       <small><span class="right badge badge-danger ml-3 mt-2"><?php echo $vencidas['total'].'<small><small><br> Venc. </small></small>'; ?></span></small>
@@ -149,7 +149,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                       <?php if ($reprogramadas !== false && $reprogramadas['total'] > 0){ ?>
                       <small><span class="right badge badge-primary ml-2 mt-2"><?php echo $reprogramadas['total'].'<small><small><br> Repr. </small></small>'; ?></span></small>
                       <?php } ?>
-                  </h2>  
+                  </h3>  
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -166,7 +166,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon bg-secondary elevation-1"><i class="fa-solid fa-dolly"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text d-flex align-items-center">Materiales</h2>  
+                    <h3 class="info-box-text d-flex align-items-center">Materiales</h3>  
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -183,7 +183,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon bg-primary elevation-1"><i class="fa-solid fa-helmet-safety"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text d-flex align-items-center">Obras</h2>  
+                    <h3 class="info-box-text d-flex align-items-center">Obras</h3>  
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -200,7 +200,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon v-bg-magenta elevation-1"><i class="fa-solid fa-people-roof"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text d-flex align-items-center">AEO - Asistencia en obras</h2>  
+                    <h3 class="info-box-text d-flex align-items-center">AEO - Asistencia en obras</h3>  
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -217,7 +217,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
                   <span class="info-box-icon v-bg-verde-oscuro elevation-1"><i class="fa-solid fa-sack-dollar"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h2 class="info-box-text d-flex align-items-center">Tipos de Jornales</h2>  
+                    <h3 class="info-box-text d-flex align-items-center">Tipos de Jornales</h3>  
                   </div>
                 <!-- /.info-box-content -->
               </div>
