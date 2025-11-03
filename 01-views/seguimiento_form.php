@@ -46,6 +46,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
   }
 
+  
 //echo utf8_encode( $usuario_datos['0']['provincia'] ); die();
 
     $previsita_card = 'card-success'; $previsita_buttons = 'd-flex'; 
@@ -1702,6 +1703,9 @@ const tareasVisitadas = <?php
         JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT
     ); 
 ?>;
+
+
+
 </script>
 <script src="../07-funciones_js/accordionVisita.js"></script>
 <script src="../07-funciones_js/accordionPresupuesto.js"></script>
@@ -1760,6 +1764,6 @@ const tareasVisitadas = <?php
 <div id="popover-content-visita" style="display:none">
   <?= $popoverIntervinientes /* contiene la tabla completa */ ?>
 </div>
-
+<script>window.URL_GUARDAR_PRESUPUESTO = '../03-controller/presupuestos_guardar.php';</script>
 </body>
 </html>
