@@ -1032,6 +1032,22 @@ textarea.is-invalid {
   pointer-events: none !important;      /* bloquea scroll en inputs number */
 }
 
+.presu-dropzone { border-style: dashed; overflow: auto; }
+.presu-preview-fotos .preview-img-container { margin: .25rem; }
+
+.presu-dropzone{
+  position: relative; min-height:120px; cursor:pointer;
+}
+.presu-preview-fotos{
+  display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem;
+}
+.preview-img-container{ position:relative; width:100px; height:100px; }
+.preview-img-container .presu-eliminar-imagen{ position:absolute; top:2px; right:2px; z-index:2; }
+
+.presu-dropzone { cursor: pointer; }
+.presu-preview-fotos { min-height: 10px; } /* que siempre tenga algo clickeable */
+
+
 
 
 
