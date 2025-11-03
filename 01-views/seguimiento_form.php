@@ -10,10 +10,10 @@ include_once '../04-modelo/presupuestosModel.php'; //conecta a la tabla de clien
 include_once '../04-modelo/callesModel.php'; //conecta a la tabla de usuarios
 include_once '../04-modelo/clientesModel.php'; //conecta a la tabla de clientes
 include_once '../04-modelo/visitaModel.php';
+include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
-
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
 
@@ -25,13 +25,13 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   $datos = modGetPresupuestoById($id, 'php');
   $datos = $datos[0];
 
-  //dd($datos);
-
+//dd($datos);
+//dd($datos["id_previsita"]);
   $intervino_previsita_agente = db_select_with_filters_V2(
     'usuarios',                // tabla
     ['id_usuario'],            // columnas a filtrar
     ['='],                     // comparaciones
-    [$datos['log_usuario_id']],              // valores
+    [$datos['log_usuario_id']],// valores
     [],                        // ordenamiento (vacío)
     'php'                      // devuelve array en PHP
   );
@@ -53,6 +53,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $visita_card = 'card-danger'; $items_options = "";
     $presupuesto_card = 'card-danger'; 
     $orden_compra_card = 'card-danger';
+    $presupuesto_display = 'd-none';
 
     if($datos['estado_visita'] !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
     
@@ -231,17 +232,23 @@ $ultimo = $intervinientes_visita_nombres[0] ?? '';
 if (empty($tareas_visitadas)){$visita_card = 'card-danger';}else{$visita_card = 'card-success';}
 // END PHP - Visita
 
-// START PRESUPUESTO
-$presupuestoGenerado = false; // Cambia a true para probar el otro caso
-if ($presupuestoGenerado) {
-  $visita_show = '';
+
+// START PHP PRESUPUESTO GENERADO 
+$presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true); 
+$presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
+if ($presupuesto_generado['presupuesto']) {
+  //muestra el accordión de presupuesto generado abierto
+  $presupuesto_card = 'card-success';
   $presupuesto_show = 'show';
+  $visita_show = '';
+  $presupuesto_display = '';
 } else {
   $visita_show = 'show';
   $presupuesto_show = '';
 }
+// END PRESUPUESTO GENERADO 
 
-// END PRESUPUESTO
+
 function intervinientes_names($b_array){
   $intervinieron_agentes = [];
   foreach ($b_array as $key => $value) {
@@ -933,7 +940,7 @@ function intervinientes_names($b_array){
 
 <!-- /accordion presupuesto -->
 <?php if ($presupuestoGenerado): ?>
-  <div class="accordion" id="accordionPresupuesto">
+  <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
         <h2 class="mb-0 d-flex justify-content-between align-items-center">
@@ -977,7 +984,7 @@ function intervinientes_names($b_array){
 
 
 <!-- start accordion 4 - Orden de compra -->
-<div class="accordion" id="accordionExample4">
+<div class="accordion d-none" id="accordionExample4">
   <div class="card <?php echo $orden_compra_card; ?> accordion 4">
     <div class="card-header" id="heading4">
       <h2 class="mb-0">
@@ -1004,7 +1011,7 @@ function intervinientes_names($b_array){
 <!-- end accordion 4 -->
 
 <!-- start accordion 5 - Pedido de materiales -->
-<div class="accordion" id="accordionExample5">
+<div class="accordion d-none" id="accordionExample5">
   <div class="card <?php echo $orden_compra_card; ?> accordion 5">
     <div class="card-header" id="heading5">
       <h2 class="mb-0">
@@ -1031,7 +1038,7 @@ function intervinientes_names($b_array){
 <!-- end accordion 5 -->
 
 <!-- start accordion 6 - Facturación -->
-<div class="accordion" id="accordionExample6">
+<div class="accordion d-none" id="accordionExample6">
   <div class="card <?php echo $orden_compra_card; ?> accordion 6">
     <div class="card-header" id="heading6">
       <h2 class="mb-0">
