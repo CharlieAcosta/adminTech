@@ -1,5 +1,5 @@
 <?php
-// ../04-modelo/guardarPresupuestoModel.php
+// ../04-modelo/presupuestoGeneradoModel.php
 
 require_once __DIR__ . '/conectDB.php';
 
@@ -417,6 +417,230 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
     }
 }
 
+// === Helper: preparar statement o lanzar con el detalle real de MySQL ===
+if (!function_exists('stmt_or_throw')) {
+    function stmt_or_throw(mysqli $db, string $sql): mysqli_stmt {
+        $stmt = mysqli_prepare($db, $sql);
+        if ($stmt === false) {
+            throw new RuntimeException('Fallo prepare(): ' . mysqli_error($db) . ' | SQL: ' . $sql);
+        }
+        return $stmt;
+    }
+}
+
+// === Helper: bind_param dinámico (IN (...)) con referencias ===
+if (!function_exists('bind_params_dynamic')) {
+    function bind_params_dynamic(mysqli_stmt $stmt, string $types, array $params): bool {
+        // armar array: [$stmt, $types, &p1, &p2, ...] con referencias
+        $bind = [$stmt, $types];
+        foreach ($params as $k => $v) { $bind[] = &$params[$k]; }
+        return call_user_func_array('mysqli_stmt_bind_param', $bind);
+    }
+}
+
+// === Helper: check si existe tabla (para fotos opcionales) ===
+if (!function_exists('tabla_existe')) {
+    function tabla_existe(mysqli $db, string $table): bool {
+        $sql = "SHOW TABLES LIKE ?";
+        $st  = mysqli_prepare($db, $sql);
+        if (!$st) return false;
+        mysqli_stmt_bind_param($st, "s", $table);
+        mysqli_stmt_execute($st);
+        $rs = mysqli_stmt_get_result($st);
+        $ok = ($rs && mysqli_fetch_row($rs));
+        mysqli_stmt_close($st);
+        return (bool)$ok;
+    }
+}
+
+/**
+ * Obtiene el presupuesto más reciente de una previsita.
+ *
+ * @param int  $id_previsita
+ * @param bool $incluirDetalle  Cuando true, agrega tareas + materiales + mano de obra + fotos
+ * @return array ['ok'=>true, 'presupuesto'=>array|null, 'tareas'=>array] | ['ok'=>false,'msg'=>string]
+ */
+function obtenerPresupuestoPorPrevisita(int $id_previsita, bool $incluirDetalle = true): array
+{
+    $db = conectDB();
+    if (!$db) {
+        return ['ok' => false, 'msg' => 'No se pudo abrir conexión a la base de datos'];
+    }
+    mysqli_set_charset($db, 'utf8mb4');
+
+    try {
+        $sql = "
+            SELECT *
+            FROM `presupuestos`
+            WHERE `id_previsita` = ?
+            ORDER BY `version` DESC, `created_at` DESC, `id_presupuesto` DESC
+            LIMIT 1
+        ";
+        $stmt = stmt_or_throw($db, $sql);
+        mysqli_stmt_bind_param($stmt, "i", $id_previsita);
+        mysqli_stmt_execute($stmt);
+        $res   = mysqli_stmt_get_result($stmt);
+        $presu = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        if (!$presu) {
+            mysqli_close($db);
+            return ['ok' => true, 'presupuesto' => null, 'tareas' => []];
+        }
+
+        $tareas = $incluirDetalle ? _obtenerTareasConDetalle($db, (int)$presu['id_presupuesto']) : [];
+        mysqli_close($db);
+
+        return ['ok' => true, 'presupuesto' => $presu, 'tareas' => $tareas];
+
+    } catch (Throwable $e) {
+        mysqli_close($db);
+        return ['ok' => false, 'msg' => $e->getMessage()];
+    }
+}
+
+
+
+/**
+ * Obtiene un presupuesto por id_presupuesto.
+ *
+ * @param int  $id_presupuesto
+ * @param bool $incluirDetalle  Cuando true, agrega tareas + materiales + mano de obra + fotos
+ * @return array ['ok'=>true, 'presupuesto'=>array|null, 'tareas'=>array] | ['ok'=>false,'msg'=>string]
+ */
+function obtenerPresupuestoPorId(int $id_presupuesto, bool $incluirDetalle = true): array
+{
+    $db = conectDB();
+    if (!$db) {
+        return ['ok' => false, 'msg' => 'No se pudo abrir conexión a la base de datos'];
+    }
+    mysqli_set_charset($db, 'utf8mb4');
+
+    try {
+        $sql = "SELECT * FROM `presupuestos` WHERE `id_presupuesto` = ? LIMIT 1";
+        $stmt = stmt_or_throw($db, $sql);
+        mysqli_stmt_bind_param($stmt, "i", $id_presupuesto);
+        mysqli_stmt_execute($stmt);
+        $res   = mysqli_stmt_get_result($stmt);
+        $presu = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        if (!$presu) {
+            mysqli_close($db);
+            return ['ok' => true, 'presupuesto' => null, 'tareas' => []];
+        }
+
+        $tareas = $incluirDetalle ? _obtenerTareasConDetalle($db, (int)$presu['id_presupuesto']) : [];
+        mysqli_close($db);
+
+        return ['ok' => true, 'presupuesto' => $presu, 'tareas' => $tareas];
+
+    } catch (Throwable $e) {
+        mysqli_close($db);
+        return ['ok' => false, 'msg' => $e->getMessage()];
+    }
+}
+
+
+
+/**
+ * PRIVADA: trae tareas con sus materiales, mano de obra y fotos (si existen).
+ * - Menos roundtrips: materiales/MO/fotos se traen en batch usando IN (...)
+ * - Devuelve array de tareas, cada una con keys: materiales[], mano_obra[], fotos[]
+ *
+ * @param mysqli $db
+ * @param int    $id_presupuesto
+ * @return array
+ */
+function _obtenerTareasConDetalle(mysqli $db, int $id_presupuesto): array
+{
+    // === TAREAS
+    $stmtT = stmt_or_throw($db, "
+        SELECT *
+        FROM `presupuesto_tareas`
+        WHERE `id_presupuesto` = ?
+        ORDER BY `nro` ASC, `id_presu_tarea` ASC
+    ");
+    mysqli_stmt_bind_param($stmtT, "i", $id_presupuesto);
+    mysqli_stmt_execute($stmtT);
+    $resT = mysqli_stmt_get_result($stmtT);
+
+    $tareas = [];
+    while ($row = mysqli_fetch_assoc($resT)) {
+        $tareas[] = $row;
+    }
+    mysqli_stmt_close($stmtT);
+
+    if (!$tareas) {
+        return [];
+    }
+
+    // IDs para IN(...)
+    $ids = array_map(static fn($t) => (int)$t['id_presu_tarea'], $tareas);
+    if (count($ids) === 0) {
+        return $tareas;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $types        = str_repeat('i', count($ids));
+
+    // === MATERIALES
+    $materialesPorTarea = [];
+    $sqlMat = "SELECT * FROM `presupuesto_tarea_material` WHERE `id_presu_tarea` IN ($placeholders) ORDER BY `id_ptm` ASC";
+    $stmtM  = stmt_or_throw($db, $sqlMat);
+    bind_params_dynamic($stmtM, $types, $ids);
+    mysqli_stmt_execute($stmtM);
+    $resM = mysqli_stmt_get_result($stmtM);
+    while ($row = mysqli_fetch_assoc($resM)) {
+        $materialesPorTarea[(int)$row['id_presu_tarea']][] = $row;
+    }
+    mysqli_stmt_close($stmtM);
+
+    // === MANO DE OBRA
+    $moPorTarea = [];
+    $sqlMO = "SELECT * FROM `presupuesto_tarea_mano_obra` WHERE `id_presu_tarea` IN ($placeholders) ORDER BY `id_ptmo` ASC";
+    $stmtMO = stmt_or_throw($db, $sqlMO);
+    bind_params_dynamic($stmtMO, $types, $ids);
+    mysqli_stmt_execute($stmtMO);
+    $resMO = mysqli_stmt_get_result($stmtMO);
+    while ($row = mysqli_fetch_assoc($resMO)) {
+        $moPorTarea[(int)$row['id_presu_tarea']][] = $row;
+    }
+    mysqli_stmt_close($stmtMO);
+
+    // === FOTOS (mismo patrón que materiales/MO: IN(...) sobre los mismos $ids) ===
+    $fotosPorTarea = [];
+    // Si tu tabla se llama EXACTAMENTE 'presupuesto_tarea_foto', esto va a funcionar.
+    // Si usás otro nombre, cambialo aquí.
+    $sqlF = "SELECT * 
+             FROM `presupuesto_tarea_foto` 
+             WHERE `id_presu_tarea` IN ($placeholders)
+             ORDER BY `id_presu_tarea` ASC";
+    $stmtF = stmt_or_throw($db, $sqlF);
+    bind_params_dynamic($stmtF, $types, $ids);
+    mysqli_stmt_execute($stmtF);
+    $resF = mysqli_stmt_get_result($stmtF);
+    while ($row = mysqli_fetch_assoc($resF)) {
+        $fotosPorTarea[(int)$row['id_presu_tarea']][] = $row;
+    }
+    mysqli_stmt_close($stmtF);
+
+
+
+    // === MERGE
+    foreach ($tareas as &$t) {
+        $tid = (int)$t['id_presu_tarea'];
+        $t['materiales'] = $materialesPorTarea[$tid] ?? [];
+        $t['mano_obra']  = $moPorTarea[$tid] ?? [];
+        $t['fotos']      = $fotosPorTarea[$tid] ?? [];
+    }
+    unset($t);
+
+    return $tareas;
+}
+
+
+
 /**
  * Borra hijos (tareas + materiales + mano_obra + fotos) de un presupuesto.
  */
@@ -519,5 +743,7 @@ function eliminarDirectorioRecursivo(string $dir): void
     }
     @rmdir($dir);
 }
+
+
 
 

@@ -2,7 +2,7 @@
 // ../03-controller/presupuestos_guardar.php
 header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/../04-modelo/guardarPresupuestoModel.php';
+require_once __DIR__ . '../04-modelo/presupuestoGeneradoModel.php';
 
 try {
     // ---- Validaciones básicas
