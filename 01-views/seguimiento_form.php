@@ -10,10 +10,10 @@ include_once '../04-modelo/presupuestosModel.php'; //conecta a la tabla de clien
 include_once '../04-modelo/callesModel.php'; //conecta a la tabla de usuarios
 include_once '../04-modelo/clientesModel.php'; //conecta a la tabla de clientes
 include_once '../04-modelo/visitaModel.php';
+include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
-
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
 
@@ -25,13 +25,13 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   $datos = modGetPresupuestoById($id, 'php');
   $datos = $datos[0];
 
-  //dd($datos);
-
+//dd($datos);
+//dd($datos["id_previsita"]);
   $intervino_previsita_agente = db_select_with_filters_V2(
     'usuarios',                // tabla
     ['id_usuario'],            // columnas a filtrar
     ['='],                     // comparaciones
-    [$datos['log_usuario_id']],              // valores
+    [$datos['log_usuario_id']],// valores
     [],                        // ordenamiento (vacío)
     'php'                      // devuelve array en PHP
   );
@@ -46,12 +46,14 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
   }
 
+  
 //echo utf8_encode( $usuario_datos['0']['provincia'] ); die();
 
     $previsita_card = 'card-success'; $previsita_buttons = 'd-flex'; 
     $visita_card = 'card-danger'; $items_options = "";
     $presupuesto_card = 'card-danger'; 
     $orden_compra_card = 'card-danger';
+    $presupuesto_display = 'd-none';
 
     if($datos['estado_visita'] !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
     
@@ -230,17 +232,23 @@ $ultimo = $intervinientes_visita_nombres[0] ?? '';
 if (empty($tareas_visitadas)){$visita_card = 'card-danger';}else{$visita_card = 'card-success';}
 // END PHP - Visita
 
-// START PRESUPUESTO
-$presupuestoGenerado = false; // Cambia a true para probar el otro caso
-if ($presupuestoGenerado) {
-  $visita_show = '';
+
+// START PHP PRESUPUESTO GENERADO 
+$presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true); 
+$presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
+if ($presupuesto_generado['presupuesto']) {
+  //muestra el accordión de presupuesto generado abierto
+  $presupuesto_card = 'card-success';
   $presupuesto_show = 'show';
+  $visita_show = '';
+  $presupuesto_display = '';
 } else {
   $visita_show = 'show';
   $presupuesto_show = '';
 }
+// END PRESUPUESTO GENERADO 
 
-// END PRESUPUESTO
+
 function intervinientes_names($b_array){
   $intervinieron_agentes = [];
   foreach ($b_array as $key => $value) {
@@ -257,6 +265,307 @@ function intervinientes_names($b_array){
         array_push($intervinieron_agentes, $intervino_agente[0]['apellidos']." ".$intervino_agente[0]['nombres']." | ".strToDateFormat($value['created_at'], 'd/m/Y H:i:s'));
     }
      return $intervinieron_agentes;
+}
+
+function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true): string
+{
+    $hoy = new DateTimeImmutable('now');
+
+    $e = function ($v): string {
+        return htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8');
+    };
+
+    $parseFecha = function (?string $s): ?DateTimeImmutable {
+        if (!$s) return null;
+        // Acepta "YYYY-mm-dd HH:ii:ss" o lo que parsee strtotime
+        $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $s);
+        return $dt ?: (strtotime($s) ? (new DateTimeImmutable('@'.strtotime($s)))->setTimezone(new DateTimeZone(date_default_timezone_get())) : null);
+    };
+
+    $vigencia = function (?string $fechaStr) use ($parseFecha, $hoy): array {
+        $dt = $parseFecha($fechaStr);
+        if (!$dt) {
+            // Sin fecha → lo consideramos vigente (verde y readonly), igual que tu JS para MO sin updated_at
+            return ['bg-success', 'readonly'];
+        }
+        $diffDias = (int)$hoy->diff($dt)->format('%a');
+        if ($dt < $hoy && $diffDias > 30) {
+            return ['bg-danger', '']; // vencido, editable
+        }
+        return ['bg-success', 'readonly']; // vigente
+    };
+
+    $html = [];
+    $idPresupuesto = $presupuesto_generado['presupuesto']['id_presupuesto'] ?? null;
+
+    // Contenedor raíz (data-id_presupuesto para que tu JS lo tome)
+    $html[] = '<div id="contenedorPresupuestoGenerado" data-id_presupuesto="'. $e($idPresupuesto) .'">';
+
+    // TAREAS (respetamos el orden por "nro" si viene)
+    $tareas = $presupuesto_generado['tareas'] ?? [];
+    usort($tareas, function($a,$b){ return ($a['nro'] ?? 0) <=> ($b['nro'] ?? 0); });
+
+    foreach ($tareas as $t) {
+        $nro          = (int)($t['nro'] ?? 0);
+        $descripcion  = $t['descripcion'] ?? '';
+        $incluido     = (int)($t['incluir_en_total'] ?? 1) === 1 ? 'checked' : '';
+        $utilMatPct   = $t['utilidad_materiales_pct'] ?? null;
+        $utilMoPct    = $t['utilidad_mano_obra_pct'] ?? null;
+        $otrosMat     = $t['otros_materiales_monto'] ?? '0.00';
+        $otrosMo      = $t['otros_mano_obra_monto'] ?? '0.00';
+
+        // --- Materiales
+        $rowsMat = [];
+        foreach (($t['materiales'] ?? []) as $m) {
+            $nombre   = $m['nombre_material'] ?? '';
+            $cant     = $m['cantidad'] ?? '0';
+            $pu       = $m['precio_unitario_usado'] ?? '0';
+            $pctExtra = $m['porcentaje_extra'] ?? '0';
+            $subfila  = $m['subtotal_fila'] ?? '0.00';
+            $idMat    = $m['id_material'] ?? null;
+
+            // vigencia: log_edicion o log_alta
+            $fechaRef = $m['log_edicion'] ?? $m['log_alta'] ?? null;
+            [$clase, $ro] = $vigencia($fechaRef);
+
+            $rowsMat[] = '
+            <tr data-material-id="'. $e($idMat) .'">
+              <td>'. $e($nombre) .'</td>
+              <td>
+                <input type="number" class="form-control form-control-sm cantidad-material"
+                       value="'. $e($cant) .'" min="0" step="any">
+              </td>
+              <td>
+                <input type="number" class="form-control form-control-sm precio-unitario '. $e($clase) .'"
+                       value="'. $e($pu) .'" min="0" step="any" '. $e($ro) .'>
+              </td>
+              <td></td>
+              <td>
+                <input type="number" class="form-control form-control-sm porcentaje-extra"
+                       value="'. $e($pctExtra) .'" min="0" step="any">
+              </td>
+              <td class="text-right subtotal-material">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
+            </tr>';
+        }
+
+        // --- Mano de obra
+        $rowsMo = [];
+        foreach (($t['mano_obra'] ?? []) as $mo) {
+            $nombre   = $mo['nombre_jornal'] ?? '';
+            $cant     = $mo['cantidad'] ?? '0';
+            $valorJ   = $mo['valor_jornal_usado'] ?? '0';
+            $pctExtra = $mo['porcentaje_extra'] ?? '0';
+            $subfila  = $mo['subtotal_fila'] ?? '0.00';
+            $jId      = $mo['id_jornal'] ?? $mo['jornal_id'] ?? null;
+
+            // vigencia: updated_at_origen preferente, si no updated_at
+            $fechaRef = $mo['updated_at_origen'] ?? $mo['updated_at'] ?? null;
+            [$clase, $ro] = $vigencia($fechaRef);
+
+            $rowsMo[] = '
+            <tr data-jornal_id="'. $e($jId) .'">
+              <td>'. $e($nombre) .'</td>
+              <td>
+                <input type="number" class="form-control form-control-sm cantidad-mano-obra"
+                       value="'. $e($cant) .'" min="0" step="any">
+              </td>
+              <td>
+                <input type="number" class="form-control form-control-sm valor-jornal '. $e($clase) .'"
+                       value="'. $e($valorJ) .'" min="0" step="any" '. $e($ro) .'>
+              </td>
+              <td></td>
+              <td>
+                <input type="number" class="form-control form-control-sm porcentaje-extra"
+                       value="'. $e($pctExtra) .'" min="0" step="any">
+              </td>
+              <td class="text-right subtotal-mano">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
+            </tr>';
+        }
+
+        $claseUtil = $mostrarVistaDetallada ? '' : 'd-none';
+        $claseImp  = $mostrarVistaDetallada ? '' : 'd-none';
+        $roUtil    = $mostrarVistaDetallada ? '' : 'readonly input-sololectura';
+
+        $html[] = '
+        <div class="tarea-card">
+          <div class="tarea-encabezado">
+            <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($descripcion) .'</b></span>
+            <label class="incluir-presupuesto-label">
+              <input type="checkbox" class="incluir-en-total" '. $incluido .'>
+              <span>Incluído en el presupuesto</span>
+            </label>
+          </div>
+
+          <div class="container-fluid px-3 pt-3">
+            <div class="row">
+              <!-- Izquierda -->
+              <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height:100%;">
+                <div class="mb-2">
+                  <label class="mb-0"><b>Detalle de la tarea</b></label>
+                  <textarea class="form-control form-control-sm" rows="5">'. $e($descripcion) .'</textarea>
+                </div>
+
+                <div class="mb-2 flex-grow-1">
+                  <label class="mb-0"><b>Imágenes</b></label>
+
+                  <input type="file" class="presu-fotos d-none" id="presu_fotos_tarea_'. $e($nro) .'"
+                         multiple accept="image/*" data-index="'. $e($nro) .'"/>
+
+                  <div class="presu-dropzone border rounded bg-light p-3 text-muted mb-2"
+                       data-index="'. $e($nro) .'" style="min-height:100px;">
+                    <div class="w-100 d-flex align-items-center justify-content-center text-center">
+                      <em>Arrastre aquí las imágenes o haga click.</em>
+                    </div>
+                    <div class="row presu-preview-fotos m-0 mt-2" id="presu_preview_'. $e($nro) .'">';
+
+        // Thumbs de fotos existentes (si hay)
+        foreach (($t['fotos'] ?? []) as $f) {
+            $src   = $f['ruta_archivo'] ?? '';
+            $nom   = $f['nombre_archivo'] ?? basename($src);
+            $html[] = '
+              <div class="preview-img-container position-relative d-inline-block m-1" data-nombre-archivo="'. $e($nom) .'">
+                <img src="../'. $e($src) .'" class="img-thumbnail" style="width:100px;height:100px;object-fit:cover;cursor:pointer;">
+                <i class="fa fa-times-circle text-white rounded-circle position-absolute presu-eliminar-imagen"
+                   style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
+              </div>';
+        }
+
+        $html[] = '
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Derecha -->
+              <div class="col-md-8 d-flex flex-column justify-content-start">
+                <!-- Materiales -->
+                <div class="tarea-materiales mb-0 mt-0 pt-0">
+                  <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+                  <table class="tabla-presupuesto tabla-presupuesto-sm">
+                    <thead>
+                      <tr>
+                        <th>Material</th>
+                        <th>Cantidad</th>
+                        <th>Precio Unitario</th>
+                        <th>% Utilidad Materiales</th>
+                        <th>% Extra</th>
+                        <th>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>'
+                    . implode('', $rowsMat) .
+                    '
+                      <tr class="fila-otros-materiales">
+                        <td><b>Otros</b></td><td></td><td></td><td></td><td></td>
+                        <td class="text-right">
+                          <input type="number" min="0" step="0.01"
+                                 class="form-control form-control-sm input-otros-materiales"
+                                 id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'">
+                        </td>
+                      </tr>
+                      <tr class="fila-subtotal">
+                        <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
+                        <td>
+                          <input type="number" class="form-control form-control-sm utilidad-global-materiales"
+                                 min="0" '. $roUtil .' value="'. $e($utilMatPct ?? '') .'" placeholder="%">
+                        </td>
+                        <td class="text-right"><b>$0.00</b></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Mano de Obra -->
+                <div class="tarea-mano-obra">
+                  <div class="bloque-titulo mt-0">Mano de Obra</div>
+                  <table class="tabla-presupuesto tabla-presupuesto-sm">
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Cantidad</th>
+                        <th>Valor Jornal</th>
+                        <th>% Utilidad Mano de Obra</th>
+                        <th>% Extra</th>
+                        <th>Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>'
+                    . implode('', $rowsMo) .
+                    '
+                      <tr class="fila-otros-mano">
+                        <td><b>Otros</b></td><td></td><td></td><td></td><td></td>
+                        <td class="text-right">
+                          <input type="number" min="0" step="0.01"
+                                 class="form-control form-control-sm input-otros-mano"
+                                 id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'">
+                        </td>
+                      </tr>
+                      <tr class="fila-subtotal">
+                        <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
+                        <td>
+                          <input type="number" class="form-control form-control-sm utilidad-global-mano-obra"
+                                 min="0" '. $roUtil .' value="'. $e($utilMoPct ?? '') .'" placeholder="%">
+                        </td>
+                        <td class="text-right"><b>$0.00</b></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tarea-total d-flex flex-column align-items-end px-3">
+            <div class="utilidades-extra w-100">
+              <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
+            </div>
+            <div class="utilidades-extra w-100">
+              <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
+            </div>
+            <div class="utilidades-extra w-100">
+              <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
+            </div>
+            <div class="d-flex justify-content-end w-100">
+              <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
+            </div>
+            <div class="d-flex justify-content-end w-100">
+              <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+            </div>
+
+            <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-'. $e($nro) .'">
+              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
+              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
+              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
+              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
+              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+
+              <div class="col-2 pr-0 pl-0">
+                <button type="button" class="btn-total-tarea w-100 px-4 util-muy pt-2 mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
+              </div>
+            </div>
+          </div>
+        </div>';
+    }
+
+    // Bloque TOTAL
+    $html[] = '
+      <div class="presupuesto-total-card">
+        <div class="presupuesto-total-row">
+          <div class="presupuesto-total-actions">
+            <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2"><i class="fas fa-save"></i> Guardar</button>
+            <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
+            <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
+          </div>
+          <div class="presupuesto-total-label">
+            <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+            <span class="presupuesto-total-valor">$0.00</span>
+          </div>
+        </div>
+      </div>';
+
+    $html[] = '</div>'; // cierre contenedor
+
+    return implode("\n", $html);
 }
 
 ?>
@@ -932,7 +1241,7 @@ function intervinientes_names($b_array){
 
 <!-- /accordion presupuesto -->
 <?php if ($presupuestoGenerado): ?>
-  <div class="accordion" id="accordionPresupuesto">
+  <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
         <h2 class="mb-0 d-flex justify-content-between align-items-center">
@@ -944,29 +1253,16 @@ function intervinientes_names($b_array){
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          <small>
-            <span>
-              <i class="fas fa-edit fa-xs v-icon-pointer v-icon-accion" 
-                data-accion="editar-presupuesto" 
-                data-toggle="tooltip" 
-                data-placement="top" 
-                title="Editar presupuesto"
-                style="color: #ffffff;">
-              </i>
-            </span>
-          </small>
         </h2>
       </div>
       <div id="collapsePresupuesto" class="collapse <?php echo $presupuesto_show; ?>" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
         <div class="card-body" id="presupuesto-card-body">
           <!-- Aquí se insertará el contenido dinámico generado -->
-          <div id="contenedorPresupuestoGenerado" class="mt-3">
-            <?php if($presupuestoGenerado): ?>
-              <div class="alert alert-info text-center mb-3">
-                  Aquí aparecerá el presupuesto generado con los datos traídos del backend.
-              </div>
-            <?php endif; ?>
-            </div>
+            <?php 
+              if($presupuestoGenerado): 
+                echo renderizar_presupuesto_html($presupuesto_generado, /*mostrarVistaDetallada=*/true);
+              endif; 
+            ?>
         </div>
       </div>
     </div>
@@ -976,7 +1272,7 @@ function intervinientes_names($b_array){
 
 
 <!-- start accordion 4 - Orden de compra -->
-<div class="accordion" id="accordionExample4">
+<div class="accordion d-none" id="accordionExample4">
   <div class="card <?php echo $orden_compra_card; ?> accordion 4">
     <div class="card-header" id="heading4">
       <h2 class="mb-0">
@@ -1003,7 +1299,7 @@ function intervinientes_names($b_array){
 <!-- end accordion 4 -->
 
 <!-- start accordion 5 - Pedido de materiales -->
-<div class="accordion" id="accordionExample5">
+<div class="accordion d-none" id="accordionExample5">
   <div class="card <?php echo $orden_compra_card; ?> accordion 5">
     <div class="card-header" id="heading5">
       <h2 class="mb-0">
@@ -1030,7 +1326,7 @@ function intervinientes_names($b_array){
 <!-- end accordion 5 -->
 
 <!-- start accordion 6 - Facturación -->
-<div class="accordion" id="accordionExample6">
+<div class="accordion d-none" id="accordionExample6">
   <div class="card <?php echo $orden_compra_card; ?> accordion 6">
     <div class="card-header" id="heading6">
       <h2 class="mb-0">
@@ -1702,9 +1998,12 @@ const tareasVisitadas = <?php
         JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT
     ); 
 ?>;
+
+
+
 </script>
-<script src="../07-funciones_js/accordionVisita.js"></script>
 <script src="../07-funciones_js/accordionPresupuesto.js"></script>
+<script src="../07-funciones_js/accordionVisita.js"></script>
 <!-- funcion para saber si es un alta, visualización, edición // formatea la vista -->
 <script src="../07-funciones_js/abm_detect.js"></script>
 <!-- funcion para traer los partidos de una provincia -->
@@ -1722,7 +2021,7 @@ const tareasVisitadas = <?php
 <!-- Guarda usuarios en la base -->
 <script src="../07-funciones_js/presupuestosAcciones.js"></script>
 <!-- Guarda usuarios en la base -->
-<script src="../07-funciones_js/presupuestoGuardar.js"></script>
+<!-- <script src="../07-funciones_js/presupuestoGuardar.js"></script> -->
 
 <!-- funciones js -->
 <script src="../07-funciones_js/scripts_list.js"></script>
@@ -1760,6 +2059,6 @@ const tareasVisitadas = <?php
 <div id="popover-content-visita" style="display:none">
   <?= $popoverIntervinientes /* contiene la tabla completa */ ?>
 </div>
-
+<script>window.URL_GUARDAR_PRESUPUESTO = '../03-controller/presupuestos_guardar.php';</script>
 </body>
 </html>

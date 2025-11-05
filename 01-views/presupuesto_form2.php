@@ -626,7 +626,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
 <!-- end accordion 3 -->
 
 <!-- start accordion 4 -->
-<div class="accordion" id="accordionExample4">
+<div class="accordion d-none" id="accordionExample4">
   <div class="card <?php echo $orden_compra_card; ?> accordion 4">
     <div class="card-header" id="heading2">
       <h2 class="mb-0">

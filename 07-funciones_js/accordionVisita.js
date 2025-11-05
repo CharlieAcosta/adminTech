@@ -4,9 +4,16 @@ const porcentajesPorDefecto = {
   mano_obra: 100         // Placeholder para futuro uso en mano de obra
 };
 
+// === Fotos de PRESUPUESTO (independientes de las de VISITA) ===
+window.presuImagenesPorTarea = {};     // { [nroTarea]: [ { file:File, nombre:string } ] }
+window.presuFotosEliminadas  = {};     // { [nroTarea]: [ nombre:string ] }
+
+
 $(document).ready(function() {
     let modoVisualizacion = false;
     let presupuestoGenerado = false;
+    window.presupuestoGenerado = window.presupuestoGenerado || false;
+
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
@@ -403,6 +410,9 @@ $(document).ready(function() {
 
                   // Eliminar visual y registrar
                   contenedor.find('.eliminar-imagen').on('click', () => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
                     imagenesPorTarea[index] = imagenesPorTarea[index].filter(img => img.nombre !== nombreArchivo);
                     fotosEliminadasPorTarea[index].push(nombreArchivo);
                     contenedor.remove();
@@ -890,7 +900,6 @@ $(document).ready(function() {
       console.log('📦 Datos extraídos para presupuesto:', datosExtraidos);
       renderizarPresupuestoDesdeDatos(datosExtraidos);
 
-      PresupuestoFotos.refresh();
 
       // 🔗 NUEVO: preparar bloque de fotos para drag&drop y selección
       if (window.PresupuestoFotos && typeof PresupuestoFotos.refresh === 'function') {
@@ -1208,7 +1217,7 @@ $(document).ready(function() {
     
       $tr.find('.subtotal-material').text(formatMoney(subtotal));
     }
-    
+    window.calcularFilaMaterial     = calcularFilaMaterial;
     
     /**
      * Calcula y actualiza el subtotal de una fila de mano de obra.
@@ -1225,6 +1234,7 @@ $(document).ready(function() {
     
       $tr.find('.subtotal-mano').text(formatMoney(subtotal));
     }
+    window.calcularFilaManoObra     = calcularFilaManoObra;
    
     /**
      * Formatea un número como moneda en formato español:
@@ -1320,7 +1330,8 @@ $(document).ready(function() {
       const utilTotalParaMostrar = utilMatParaMostrar + utilMoParaMostrar;
       $card.find('.subt-util-total').text('Sub Util. Mat.+MO.: ' + formatMoney(utilTotalParaMostrar));
     }
-         
+    window.actualizarSubtotalesBloque = actualizarSubtotalesBloque; 
+    
     /**
      * Calcula y actualiza los botones de utilidades y subtotal de tarea para una tarjeta de tarea.
      * @param {number} numeroTarea - El índice de la tarea (1-based).
@@ -1415,6 +1426,7 @@ $(document).ready(function() {
       else if (porcentajeUtilidad <= 23) $targets.addClass('util-muy');
       else                               $targets.addClass('util-margen');
     }
+    window.actualizarTotalesPorTarea  = actualizarTotalesPorTarea;
        
     /**
      * Recorre todos los botones de subtotal de tarea y suma sus valores,
@@ -1445,8 +1457,9 @@ $(document).ready(function() {
       window.__TOTAL_BASE__     = totalBase;
       window.__TOTAL_MOSTRADO__ = totalMostrar;
     }
+    window.actualizarTotalGeneral     = actualizarTotalGeneral;
     
-    function renderizarPresupuestoDesdeDatos(datos) {
+    function renderizarPresupuestoDesdeDatos(datos){   
       const contenedor = $('#contenedorPresupuestoGenerado');
       contenedor.empty();
       const hoy = new Date();
@@ -1606,13 +1619,32 @@ $(document).ready(function() {
                 <label class="mb-0"><b>Detalle de la tarea</b></label>
                 <textarea class="form-control form-control-sm" rows="5">${descripcion}</textarea>
               </div>
-              <!-- Fotos -->
+              <!-- Fotos (PRESUPUESTO: dropzone + input oculto, sin “Seleccionar fotos”) -->
               <div class="mb-2 flex-grow-1">
-                <label class="mb-0"><b>Imagenes</b></label>
-                <div class="preview-fotos border rounded bg-light p-3 d-flex align-items-center justify-content-center text-muted" style="min-height: 100px;">
-                  <em>Arrastre aquí las imagenes que desea ajuntar al presupuesto de esta tarea.</em>
+                <label class="mb-0"><b>Imágenes</b></label>
+              
+                <!-- input oculto por tarea (queda igual) -->
+                <input 
+                  type="file" 
+                  class="presu-fotos d-none"
+                  id="presu_fotos_tarea_${numeroTarea}" 
+                  multiple 
+                  accept="image/*" 
+                  data-index="${numeroTarea}"
+                />
+                
+                <!-- dropzone gris + previews adentro -->
+                <div class="presu-dropzone border rounded bg-light p-3 text-muted mb-2"
+                     data-index="${numeroTarea}"
+                     style="min-height: 100px;">
+                  <div class="w-100 d-flex align-items-center justify-content-center text-center">
+                    <em>Arrastre aquí las imágenes o haga click.</em>
+                  </div>
+                  <div class="row presu-preview-fotos m-0 mt-2" id="presu_preview_${numeroTarea}"></div>
                 </div>
+                
               </div>
+                          
             </div>
 
             <!-- Columna derecha -->
@@ -1798,22 +1830,266 @@ $(document).ready(function() {
 
       });
     
-      // Bloque total general con botón Guardar
-      const htmlTotal = `
-        <div class="presupuesto-total-card">
-          <div class="presupuesto-total-row">
-            <div class="presupuesto-total-actions">
-              <button class="btn btn-success mr-2"><i class="fas fa-save"></i> Guardar</button>
-              <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
-              <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
-            </div>
-            <div class="presupuesto-total-label">
-              <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
-              <span class="presupuesto-total-valor">$0.00</span>
-            </div>
+    // Bloque total general con botón Guardar
+    const htmlTotal = `
+      <div class="presupuesto-total-card">
+        <div class="presupuesto-total-row">
+          <div class="presupuesto-total-actions">
+            <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2" type="button"> 
+              <i class="fas fa-save"></i> Guardar
+            </button>
+            <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
+            <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
           </div>
-        </div>`;
+          <div class="presupuesto-total-label">
+            <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+            <span class="presupuesto-total-valor">$0.00</span>
+          </div>
+        </div>
+      </div>`;
       contenedor.append(htmlTotal);
+
+       // === Guardar presupuesto (delegado sobre el contenedor)
+      contenedor.off('click', '#btn-guardar-presupuesto')
+      .on('click', '#btn-guardar-presupuesto', async function (e) {
+console.log('1885 | e.preventDefault()');        e.preventDefault();
+
+        const $btn = $(this);
+        $btn.prop('disabled', true);
+
+        try {
+          const $root = $('#contenedorPresupuestoGenerado');
+
+          const id_presupuesto = Number($root.data('id_presupuesto')) || null;
+          const id_previsita   = $('#id_previsita').val() || null;
+          const id_visita      = $('#id_visita').val() || null;
+
+          const tareas = [];
+
+          // Armar payload JSON (sin archivos aún)
+          $root.find('.tarea-card').each(function (index) {
+            const $card = $(this);
+            const nro = index + 1;
+
+            const descripcion       = $card.find('textarea').first().val()?.trim() || '';
+            const incluir_en_total  = $card.find('.incluir-en-total').is(':checked') ? 1 : 0;
+            const utilidad_materiales = parseFloat($card.find('.tarea-materiales .utilidad-global-materiales').val()) || null;
+            const utilidad_mano_obra  = parseFloat($card.find('.tarea-mano-obra .utilidad-global-mano-obra').val()) || null;
+            const otros_materiales    = parseFloat($card.find('.tarea-materiales .input-otros-materiales').val()) || 0;
+            const otros_mano_obra     = parseFloat($card.find('.tarea-mano-obra .input-otros-mano').val()) || 0;
+
+            const materiales = [];
+            $card.find('.tarea-materiales tbody tr').not('.fila-subtotal,.fila-otros-materiales').each(function () {
+              const $tr = $(this);
+              const nombre            = $tr.find('td').eq(0).text().trim();
+              const cantidad          = parseFloat($tr.find('.cantidad-material').val()) || 0;
+              const precio_unitario   = parseFloat($tr.find('.precio-unitario').val()) || 0;
+              const porcentaje_extra  = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+              const id_material       = $tr.data('material_id') || $tr.data('material-id') || null;
+              if (nombre || cantidad || precio_unitario) {
+                materiales.push({ id_material, nombre, cantidad, precio_unitario, porcentaje_extra });
+              }
+            });
+
+            const mano_obra = [];
+            $card.find('.tarea-mano-obra tbody tr').not('.fila-subtotal,.fila-otros-mano').each(function () {
+              const $tr = $(this);
+              const nombre            = $tr.find('td').eq(0).text().trim();
+              const cantidad          = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0;
+              const jornal_valor      = parseFloat($tr.find('.valor-jornal').val()) || 0;
+              const porcentaje_extra  = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+              const jornal_id         = $tr.data('jornal_id') || $tr.data('jornal-id') || null;
+              if (nombre || cantidad || jornal_valor) {
+                mano_obra.push({ jornal_id, nombre, cantidad, jornal_valor, porcentaje_extra });
+              }
+            });
+
+            // En el payload solo indicamos que HAY fotos; los File viajan aparte en FormData
+            const fotos_nuevas_cant = Array.isArray(presuImagenesPorTarea[nro])
+              ? presuImagenesPorTarea[nro].filter(f => f && f.file instanceof File).length
+              : 0;
+
+            const fotos_eliminadas_cant = Array.isArray(presuFotosEliminadas[nro])
+              ? presuFotosEliminadas[nro].length
+              : 0;
+
+            tareas.push({
+              nro,
+              descripcion,
+              incluir_en_total,
+              utilidad_materiales,
+              utilidad_mano_obra,
+              otros_materiales,
+              otros_mano_obra,
+              materiales,
+              mano_obra,
+              fotos_nuevas_cant,
+              fotos_eliminadas_cant
+            });
+          });
+
+          // Armamos FormData: payload + archivos + eliminadas
+          const fd = new FormData();
+          fd.append('via', 'ajax');
+          fd.append('funcion', 'guardarPresupuesto');
+          fd.append('payload', JSON.stringify({
+            id_presupuesto,
+            id_previsita,
+            id_visita,
+            tareas
+          }));
+
+          // Adjuntar archivos reales: fotos_tarea_{N}[]
+          Object.entries(window.presuImagenesPorTarea || {}).forEach(([nro, arr]) => {
+            (arr || []).forEach((f) => {
+              if (f && f.file instanceof File) {
+                // nombre estable: si tenés f.nombre lo usamos; si no, el del File
+                fd.append(`fotos_tarea_${nro}[]`, f.file, f.nombre || f.file.name);
+              }
+            });
+          });
+
+          // Adjuntar eliminadas: fotos_eliminadas_tarea_{N}[]
+          Object.entries(window.presuFotosEliminadas || {}).forEach(([nro, arr]) => {
+            (arr || []).forEach((nombre) => {
+              fd.append(`fotos_eliminadas_tarea_${nro}[]`, nombre);
+            });
+          });
+
+          
+          const resp = await $.ajax({
+            url: ENDPOINT,
+            method: 'POST',
+            data: fd,
+            contentType: false,
+            processData: false,
+            cache: false,
+            dataType: 'json'
+          });
+
+          if (resp && resp.ok) {
+            if (resp.id_presupuesto) {
+              $('#contenedorPresupuestoGenerado').data('id_presupuesto', resp.id_presupuesto);
+            }
+            mostrarExito('Presupuesto guardado correctamente.');
+
+            if (typeof window.initRecalculoPresupuestoCargado === 'function') {
+              window.initRecalculoPresupuestoCargado();
+            }
+                     
+            // (Opcional) limpiar buffers de nuevas si el back ya las guardó
+            presuImagenesPorTarea = {};
+            presuFotosEliminadas  = {};
+          } else {
+            mostrarError(resp?.msg || 'No se pudo guardar el presupuesto.');
+          }
+        } catch (err) {
+          console.log('Error al guardar presupuesto:', err);
+          mostrarError('Error al guardar el presupuesto.');
+        } finally {
+          $btn.prop('disabled', false);
+        }
+      });
+
+      // === PRESUPUESTO: cambiar input de fotos
+      $(document).off('change', '.presu-fotos').on('change', '.presu-fotos', function (e) {
+        const input = e.target;
+        const idx   = parseInt($(input).data('index'), 10);
+        const $prev = $(`#presu_preview_${idx}`);
+        const files = Array.from(input.files || []);
+
+        if (!idx || !files.length) return;
+
+        if (!presuImagenesPorTarea[idx]) presuImagenesPorTarea[idx] = [];
+        if (!presuFotosEliminadas[idx])  presuFotosEliminadas[idx]  = [];
+
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const src = ev.target.result;
+            const nombreArchivo = file.name;
+
+            // buffer
+            presuImagenesPorTarea[idx].push({ file, nombre: nombreArchivo });
+
+            // UI
+            const thumb = $(`
+              <div class="preview-img-container position-relative d-inline-block m-1" data-nombre-archivo="${nombreArchivo}">
+                <img src="${src}" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor: pointer;">
+                <i class="fa fa-times-circle text-white rounded-circle position-absolute presu-eliminar-imagen" 
+                  style="top: 0px; right: 0px; cursor: pointer; font-size: 1rem;"></i>
+              </div>
+            `);
+            $prev.append(thumb);
+          };
+          reader.readAsDataURL(file);
+        });
+
+        // limpiar el input para poder volver a elegir los mismos archivos si hace falta
+        input.value = '';
+      });
+
+      // PRESUPUESTO
+      $(document).off('click', '.presu-eliminar-imagen').on('click', '.presu-eliminar-imagen', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const $thumb = $(this).closest('.preview-img-container');
+        const nombre = $thumb.data('nombre-archivo');
+        const idx = parseInt($(this).closest('.presu-preview-fotos').attr('id').replace('presu_preview_', ''), 10);
+
+        presuImagenesPorTarea[idx] = (presuImagenesPorTarea[idx] || []).filter(img => img.nombre !== nombre);
+        presuFotosEliminadas[idx]  = presuFotosEliminadas[idx]  || [];
+        if (!presuFotosEliminadas[idx].includes(nombre)) presuFotosEliminadas[idx].push(nombre);
+
+        $thumb.remove();
+      });
+
+      // === PRESUPUESTO: drag & drop sobre la dropzone
+      $(document).off('dragover drop dragleave', '.presu-dropzone')
+      .on('dragover', '.presu-dropzone', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        $(this).addClass('bg-white');
+      })
+      .on('dragleave', '.presu-dropzone', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        $(this).removeClass('bg-white');
+      })
+      .on('drop', '.presu-dropzone', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        $(this).removeClass('bg-white');
+
+        const idx   = parseInt($(this).data('index'), 10);
+        const $prev = $(`#presu_preview_${idx}`);
+        const files = Array.from(e.originalEvent.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+
+        if (!idx || !files.length) return;
+
+        if (!presuImagenesPorTarea[idx]) presuImagenesPorTarea[idx] = [];
+        if (!presuFotosEliminadas[idx])  presuFotosEliminadas[idx]  = [];
+
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const src = ev.target.result;
+            const nombreArchivo = file.name;
+
+            presuImagenesPorTarea[idx].push({ file, nombre: nombreArchivo });
+
+            const thumb = $(`
+              <div class="preview-img-container position-relative d-inline-block m-1" data-nombre-archivo="${nombreArchivo}">
+                <img src="${src}" class="img-thumbnail" style="width: 100px; height: 100px; object-fit: cover; cursor: pointer;">
+                <i class="fa fa-times-circle text-white rounded-circle position-absolute presu-eliminar-imagen" 
+                  style="top: 0px; right: 0px; cursor: pointer; font-size: 1rem;"></i>
+              </div>
+            `);
+            $prev.append(thumb);
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
       if (!mostrarVistaDetallada) {
         contenedor.find('.fila-impuestos').addClass('d-none');
       }
@@ -1926,7 +2202,13 @@ $(document).ready(function() {
 
       
     }
-  
+
+   // START - Rederizado con datos backend ///////////////////////////////////////////////////////
+   function renderizarPresupuestoDesdeBackend(datos) {
+    
+   }   
+  // END - Rederizado con datos backend /////////////////////////////////////////////////////////
+
     // Recalcular al modificar los inputs de utilidad global por bloque
     $(document).on('input change', '.utilidad-global-materiales, .utilidad-global-mano-obra', function () {
       const $card = $(this).closest('.tarea-card');
@@ -2011,4 +2293,33 @@ $(document).ready(function() {
       }
     }
   
+    // al final del $(document).ready, antes de cerrar:
+    if ($('#contenedorPresupuestoGenerado .tarea-card').length) {
+      window.presupuestoGenerado = true;
+    }
+
+    // al final del $(document).ready, después del bloque anterior:
+    (function initRecalculoPresupuestoCargado() {
+      const $root = $('#contenedorPresupuestoGenerado');
+      if (!$root.length) return;
+      // Recalcular filas
+      $root.find('.tarea-card').each(function () {
+        const $card = $(this);
+        $card.find('tbody tr').each(function () {
+          const $tr = $(this);
+          if ($tr.find('.cantidad-material').length)  window.calcularFilaMaterial($tr);
+          if ($tr.find('.cantidad-mano-obra').length) window.calcularFilaManoObra($tr);
+        });
+        window.actualizarSubtotalesBloque($card);
+        // obtener número de tarea desde el botón final
+        const idBtn = $card.find('[id^="subt-tarea-"]').attr('id');
+        const numero = parseInt(idBtn?.split('-').pop(), 10) || 1;
+        window.actualizarTotalesPorTarea(numero, $card);
+      });
+      window.actualizarTotalGeneral();
+    })();
+
 });
+
+// Endpoint (ajustá si cambió)
+const ENDPOINT = window.URL_GUARDAR_PRESUPUESTO || '../03-controller/presupuestos_guardar.php';
