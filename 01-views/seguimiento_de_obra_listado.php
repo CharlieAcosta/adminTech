@@ -145,7 +145,7 @@ $filas = poblarDatableAll(array('id_previsita', 'log_alta', 'cuit', 'razon_socia
   $(function () {
     $("#current_table").DataTable({
       "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
-      "responsive": true, "lengthChange": true, "autoWidth": false,
+      "responsive": true, "lengthChange": true, "autoWidth": false, "pageLength": 100, 
       "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
       "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
       "columns": [{ "width": "1%" }, { "width": "6%" }, { "width": "6%" }, { "width": "11%" }, { "width": "7%" }, { "width": "6%" }, { "width": "5%" }, { "width": "10%" },{ "width": "10%" },{ "width": "10%" }],
