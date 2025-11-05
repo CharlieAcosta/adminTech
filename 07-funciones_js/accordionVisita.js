@@ -12,6 +12,8 @@ window.presuFotosEliminadas  = {};     // { [nroTarea]: [ nombre:string ] }
 $(document).ready(function() {
     let modoVisualizacion = false;
     let presupuestoGenerado = false;
+    window.presupuestoGenerado = window.presupuestoGenerado || false;
+
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
@@ -898,7 +900,6 @@ $(document).ready(function() {
       console.log('📦 Datos extraídos para presupuesto:', datosExtraidos);
       renderizarPresupuestoDesdeDatos(datosExtraidos);
 
-      PresupuestoFotos.refresh();
 
       // 🔗 NUEVO: preparar bloque de fotos para drag&drop y selección
       if (window.PresupuestoFotos && typeof PresupuestoFotos.refresh === 'function') {
@@ -1216,7 +1217,7 @@ $(document).ready(function() {
     
       $tr.find('.subtotal-material').text(formatMoney(subtotal));
     }
-    
+    window.calcularFilaMaterial     = calcularFilaMaterial;
     
     /**
      * Calcula y actualiza el subtotal de una fila de mano de obra.
@@ -1233,6 +1234,7 @@ $(document).ready(function() {
     
       $tr.find('.subtotal-mano').text(formatMoney(subtotal));
     }
+    window.calcularFilaManoObra     = calcularFilaManoObra;
    
     /**
      * Formatea un número como moneda en formato español:
@@ -1328,7 +1330,8 @@ $(document).ready(function() {
       const utilTotalParaMostrar = utilMatParaMostrar + utilMoParaMostrar;
       $card.find('.subt-util-total').text('Sub Util. Mat.+MO.: ' + formatMoney(utilTotalParaMostrar));
     }
-         
+    window.actualizarSubtotalesBloque = actualizarSubtotalesBloque; 
+    
     /**
      * Calcula y actualiza los botones de utilidades y subtotal de tarea para una tarjeta de tarea.
      * @param {number} numeroTarea - El índice de la tarea (1-based).
@@ -1423,6 +1426,7 @@ $(document).ready(function() {
       else if (porcentajeUtilidad <= 23) $targets.addClass('util-muy');
       else                               $targets.addClass('util-margen');
     }
+    window.actualizarTotalesPorTarea  = actualizarTotalesPorTarea;
        
     /**
      * Recorre todos los botones de subtotal de tarea y suma sus valores,
@@ -1453,8 +1457,9 @@ $(document).ready(function() {
       window.__TOTAL_BASE__     = totalBase;
       window.__TOTAL_MOSTRADO__ = totalMostrar;
     }
+    window.actualizarTotalGeneral     = actualizarTotalGeneral;
     
-    function renderizarPresupuestoDesdeDatos(datos) {
+    function renderizarPresupuestoDesdeDatos(datos){   
       const contenedor = $('#contenedorPresupuestoGenerado');
       contenedor.empty();
       const hoy = new Date();
@@ -1830,7 +1835,7 @@ $(document).ready(function() {
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
-            <button id="btn-guardar-presupuesto" class="btn btn-success mr-2">
+            <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2" type="button"> 
               <i class="fas fa-save"></i> Guardar
             </button>
             <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
@@ -1845,8 +1850,9 @@ $(document).ready(function() {
       contenedor.append(htmlTotal);
 
        // === Guardar presupuesto (delegado sobre el contenedor)
-      contenedor.off('click', '#btn-guardar-presupuesto').on('click', '#btn-guardar-presupuesto', async function (e) {
-        e.preventDefault();
+      contenedor.off('click', '#btn-guardar-presupuesto')
+      .on('click', '#btn-guardar-presupuesto', async function (e) {
+console.log('1885 | e.preventDefault()');        e.preventDefault();
 
         const $btn = $(this);
         $btn.prop('disabled', true);
@@ -1966,6 +1972,11 @@ $(document).ready(function() {
               $('#contenedorPresupuestoGenerado').data('id_presupuesto', resp.id_presupuesto);
             }
             mostrarExito('Presupuesto guardado correctamente.');
+
+            if (typeof window.initRecalculoPresupuestoCargado === 'function') {
+              window.initRecalculoPresupuestoCargado();
+            }
+                     
             // (Opcional) limpiar buffers de nuevas si el back ya las guardó
             presuImagenesPorTarea = {};
             presuFotosEliminadas  = {};
@@ -1973,7 +1984,7 @@ $(document).ready(function() {
             mostrarError(resp?.msg || 'No se pudo guardar el presupuesto.');
           }
         } catch (err) {
-          console.error('Error al guardar presupuesto:', err);
+          console.log('Error al guardar presupuesto:', err);
           mostrarError('Error al guardar el presupuesto.');
         } finally {
           $btn.prop('disabled', false);
@@ -2191,7 +2202,13 @@ $(document).ready(function() {
 
       
     }
-  
+
+   // START - Rederizado con datos backend ///////////////////////////////////////////////////////
+   function renderizarPresupuestoDesdeBackend(datos) {
+    
+   }   
+  // END - Rederizado con datos backend /////////////////////////////////////////////////////////
+
     // Recalcular al modificar los inputs de utilidad global por bloque
     $(document).on('input change', '.utilidad-global-materiales, .utilidad-global-mano-obra', function () {
       const $card = $(this).closest('.tarea-card');
@@ -2276,31 +2293,31 @@ $(document).ready(function() {
       }
     }
   
-    // Evita doble apertura (clic en preview + dropzone)
-    let __abriendoDialogoPresu = false;
+    // al final del $(document).ready, antes de cerrar:
+    if ($('#contenedorPresupuestoGenerado .tarea-card').length) {
+      window.presupuestoGenerado = true;
+    }
 
-    $(document)
-      .off('click.presu-open', '.presu-dropzone')
-      .on('click.presu-open', '.presu-dropzone', function (e) {
-        // si fue sobre un thumb o su "x", no abrir
-        if ($(e.target).closest('.preview-img-container, .presu-eliminar-imagen').length) return;
-
-        if (__abriendoDialogoPresu) return; // candado anti-doble click
-        __abriendoDialogoPresu = true;
-
-        const idx = $(this).data('index');
-        const $input = $(`#presu_fotos_tarea_${idx}`);
-
-        // liberamos el candado cuando efectivamente hubo selección
-        $input.one('change.presu-open', function () {
-          __abriendoDialogoPresu = false;
+    // al final del $(document).ready, después del bloque anterior:
+    (function initRecalculoPresupuestoCargado() {
+      const $root = $('#contenedorPresupuestoGenerado');
+      if (!$root.length) return;
+      // Recalcular filas
+      $root.find('.tarea-card').each(function () {
+        const $card = $(this);
+        $card.find('tbody tr').each(function () {
+          const $tr = $(this);
+          if ($tr.find('.cantidad-material').length)  window.calcularFilaMaterial($tr);
+          if ($tr.find('.cantidad-mano-obra').length) window.calcularFilaManoObra($tr);
         });
-
-        // fallback por si el usuario cancela el diálogo
-        setTimeout(() => { __abriendoDialogoPresu = false; }, 1500);
-
-        $input.trigger('click');
+        window.actualizarSubtotalesBloque($card);
+        // obtener número de tarea desde el botón final
+        const idBtn = $card.find('[id^="subt-tarea-"]').attr('id');
+        const numero = parseInt(idBtn?.split('-').pop(), 10) || 1;
+        window.actualizarTotalesPorTarea(numero, $card);
       });
+      window.actualizarTotalGeneral();
+    })();
 
 });
 

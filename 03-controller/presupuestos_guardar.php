@@ -1,8 +1,11 @@
 <?php
+// Evita rutas relativas frágiles tipo "03-controller../..."
+$BASE = __DIR__;
+
 // ../03-controller/presupuestos_guardar.php
 header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '../04-modelo/presupuestoGeneradoModel.php';
+require_once $BASE . '/../04-modelo/presupuestoGeneradoModel.php';
 
 try {
     // ---- Validaciones básicas
