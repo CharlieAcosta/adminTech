@@ -64,40 +64,57 @@ function modGetAllRegistros($filtro){
    }
 }
 
-function modGetPresupuestoById($id, $via){     
+function modGetPresupuestoById($id, $via){
    $db = conectDB();
+
+   // 1) Habilitamos big selects SOLO en esta conexión (sesión actual)
+   //    No toca config global ni .htaccess
+   $db->query("SET SESSION SQL_BIG_SELECTS=1");
+
+   // 2) Sanitizar id
+   $id_safe = mysqli_real_escape_string($db, $id);
+
+   // 3) STRAIGHT_JOIN fuerza a resolver pv (const por PK) primero
+   //    y recién después los catálogos. CAST en el lado pv para evitar
+   //    conversiones sobre índices de catálogos.
    $query = "
-   SELECT pv.*, pro.provincia AS provincianom, par.partido AS partidonom, loc.localidad AS localidadnom, cal.calle AS callenom
+   SELECT
+       pv.*,
+       pro.provincia  AS provincianom,
+       par.partido    AS partidonom,
+       loc.localidad  AS localidadnom,
+       cal.calle      AS callenom
    FROM previsitas AS pv
-   LEFT JOIN provincias pro
-   ON pv.provincia_visita = pro.id_provincia
-   LEFT JOIN partidos par
-   ON pv.partido_visita = par.id_partido
-   LEFT JOIN localidades loc
-   ON pv.localidad_visita = loc.id_localidad
-   LEFT JOIN calles cal
-   ON pv.calle_visita = cal.id_calle
-   WHERE pv.id_previsita = '".$id."'
-   ;"; // trae todos los usuarios
+   STRAIGHT_JOIN provincias  AS pro ON pro.id_provincia  = CAST(pv.provincia_visita  AS UNSIGNED)
+   LEFT JOIN     partidos    AS par ON par.id_partido    = CAST(pv.partido_visita    AS UNSIGNED)
+   LEFT JOIN     localidades AS loc ON loc.id_localidad  = CAST(pv.localidad_visita  AS UNSIGNED)
+   LEFT JOIN     calles      AS cal ON cal.id_calle      = CAST(pv.calle_visita      AS UNSIGNED)
+   WHERE pv.id_previsita = '{$id_safe}'
+   LIMIT 1
+   ;";
 
-        $resultado = $db->query($query);
+   $resultado = $db->query($query);
 
-        while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
+   $rows = [];
+   while ($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)) {
+       $rows[] = $row;
+   }
 
-        foreach ($rows as $key => $value) {
-            $rows[$key]['provincianom'] = utf8_encode(ucwords(mb_strtolower($value['provincianom'])));
-            $rows[$key]['partidonom'] = utf8_encode(ucwords(mb_strtolower($value['partidonom'])));
-            $rows[$key]['localidadnom'] = utf8_encode(ucwords(mb_strtolower($value['localidadnom'])));
-            $rows[$key]['callenom'] = utf8_encode(ucwords(mb_strtolower($value['callenom'])));
-        }
-//var_dump($rows); die();
+   if (!empty($rows)) {
+       foreach ($rows as $key => $value) {
+           $rows[$key]['provincianom'] = utf8_encode(ucwords(mb_strtolower($value['provincianom'] ?? '')));
+           $rows[$key]['partidonom']   = utf8_encode(ucwords(mb_strtolower($value['partidonom']   ?? '')));
+           $rows[$key]['localidadnom'] = utf8_encode(ucwords(mb_strtolower($value['localidadnom'] ?? '')));
+           $rows[$key]['callenom']     = utf8_encode(ucwords(mb_strtolower($value['callenom']     ?? '')));
+       }
+   }
 
-        mysqli_close($db);                           // cierra la base de datos
+   mysqli_close($db);
 
-   if($via != 'ajax'){    
-      return $rows; // es php devuelve un array()
-   }else{
-      echo json_encode($rows); // es ajax devuelve un jason
+   if ($via !== 'ajax'){
+       return $rows ?? [];
+   } else {
+       echo json_encode($rows ?? []);
    }
 }
 // end - funcion para dar de alta un agente
