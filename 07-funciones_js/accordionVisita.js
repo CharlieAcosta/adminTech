@@ -1852,7 +1852,7 @@ $(document).ready(function() {
        // === Guardar presupuesto (delegado sobre el contenedor)
       contenedor.off('click', '#btn-guardar-presupuesto')
       .on('click', '#btn-guardar-presupuesto', async function (e) {
-console.log('1885 | e.preventDefault()');        e.preventDefault();
+      e.preventDefault();
 
         const $btn = $(this);
         $btn.prop('disabled', true);
