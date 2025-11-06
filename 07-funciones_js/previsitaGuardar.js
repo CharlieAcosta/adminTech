@@ -1,14 +1,13 @@
 // funcion ajax guardar los usuarios
-function presupuestoGuardar() {
-console.log('3 | presupuestoGuardar()');    
+function previsitaGuardar() {
     if ($(".v-id").val() != "") {
         var accion = "edicion&log_accion=editar";
-        var leyenda = "¿Quieres continuar editando esta previsita+++";
+        var leyenda = "¿Quieres continuar editando esta previsita";
         var accionPost = 'edicion';
     } else {
         var accion = "alta&log_accion=alta";
         var accionPost = 'alta';
-        var leyenda = "¿Quieres ingresar otra previsita?++++";
+        var leyenda = "¿Quieres ingresar otra previsita?";
     }
 
     var formData = new FormData($('#currentForm')[0]);

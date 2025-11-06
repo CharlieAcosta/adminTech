@@ -918,7 +918,8 @@ $(document).ready(function() {
     });
 
     // ======= POBLAR DESDE EL BACKEND =======
-    if (Array.isArray(tareasVisitadas) && tareasVisitadas.length) {
+    
+    if (typeof tareasVisitadas !== 'undefined' && tareasVisitadas.length) {
         modoVisualizacion = $('form').find('.v-id').data('visualiza') === 'on';
 
         // Reiniciamos trackers

@@ -574,7 +574,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
 ?>
 <script>
-  let presupuestoGenerado = <?php echo $presupuestoGenerado ? 'true' : 'false'; ?>;
+  const presupuestoGenerado = <?php echo json_encode((bool)($presupuestoGenerado ?? false)); ?>;
 </script>
 
 <!DOCTYPE html>
@@ -1862,7 +1862,8 @@ $(function () {
 
   $.validator.setDefaults({
     submitHandler: function () {
-      presupuestoGuardar();
+console.log('1865 | previsitaGuardar()');      
+      previsitaGuardar();
     }
   });
 
@@ -1993,15 +1994,21 @@ $(function () {
  
 </script>
 
-<!-- custom functions -->
+<?php
+// Garantizá que sea array; si no existe o viene null, dejalo en []
+$tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitadas) : [];
+?>
 <script>
-// Paso 1: Serializamos el arreglo PHP a JSON seguro para JS
-const tareasVisitadas = <?php 
-    echo json_encode(
-        $tareas_visitadas, 
-        JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT
-    ); 
-?>;
+  // JSON limpio y seguro para JS
+  window.tareasVisitadas = <?= json_encode(
+    $tareas_js,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES |
+    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+  ); ?>;
+
+  // Copia segura para usar en tu código
+  const tareas = Array.isArray(window.tareasVisitadas) ? window.tareasVisitadas : [];
+</script>
 
 
 
@@ -2025,7 +2032,7 @@ const tareasVisitadas = <?php
 <!-- Guarda usuarios en la base -->
 <script src="../07-funciones_js/presupuestosAcciones.js"></script>
 <!-- Guarda usuarios en la base -->
-<!-- <script src="../07-funciones_js/presupuestoGuardar.js"></script> -->
+<script src="../07-funciones_js/previsitaGuardar.js"></script>
 
 <!-- funciones js -->
 <script src="../07-funciones_js/scripts_list.js"></script>
