@@ -178,8 +178,25 @@ function sortArrayMultiple(array $array, array $indicesOrden): array {
     return $array;
 }
 
+function imprimirValido(
+    string $etiqueta,            // Texto de la etiqueta visible (ej: "Intervino")
+    string $nombreVariable,      // Nombre de la variable SIN el $ (ej: 'intervino_previsita_apenom')
+    bool $echo = true,           // true = imprime; false = devuelve string return
+    string $tagEtiqueta = 'strong', // Tag HTML para la etiqueta
+    string $sep = ': '           // Separador entre etiqueta y valor
+){
+    if (!isset($GLOBALS[$nombreVariable])) return '';                 // Evita warning si la variable no existe
+    $valor = $GLOBALS[$nombreVariable];                               // Toma el valor desde el ámbito global
+    $texto = trim((string)$valor);                                    // Normaliza a string y recorta espacios
+    if ($texto === '') return '';                                     // Si está vacío, no muestra nada
 
+    $etiquetaEsc = htmlspecialchars($etiqueta, ENT_QUOTES, 'UTF-8');  // Escapa etiqueta para HTML seguro
+    $valorEsc    = htmlspecialchars($texto,   ENT_QUOTES, 'UTF-8');   // Escapa valor para HTML seguro
 
+    $html = "<{$tagEtiqueta}>{$etiquetaEsc}{$sep}</{$tagEtiqueta}>{$valorEsc}"; // Arma el bloque final
+    if ($echo) { echo $html; return ''; }                             // Imprime o devuelve según $echo
+    return $html;                                                     // Retorna el HTML si $echo === false
+}
 
 // 5) Convierte las palabras de una cadena de texto a mayusculas
     //echo strToBold('Función: strToMayus($string)').'<br>'.'$string = CARLOS alberto aCOsta'.'<br>'.strToBold('Respuesta: ').strToMayus('CARLOS alberto aCOsta').'<br><br>';

@@ -25,8 +25,8 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   $datos = modGetPresupuestoById($id, 'php');
   $datos = $datos[0];
 
-//dd($datos);
-//dd($datos["id_previsita"]);
+  //dd($datos);
+  //dd($datos['log_usuario_id']);
   $intervino_previsita_agente = db_select_with_filters_V2(
     'usuarios',                // tabla
     ['id_usuario'],            // columnas a filtrar
@@ -154,100 +154,104 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
 
 // START PHP - Visita
 
-// Traemos materiales activos
-$materiales = SelectAllDB('materiales', 'estado_material', '=', "'Activo'", 'php');
+      // Traemos materiales activos
+      $materiales = SelectAllDB('materiales', 'estado_material', '=', "'Activo'", 'php');
 
-// Preparamos las opciones
-$opcionesMateriales = arrayToOptionsWithData(
-  $materiales,
-  'id_material',
-  'descripcion_corta',
-  'Seleccione un material',
-  ' | ',
-  ['unidad_venta', 'contenido', 'unidad_medida'],
-  [
-    'precio_unitario' => 'precio_unitario',
-    'unidad_medida'   => 'unidad_medida',
-    'unidad_venta'    => 'unidad_venta',
-    'contenido'       => 'contenido',
-    'log_alta'        => 'log_alta',
-    'log_edicion'     => 'log_edicion'
-  ]
-);
+      // Preparamos las opciones
+      $opcionesMateriales = arrayToOptionsWithData(
+        $materiales,
+        'id_material',
+        'descripcion_corta',
+        'Seleccione un material',
+        ' | ',
+        ['unidad_venta', 'contenido', 'unidad_medida'],
+        [
+          'precio_unitario' => 'precio_unitario',
+          'unidad_medida'   => 'unidad_medida',
+          'unidad_venta'    => 'unidad_venta',
+          'contenido'       => 'contenido',
+          'log_alta'        => 'log_alta',
+          'log_edicion'     => 'log_edicion'
+        ]
+      );
 
-$manoDeObra = SelectAllDB('tipo_jornales', 'jornal_estado', '=', "'activo'", 'php');
+      $manoDeObra = SelectAllDB('tipo_jornales', 'jornal_estado', '=', "'activo'", 'php');
 
-$opcionesManoDeObra = arrayToOptionsWithData(
-  $manoDeObra,
-  'jornal_id',
-  'jornal_codigo',
-  'Seleccione mano de obra',
-  ' | ',
-  ['jornal_descripcion'],
-  [
-    'jornal_id' => 'jornal_id',
-    'jornal_valor' => 'jornal_valor',
-    'updated_at'   => 'updated_at',
-  ]
-);
+      $opcionesManoDeObra = arrayToOptionsWithData(
+        $manoDeObra,
+        'jornal_id',
+        'jornal_codigo',
+        'Seleccione mano de obra',
+        ' | ',
+        ['jornal_descripcion'],
+        [
+          'jornal_id' => 'jornal_id',
+          'jornal_valor' => 'jornal_valor',
+          'updated_at'   => 'updated_at',
+        ]
+      );
 
-// intervinientes visita
-$intervinientes_visita_ids = db_select_with_filters_V2(
-  'seguimiento_guardados',              // tabla
-  ['id_previsita', 'modulo'],           // columnas a filtrar
-  ['=','='],                            // comparaciones
-  [$datos['id_previsita'], '2'],        // valores
-  [['created_at', 'DESC']],                                   // ordenamiento (vacío)
-  'php'                                 // devuelve array en PHP
-);
+      if(isset($datos['id_previsita'])) {
+          // intervinientes visita
+          $intervinientes_visita_ids = db_select_with_filters_V2(
+            'seguimiento_guardados',              // tabla
+            ['id_previsita', 'modulo'],           // columnas a filtrar
+            ['=','='],                            // comparaciones
+            [$datos['id_previsita'], '2'],        // valores
+            [['created_at', 'DESC']],                                   // ordenamiento (vacío)
+            'php'                                 // devuelve array en PHP
+          );
 
-$intervinientes_visita_nombres = intervinientes_names($intervinientes_visita_ids);
+          $intervinientes_visita_nombres = intervinientes_names($intervinientes_visita_ids);
 
-// --- Nuevo: construyo aquí el HTML del popover sin incluir al primero ---
-$otros = array_slice($intervinientes_visita_nombres, 1);
+          // --- Nuevo: construyo aquí el HTML del popover sin incluir al primero ---
+          $otros = array_slice($intervinientes_visita_nombres, 1);
 
-$popoverIntervinientes = '<table class="table table-sm mb-0">'
-                       . '<thead><tr><th>Agente</th><th>Fecha</th></tr></thead>'
-                       . '<tbody>';
+          $popoverIntervinientes = '<table class="table table-sm mb-0">'
+                                . '<thead><tr><th>Agente</th><th>Fecha</th></tr></thead>'
+                                . '<tbody>';
 
-if (count($otros) > 0) {
-    foreach ($otros as $item) {
-        list($agente, $fecha) = explode(' | ', $item);
-        $popoverIntervinientes .= "<tr><td>{$agente}</td><td>{$fecha}</td></tr>";
-    }
-} else {
-    // opcional: mensaje si no queda ninguno
-    $popoverIntervinientes .= '<tr><td colspan="2" class="text-center text-muted">'
-                           . 'Sin otros intervinientes'
-                           . '</td></tr>';
-}
+          if (count($otros) > 0) {
+              foreach ($otros as $item) {
+                  list($agente, $fecha) = explode(' | ', $item);
+                  $popoverIntervinientes .= "<tr><td>{$agente}</td><td>{$fecha}</td></tr>";
+              }
+          } else {
+              // opcional: mensaje si no queda ninguno
+              $popoverIntervinientes .= '<tr><td colspan="2" class="text-center text-muted">'
+                                    . 'Sin otros intervinientes'
+                                    . '</td></tr>';
+          }
 
-$popoverIntervinientes .= '</tbody></table>';
-
-
-// El primer elemento (más reciente) para mostrar “en reposo”
-$ultimo = $intervinientes_visita_nombres[0] ?? '';
-// intervinientes visita
-
-if (empty($tareas_visitadas)){$visita_card = 'card-danger';}else{$visita_card = 'card-success';}
-// END PHP - Visita
+          $popoverIntervinientes .= '</tbody></table>';
 
 
-// START PHP PRESUPUESTO GENERADO 
-$presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true); 
-$presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
-if ($presupuesto_generado['presupuesto']) {
-  //muestra el accordión de presupuesto generado abierto
-  $presupuesto_card = 'card-success';
-  $presupuesto_show = 'show';
-  $visita_show = '';
-  $presupuesto_display = '';
-} else {
-  $visita_show = 'show';
-  $presupuesto_show = '';
-}
-// END PRESUPUESTO GENERADO 
+          // El primer elemento (más reciente) para mostrar “en reposo”
+          $ultimo = $intervinientes_visita_nombres[0] ?? '';
+          // intervinientes visita
 
+          if (empty($tareas_visitadas)){$visita_card = 'card-danger';}else{$visita_card = 'card-success';}
+           
+
+          // END PHP - Visita
+
+
+        // START PHP PRESUPUESTO GENERADO 
+              $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true); 
+              $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
+              if ($presupuesto_generado['presupuesto']) {
+                //muestra el accordión de presupuesto generado abierto
+                $presupuesto_card = 'card-success';
+                $presupuesto_show = 'show';
+                $visita_show = '';
+                $presupuesto_display = '';
+              } else {
+                $visita_show = 'show';
+                $presupuesto_show = '';
+              }
+        // END PRESUPUESTO GENERADO 
+
+      }
 
 function intervinientes_names($b_array){
   $intervinieron_agentes = [];
@@ -648,7 +652,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           }
         ?>
         </button>
-        <span class="col-3 card-title text-right"><?php echo "<strong>Intervino: </strong>".$intervino_previsita_apenom; ?></span>
+        <span class="col-3 card-title text-right"><?php imprimirValido("Intervino", "intervino_previsita_apenom", true, 'strong', ': ') ?></span>
       </h2>
     </div>
 
@@ -1240,7 +1244,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </select>
 
 <!-- /accordion presupuesto -->
-<?php if ($presupuestoGenerado): ?>
+<?php if (!empty($presupuestoGenerado)): ?>
   <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
