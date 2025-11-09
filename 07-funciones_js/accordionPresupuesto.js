@@ -773,5 +773,305 @@ $(function () {
 });
 
 
+// === Traer tarea — abrir modal y poblar listado real ===
+$(document)
+  .off('click.presu-traer-tarea', '#contenedorPresupuestoGenerado .btn-traer-tarea')
+  .on('click.presu-traer-tarea', '#contenedorPresupuestoGenerado .btn-traer-tarea', function (e) {
+    e.preventDefault(); e.stopPropagation();
+
+    // Guardamos referencia de la card activa (la que recibirá la plantilla)
+    const $card = $(this).closest('.tarea-card');
+    const nro   = $(this).data('nro');
+    window.__tareaDestinoTraer = { nro, $card };
+
+    // Abrimos modal
+    const $modal = $('#modalTraerTareaArchivada');
+    const $tbody = $('#tablaTareasArchivadas tbody');
+    $tbody.empty().append(
+      `<tr><td colspan="4" class="text-muted">Cargando templados…</td></tr>`
+    );
+    $modal.modal('show');
+
+    // Disparo inicial sin filtro
+    cargarListadoTareasArchivadas('');
+  });
+
+// === Helper: renderizar filas en la tabla del modal ===
+window.renderTablaTareasArchivadas = function (items) {
+  const $tbody = $('#tablaTareasArchivadas tbody');
+  $tbody.empty();
+
+  if (!Array.isArray(items) || items.length === 0) {
+    $tbody.append(`<tr><td colspan="4" class="text-muted">No hay tareas archivadas.</td></tr>`);
+    return;
+  }
+
+  items.forEach(it => {
+    const tr = `
+      <tr>
+        <td>${it.nombre_plantilla || ''}</td>
+        <td>${it.nombre_original || ''}</td>
+        <td>${it.created_at || ''}</td>
+        <td class="text-center">
+          <button type="button" class="btn btn-warning btn-sm usar-plantilla" data-id="${it.id_arch_tarea}">
+            Usar
+          </button>
+        </td>
+      </tr>`;
+    $('#tablaTareasArchivadas tbody').append(tr);
+  });
+};
+
+// === Helper: llamada AJAX a listar ===
+window.cargarListadoTareasArchivadas = function (q, page = 1) {
+  $.ajax({
+    url: '../03-controller/presupuestos_guardar.php',
+    method: 'POST',
+    dataType: 'json',
+    data: {
+      via: 'ajax',
+      funcion: 'listar_tareas_archivadas',
+      q: q || '',
+      page: page,
+      per_page: 20
+    }
+  })
+  .done(function (resp) {
+    if (resp && resp.ok) {
+      window.renderTablaTareasArchivadas(resp.items || []);
+    } else {
+      $('#tablaTareasArchivadas tbody').html(
+        `<tr><td colspan="4" class="text-danger">Error al cargar listado.</td></tr>`
+      );
+      console.error('listar_tareas_archivadas → respuesta no OK:', resp);
+    }
+  })
+  .fail(function (xhr) {
+    $('#tablaTareasArchivadas tbody').html(
+      `<tr><td colspan="4" class="text-danger">Fallo de red/servidor.</td></tr>`
+    );
+    console.error('listar_tareas_archivadas → error:', xhr.responseText || xhr.statusText);
+  });
+};
+
+// === Traer tarea — usar plantilla seleccionada ===
+$(document)
+  .off('click.presu-traer-usar', '#tablaTareasArchivadas .usar-plantilla')
+  .on('click.presu-traer-usar', '#tablaTareasArchivadas .usar-plantilla', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    const id = parseInt($(this).data('id'), 10) || 0;
+    if (!id) return;
+
+    const destino = window.__tareaDestinoTraer;
+    if (!destino || !destino.$card || !Number.isInteger(destino.nro)) {
+      console.error('Destino no definido');
+      return;
+    }
+
+    // Confirmación simple: reemplazar contenido de la tarea actual
+    if (window.Swal && typeof Swal.fire === 'function') {
+      Swal.fire({
+        title: 'Reemplazar contenido de la tarea actual?',
+        html: `<small>Se borrarán filas existentes de Materiales y Mano de Obra (excepto "Otros" y "Subtotal").</small>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, reemplazar',
+        cancelButtonText: 'Cancelar',
+        allowOutsideClick: false,
+        allowEscapeKey: false
+      }).then((res) => {
+        if (!res.isConfirmed) return;
+        obtenerYAplicarPlantilla(id, destino.$card);
+      });
+    } else {
+      if (window.confirm('Reemplazar contenido de la tarea actual?')) {
+        obtenerYAplicarPlantilla(id, destino.$card);
+      }
+    }
+  });
+
+// === Helper: pedir al servidor y aplicar en la card ===
+function obtenerYAplicarPlantilla(id_arch_tarea, $card) {
+  // cerrar modal de selección
+  $('#modalTraerTareaArchivada').modal('hide');
+
+  $.ajax({
+    url: '../03-controller/presupuestos_guardar.php',
+    method: 'POST',
+    dataType: 'json',
+    data: {
+      via: 'ajax',
+      funcion: 'obtener_tarea_archivada',
+      id_arch_tarea
+    }
+  })
+  .done(function (resp) {
+    if (!resp || !resp.ok || !resp.tarea) {
+      console.error('obtener_tarea_archivada → respuesta no OK:', resp);
+      if (window.mostrarError) mostrarError('No se pudo obtener la plantilla.');
+      return;
+    }
+    aplicarPlantillaEnCard(resp.tarea, $card);
+  })
+  .fail(function (xhr) {
+    console.error('obtener_tarea_archivada → error:', xhr.responseText || xhr.statusText);
+    if (window.mostrarError) mostrarError('Fallo de red/servidor al obtener plantilla.');
+  });
+}
+
+// === Helper: aplica materiales + MO + utilidades/otros en la card destino ===
+function aplicarPlantillaEnCard(tareaPlantilla, $card) {
+  if (!$card || !$card.length) return;
+
+  // 0) Título de la tarea = nombre de la plantilla
+  const $titulo = $card.find('.tarea-encabezado b');
+  if ($titulo.length) {
+    // Conserva el número actual de la card
+    const txtActual = ($titulo.text() || '');
+    const m = txtActual.match(/Tarea\s+(\d+)/i);
+    const nroTxt = m ? m[1] : '';
+    $titulo.text(`Tarea ${nroTxt}: ${tareaPlantilla.nombre_plantilla || ''}`);
+  }
+
+  // 0.b) Descripción (textarea) = descripcion de la plantilla (o nombre_original como fallback)
+  console.log('Plantilla recibida → descripcion:', tareaPlantilla.descripcion, 'nombre_original:', tareaPlantilla.nombre_original);
+
+  let nuevaDescripcion = '';
+  if (typeof tareaPlantilla.descripcion === 'string' && tareaPlantilla.descripcion.trim() !== '') {
+    nuevaDescripcion = tareaPlantilla.descripcion.trim();
+  } else if (typeof tareaPlantilla.nombre_original === 'string') {
+    nuevaDescripcion = tareaPlantilla.nombre_original.trim();
+  }
+
+  let $txt = $card.find('textarea.tarea-descripcion').first();
+  if (!$txt.length) {
+    // Fallback por si la clase difiere en esta vista
+    $txt = $card.find('textarea').first();
+  }
+  if ($txt.length) {
+    $txt.val(nuevaDescripcion).trigger('input');
+  }
+
+  // 1) Incluir en total
+  $card.find('.incluir-en-total').prop('checked', !!tareaPlantilla.incluir_en_total);
+
+  // 2) Setear utilidades y "otros"
+  const uMat = tareaPlantilla.utilidad_materiales;
+  const uMo  = tareaPlantilla.utilidad_mano_obra;
+  $card.find('.utilidad-global-materiales').val(uMat === null ? '' : uMat);
+  $card.find('.utilidad-global-mano-obra').val(uMo === null ? '' : uMo);
+
+  $card.find('.input-otros-materiales').val(tareaPlantilla.otros_materiales || 0);
+  $card.find('.input-otros-mano').val(tareaPlantilla.otros_mano_obra || 0);
+
+// 3) Preparar TBODY de Materiales y Mano de Obra preservando el orden correcto
+const $tbMat = $card.find('.tarea-materiales tbody');
+const $tbMo  = $card.find('.tarea-mano-obra tbody');
+
+// --- Materiales: detach de "Otros" y "Subtotal" para reinsertar al final ---
+const $matOtros    = $tbMat.find('tr.fila-otros-materiales').first().detach();
+const $matSubtotal = $tbMat.find('tr.fila-subtotal').first().detach();
+// Limpiar resto
+$tbMat.empty();
+
+// 4) Inyectar materiales (6 columnas: Nombre | Cant. | Precio | %Util fila (placeholder) | % Extra | Subtotal)
+(tareaPlantilla.materiales || []).forEach(m => {
+  const row = `
+    <tr data-material-id="${m.id_material != null ? m.id_material : ''}">
+      <td>${m.nombre || ''}</td>
+      <td class="text-center">
+        <input type="number" step="0.01" class="form-control form-control-sm cantidad-material"
+               value="${m.cantidad != null ? m.cantidad : 0}">
+      </td>
+      <td class="text-center">
+        <input type="number" step="0.01" class="form-control form-control-sm precio-unitario"
+               value="${m.precio_unitario != null ? m.precio_unitario : 0}">
+      </td>
+      <!-- Placeholder para la columna "% Utilidad Materiales" por fila (no se usa, mantiene alineación) -->
+      <td class="text-center td-utilidad-fila"></td>
+      <td class="text-center">
+        <input type="number" step="0.01" class="form-control form-control-sm porcentaje-extra"
+               value="${m.porcentaje_extra != null ? m.porcentaje_extra : 0}">
+      </td>
+      <td class="text-right subtotal-material"></td>
+    </tr>`;
+  $tbMat.append(row);
+});
+
+// Reinsertar "Otros" y luego "Subtotal" para respetar el orden original
+if ($matOtros && $matOtros.length)    $tbMat.append($matOtros);
+if ($matSubtotal && $matSubtotal.length) $tbMat.append($matSubtotal);
+
+// --- Mano de Obra: detach de "Otros" y "Subtotal" para reinsertar al final ---
+const $moOtros    = $tbMo.find('tr.fila-otros-mano').first().detach();
+const $moSubtotal = $tbMo.find('tr.fila-subtotal').first().detach();
+// Limpiar resto
+$tbMo.empty();
+
+// 5) Inyectar mano de obra (6 columnas: Tipo | Cant. | Valor | %Util fila (placeholder) | % Extra | Subtotal)
+(tareaPlantilla.mano_obra || []).forEach(o => {
+  const row = `
+    <tr data-jornal_id="${o.jornal_id != null ? o.jornal_id : ''}">
+      <td>${o.nombre || ''}</td>
+      <td class="text-center">
+        <input type="number" step="0.01" class="form-control form-control-sm cantidad-mano-obra"
+               value="${o.cantidad != null ? o.cantidad : 0}">
+      </td>
+      <td class="text-center">
+        <input type="number" step="0.01" class="form-control form-control-sm valor-jornal"
+               value="${o.jornal_valor != null ? o.jornal_valor : 0}">
+      </td>
+      <!-- Placeholder para la columna "% Utilidad Mano de Obra" por fila (no se usa, mantiene alineación) -->
+      <td class="text-center td-utilidad-fila"></td>
+      <td class="text-center">
+        <input type="number" step="0.01" class="form-control form-control-sm porcentaje-extra"
+               value="${o.porcentaje_extra != null ? o.porcentaje_extra : 0}">
+      </td>
+      <td class="text-right subtotal-mano"></td>
+    </tr>`;
+  $tbMo.append(row);
+});
+
+// Reinsertar "Otros" y luego "Subtotal" para respetar el orden original
+if ($moOtros && $moOtros.length)       $tbMo.append($moOtros);
+if ($moSubtotal && $moSubtotal.length) $tbMo.append($moSubtotal);
+
+
+  // 6) Reatachar y recalcular con tus funciones existentes
+  if (typeof window.initRecalculoPresupuestoCargado === 'function') {
+    window.initRecalculoPresupuestoCargado();
+  }
+  if (typeof window._safeActualizarSubtotalesBloque === 'function') {
+    window._safeActualizarSubtotalesBloque($card, 'materiales');
+    window._safeActualizarSubtotalesBloque($card, 'mano');
+  }
+  if (typeof window._safeActualizarTotalesPorTarea === 'function') {
+    window._safeActualizarTotalesPorTarea($card);
+  }
+  if (typeof window._safeActualizarTotalGeneral === 'function') {
+    window._safeActualizarTotalGeneral();
+  }
+
+  if (window.mostrarExito) {
+    mostrarExito('Plantilla aplicada a la tarea.');
+  }
+}
+
+
+// === Filtro por texto (con debounce simple) ===
+(function () {
+  let t = null;
+  $(document)
+    .off('input.presu-traer-filter', '#filtroTareasArchivadas')
+    .on('input.presu-traer-filter', '#filtroTareasArchivadas', function () {
+      const q = $(this).val();
+      clearTimeout(t);
+      t = setTimeout(() => cargarListadoTareasArchivadas(q, 1), 300);
+    });
+})();
+
+
+
+
 
 })(jQuery);

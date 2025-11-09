@@ -2087,5 +2087,62 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
   <?= $popoverIntervinientes /* contiene la tabla completa */ ?>
 </div>
 <script>window.URL_GUARDAR_PRESUPUESTO = '../03-controller/presupuestos_guardar.php';</script>
+
+<!-- =========================
+  MODAL: Traer tarea archivada
+  Colocar antes de </body>
+========================== -->
+<div class="modal fade" id="modalTraerTareaArchivada" tabindex="-1" role="dialog"
+     aria-labelledby="modalTraerTareaArchivadaLabel" aria-hidden="true"
+     data-backdrop="static" data-keyboard="false">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title" id="modalTraerTareaArchivadaLabel">
+          <i class="fas fa-archive mr-2"></i> Traer tarea archivada
+        </h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- Filtro simple (opcional; la lógica se agrega luego) -->
+        <div class="form-row mb-3">
+          <div class="col-md-6">
+            <label for="filtroTareasArchivadas" class="mb-1">Buscar</label>
+            <input type="text" class="form-control" id="filtroTareasArchivadas"
+                   placeholder="Escribe para filtrar por nombre de plantilla…">
+          </div>
+        </div>
+
+        <!-- Tabla de plantillas -->
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0" id="tablaTareasArchivadas">
+              <thead class="thead-light">
+                <tr>
+                  <th style="min-width: 280px;">Nombre de plantilla</th>
+                  <th style="min-width: 280px;">Nombre original</th>
+                  <th class="text-nowrap" style="width: 180px;">Creada</th>
+                  <th class="text-center" style="width: 110px;">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Se poblará por JS -->
+              </tbody>
+            </table>
+          </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
