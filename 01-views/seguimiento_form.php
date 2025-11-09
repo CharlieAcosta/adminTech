@@ -105,8 +105,6 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 
 }
 
-
-
 $provincias = getAllProvincias();
 $provinciasSelect = ""; //para el select de provincias
 foreach ($provincias as $key => $value) {
@@ -237,7 +235,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
 
 
         // START PHP PRESUPUESTO GENERADO 
-              $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true); 
+              $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true);            
               $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
               if ($presupuesto_generado['presupuesto']) {
                 //muestra el accordión de presupuesto generado abierto
@@ -537,6 +535,24 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             </div>
 
             <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-'. $e($nro) .'">
+            <div class="tarea-inline-actions d-flex align-items-center mr-auto">
+                <button
+                  type="button"
+                  id="btnGuardarTarea_'. $e($nro) .'"
+                  class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
+                  data-nro="'. $e($nro) .'"
+                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'">
+                  <i class="fas fa-save"></i> Guardar tarea
+                </button>
+                <button
+                  type="button"
+                  id="btnTraerTarea_'. $e($nro) .'"
+                  class="btn btn-warning btn-traer-tarea btn-tarea"
+                  data-nro="'. $e($nro) .'"
+                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'">
+                  <i class="fas fa-download"></i> Traer tarea
+                </button>
+            </div>
               <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
               <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
               <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>

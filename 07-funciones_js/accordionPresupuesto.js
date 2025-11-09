@@ -160,6 +160,169 @@
     }
   });
 
+// === Guardar tarea (VISTA) — SweetAlert con input, único para backend + visita ===
+// === Helper: serializa UNA sola tarea-card (mismos selectores que presupuestoGuardar) ===
+window._presuSerializarCard = function ($card, nro) {
+  // Descripción (prioriza textarea; si no, el título)
+  const descTextarea = $card.find('textarea').first().val();
+  const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
+  const descripcion  = (descTextarea != null ? String(descTextarea) : String(descTitulo || '')).trim();
+
+  const incluir_en_total = $card.find('.incluir-en-total').prop('checked') ? 1 : 0;
+
+  // --- Materiales (idéntico a guardado unificado)
+  const materiales = [];
+  $card.find('.tarea-materiales tbody tr').each(function () {
+    const $tr = $(this);
+    if ($tr.hasClass('fila-otros-materiales') || $tr.hasClass('fila-subtotal')) return;
+
+    const id_material = $tr.data('material-id');
+    if (!id_material) return;
+
+    const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+    const cantidad         = parseFloat($tr.find('.cantidad-material').val()) || 0;
+    const precio_unitario  = parseFloat($tr.find('.precio-unitario').val()) || 0;
+    const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+
+    materiales.push({
+      id_material: String(id_material),
+      nombre,
+      cantidad,
+      precio_unitario,
+      porcentaje_extra
+    });
+  });
+
+  // Otros + utilidades del bloque Materiales
+  const otros_materiales = parseFloat($card.find('.input-otros-materiales').val()) || 0;
+  const util_mat_txt     = $card.find('.utilidad-global-materiales').val();
+  const utilidad_materiales = util_mat_txt === '' ? null : (parseFloat(util_mat_txt) || 0);
+
+  // --- Mano de Obra (idéntico a guardado unificado)
+  const mano_obra = [];
+  $card.find('.tarea-mano-obra tbody tr').each(function () {
+    const $tr = $(this);
+    if ($tr.hasClass('fila-otros-mano') || $tr.hasClass('fila-subtotal')) return;
+
+    const jornal_id = $tr.data('jornal_id');
+    if (!jornal_id) return;
+
+    const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+    const cantidad         = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0;
+    const jornal_valor     = parseFloat($tr.find('.valor-jornal').val()) || 0;
+    const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+
+    mano_obra.push({
+      jornal_id: String(jornal_id),
+      nombre,
+      cantidad,
+      jornal_valor,
+      porcentaje_extra
+    });
+  });
+
+  // Otros + utilidades del bloque Mano de Obra
+  const otros_mano_obra = parseFloat($card.find('.input-otros-mano').val()) || 0;
+  const util_mo_txt     = $card.find('.utilidad-global-mano-obra').val();
+  const utilidad_mano_obra = util_mo_txt === '' ? null : (parseFloat(util_mo_txt) || 0);
+
+  // Nota: fotos quedan fuera para tareas archivadas
+  return {
+    nro,
+    descripcion,
+    incluir_en_total,
+    utilidad_materiales,
+    utilidad_mano_obra,
+    otros_materiales,
+    otros_mano_obra,
+    materiales,
+    mano_obra
+  };
+};
+
+// === Guardar tarea (VISTA) — SweetAlert + serialización de la card (único handler) ===
+$(document)
+  .off('click.presu-guardar-tarea', '#contenedorPresupuestoGenerado .btn-guardar-tarea')
+  .on('click.presu-guardar-tarea', '#contenedorPresupuestoGenerado .btn-guardar-tarea', function (e) {
+    e.preventDefault(); e.stopPropagation();
+    const $btn  = $(this);
+    const nro   = $btn.data('nro');
+    const $card = $btn.closest('.tarea-card');
+
+    const lanzarPrompt = (onOk) => {
+      // nombre por defecto: textarea > título
+      const descTextarea = $card.find('textarea').first().val();
+      const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
+      const defaultName  = (descTextarea != null ? String(descTextarea) : String(descTitulo || '')).trim();
+    
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          title: '¿Con que nombre vas a guardar este tarea?',
+          input: 'text',
+          inputValue: defaultName,
+          showCancelButton: true,
+          confirmButtonText: 'Aceptar',
+          cancelButtonText: 'Cancelar',
+          allowOutsideClick: false, // no se cierra clickeando afuera
+          allowEscapeKey: false     // no se cierra con ESC
+        }).then((result) => {
+          if (!result.isConfirmed) return;
+          onOk(String(result.value || '').trim());
+        });
+      } else {
+        const val = window.prompt('¿Con que nombre vas a guardar este tarea?', defaultName);
+        if (val != null) onOk(String(val).trim());
+      }
+    };
+
+    lanzarPrompt(function (nombre_plantilla) {
+      const id_presupuesto  = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
+      const source_tarea_id = $card.data('id_presu_tarea') || null;
+      const tarea = window._presuSerializarCard($card, nro);
+
+      // Preview en memoria
+      window.__tareaArchivadaPreview = {
+        nombre_plantilla,
+        source_id_presupuesto: id_presupuesto,
+        source_id_presu_tarea: source_tarea_id,
+        tarea
+      };
+      console.log('Tarea archivable (preview):', window.__tareaArchivadaPreview);
+      // === AJAX: enviar al controlador unificado ===
+      $.ajax({
+        url: '../03-controller/presupuestos_guardar.php',
+        method: 'POST',
+        dataType: 'json',
+        data: {
+          via: 'ajax',
+          funcion: 'guardar_tarea_archivada',
+          data_json: JSON.stringify(window.__tareaArchivadaPreview)
+        }
+      })
+      .done(function (resp) {
+        // Minimal feedback (no tocamos tus alertas existentes)
+        if (resp && resp.ok) {
+          if (window.mostrarExito) {
+            mostrarExito('La tarea ha sido archivada');
+          }
+        } else {
+          console.error('Respuesta no OK:'+resp);
+          if (window.mostrarError) {
+            mostrarError((resp && resp.msg) ? resp.msg : 'Error inesperado.');
+          }
+        }
+      })
+      .fail(function (xhr) {
+        console.error('Error AJAX (guardar_tarea_archivada):', xhr.responseText || xhr.statusText);
+        if (window.mostrarError) {
+          mostrarError('No se pudo archivar la tarea, error de red o servidor.');
+        }
+      });
+    });
+  });
+
+
+
 
 // ===============================================
 // FUNCIÓN ÚNICA DE GUARDADO (backend + visita)
