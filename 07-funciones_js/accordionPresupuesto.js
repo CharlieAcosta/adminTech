@@ -795,7 +795,7 @@ $(document)
     // Disparo inicial sin filtro
     cargarListadoTareasArchivadas('');
   });
-
+  
 // === Helper: renderizar filas en la tabla del modal ===
 window.renderTablaTareasArchivadas = function (items) {
   const $tbody = $('#tablaTareasArchivadas tbody');
