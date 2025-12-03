@@ -1776,6 +1776,22 @@ $(document).ready(function() {
             <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea ${claseUtilidades}" id="porcentajetarea-${numeroTarea}">% : <strong>$0,00</strong></button>
           </div>
           <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-${numeroTarea}">
+          <div class="tarea-inline-actions d-flex align-items-center mr-auto">
+            <button
+              type="button"
+              id="btnGuardarTarea_${numeroTarea}"
+              class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
+              data-nro="${numeroTarea}">
+              <i class="fas fa-save"></i> Guardar tarea
+            </button>
+            <button
+              type="button"
+              id="btnTraerTarea_${numeroTarea}"
+              class="btn btn-warning btn-traer-tarea"
+              data-nro="${numeroTarea}">
+              <i class="fas fa-download"></i> Traer tarea
+            </button>
+          </div>
           <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
             <button type="button" class="btn bg-secondary w-100" id="iibb-${numeroTarea}">IIBB: $0,00</button>
           </div>

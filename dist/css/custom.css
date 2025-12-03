@@ -1047,6 +1047,17 @@ textarea.is-invalid {
 .presu-dropzone { cursor: pointer; }
 .presu-preview-fotos { min-height: 10px; } /* que siempre tenga algo clickeable */
 
+/* Normaliza altura/alineación para botones de tarea */
+.btn-tarea {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.25;
+  padding: .5rem .9rem;   /* mismo alto en ambos */
+  border-radius: .5rem;   /* opcional, match visual */
+}
+
+/* Espaciado entre ícono y texto */
+.btn-tarea i { margin-right: .35rem; }
 
 
 

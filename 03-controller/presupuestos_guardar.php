@@ -14,9 +14,71 @@ try {
     }
 
     $funcion = $_POST['funcion'] ?? '';
-    if ($funcion !== 'guardarPresupuesto') {
-        throw new RuntimeException('Función no soportada: ' . $funcion);
+
+    switch ($funcion) {
+        case 'listar_tareas_archivadas':
+            // === NUEVO: listado de plantillas ===
+            require_once $BASE . '/../04-modelo/tareasArchivadasListarModel.php';
+            $q    = isset($_POST['q']) ? (string)$_POST['q'] : '';
+            $page = isset($_POST['page']) ? max(1, (int)$_POST['page']) : 1;
+            $per  = isset($_POST['per_page']) ? max(1, min(100, (int)$_POST['per_page'])) : 20;
+
+            try {
+                $out = listarTareasArchivadas($q, $page, $per);
+                echo json_encode($out, JSON_UNESCAPED_UNICODE);
+            } catch (Throwable $e) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            }
+            exit;
+
+        case 'guardar_tarea_archivada':
+            // --- Rama nueva: guardar tarea como plantilla ---
+            $raw = $_POST['data_json'] ?? '';
+            if ($raw === '') {
+                echo json_encode(['ok' => false, 'msg' => 'Falta data_json'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $data = json_decode($raw, true);
+            if (!is_array($data)) {
+                echo json_encode(['ok' => false, 'msg' => 'JSON inválido'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+    
+            require_once $BASE . '/../04-modelo/tareasArchivadasGuardarModel.php';
+            try {
+                $res = guardarTareaArchivada($data);
+                echo json_encode($res, JSON_UNESCAPED_UNICODE);
+            } catch (Throwable $e) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'msg' => 'Excepción', 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+            }
+            exit;
+
+            case 'obtener_tarea_archivada':
+                require_once $BASE . '/../04-modelo/tareasArchivadasObtenerModel.php';
+                $id = isset($_POST['id_arch_tarea']) ? (int)$_POST['id_arch_tarea'] : 0;
+                if ($id <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'id_arch_tarea inválido'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+                try {
+                    $out = obtenerTareaArchivada($id);
+                    echo json_encode($out, JSON_UNESCAPED_UNICODE);
+                } catch (Throwable $e) {
+                    http_response_code(500);
+                    echo json_encode(['ok' => false, 'msg' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                }
+                exit;
+                       
+            case 'guardarPresupuesto':
+                // >>>> de aquí para abajo sigue tu flujo existente de guardar presupuesto <<<<
+                break;
+        
+            default:
+                throw new RuntimeException('Función no soportada: ' . $funcion);
     }
+    
 
     // ---- Payload JSON
     $payloadJson = $_POST['payload'] ?? '';
