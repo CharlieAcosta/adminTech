@@ -15,6 +15,23 @@ include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indi
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 
+// =========================
+// Permisos por perfil (UI)
+// =========================
+$usuarioSesion = $_SESSION["usuario"] ?? null;
+$perfilSesion  = is_array($usuarioSesion) ? ($usuarioSesion['perfil'] ?? '') : '';
+
+// Por defecto, NO mostramos vista detallada (más seguro)
+$mostrarVistaDetallada = false;
+
+// Ajustar perfiles permitidos a ver impuestos/utilidades:
+$perfilesDetallado = ['Super Administrador', 'Administrador']; // <-- editá según tu sistema
+
+if (in_array($perfilSesion, $perfilesDetallado, true)) {
+  $mostrarVistaDetallada = true;
+}
+
+
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
 
 if(isset($_GET['id']) && isset($_GET['acci'])){
@@ -1280,8 +1297,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           <!-- Aquí se insertará el contenido dinámico generado -->
             <?php 
               if($presupuestoGenerado): 
-                echo renderizar_presupuesto_html($presupuesto_generado, /*mostrarVistaDetallada=*/true);
-              endif; 
+                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada);
+              endif;                
             ?>
         </div>
       </div>
