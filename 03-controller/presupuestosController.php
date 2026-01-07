@@ -68,7 +68,47 @@ function poblarDatableAll($tds, $via, $filtro){
 
 	   		  }
 
-	   	  $filas .='<td></td><td></td>';	  //para relleno en el caso de datos futuros
+		  // Columna Presupuesto (solo si la visita está Ejecutada)
+		  $presupuestoHtml = '';
+
+		  if (isset($value_all_registros['estado_visita']) && $value_all_registros['estado_visita'] === 'Ejecutada') {
+
+		  	$estadoPresupuesto = isset($value_all_registros['estado_presupuesto']) ? $value_all_registros['estado_presupuesto'] : null;
+
+		  	// Si no existe presupuesto asociado, la leyenda es Pendiente (en rojo)
+		  	if ($estadoPresupuesto === null || $estadoPresupuesto === '') {
+		  		$presupuestoHtml = '<span class="text-danger"><strong>Pendiente</strong></span>';
+		  	} else {
+
+		  		// Mapeo de colores por estado
+		  		$claseEstado = 'text-secondary'; // default conservador
+
+		  		switch ($estadoPresupuesto) {
+		  			case 'Borrador':
+		  				$claseEstado = 'text-secondary';
+		  				break;
+		  			case 'Enviado':
+		  				$claseEstado = 'text-primary';
+		  				break;
+		  			case 'Aprobado':
+		  				$claseEstado = 'text-success';
+		  				break;
+		  			case 'Rechazado':
+		  				$claseEstado = 'text-danger';
+		  				break;
+		  			case 'Pendiente':
+		  				// Si el registro existe pero está en Pendiente, lo mantenemos en rojo también
+		  				$claseEstado = 'text-danger';
+		  				break;
+		  		}
+
+		  		$presupuestoHtml = '<span class="'.$claseEstado.'"><strong>'.$estadoPresupuesto.'</strong></span>';
+		  	}
+		  }
+
+		  // Presupuesto + Orden de compra (por ahora OC sigue vacía)
+	   	  $filas .= '<td>'.$presupuestoHtml.'</td><td></td>';	  //para relleno en el caso de datos futuros
+
 
    		  $filas .= '<td class="text-center"><i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i><i class="v-icon-accion p-1 fas fa-edit" data-accion="editar"></i><i class="v-icon-accion p-1 fas fa-print" data-accion="pdf"></i><i class="v-icon-accion text-danger p-1 fas fa-trash-alt" data-accion="delete" data-id="'.$value_all_registros['id_previsita'].'"></i></td>'; // acciones
 		  $filas .='</tr>';
