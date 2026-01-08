@@ -142,17 +142,62 @@ $filas = poblarDatableAll(array('id_previsita', 'log_alta', 'cuit', 'razon_socia
 <script src="../07-funciones_js/funciones.js"></script>
 
 <script>
+  // --- Orden correcto para fechas en formato DD-MM-YYYY (DataTables) ---
+  // Convierte "DD-MM-YYYY" -> número YYYYMMDD para ordenar real, no por texto.
+  jQuery.fn.dataTable.ext.type.order['date-eu-pre'] = function (d) {
+    if (!d) return 0;
+
+    // Si viene con espacios, o HTML (por ejemplo <span>), lo limpiamos:
+    d = ('' + d).replace(/<[^>]*>/g, '').trim();
+
+    // Esperado: DD-MM-YYYY
+    const parts = d.split('-');
+    if (parts.length !== 3) return 0;
+
+    const dd = parts[0].padStart(2, '0');
+    const mm = parts[1].padStart(2, '0');
+    const yyyy = parts[2];
+
+    // Si no parece fecha válida, devolvemos 0 para no romper el sort
+    if (yyyy.length !== 4) return 0;
+
+    return parseInt(yyyy + mm + dd, 10);
+  };
+
   $(function () {
     $("#current_table").DataTable({
       "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
-      "responsive": true, "lengthChange": true, "autoWidth": false, "pageLength": 100, 
+      "responsive": true,
+      "lengthChange": true,
+      "autoWidth": false,
+      "pageLength": 100,
       "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
       "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
-      "columns": [{ "width": "1%" }, { "width": "6%" }, { "width": "6%" }, { "width": "11%" }, { "width": "7%" }, { "width": "6%" }, { "width": "5%" }, { "width": "10%" },{ "width": "10%" },{ "width": "10%" }],
-       "order": [[4, "desc"], [5, "asc"], [6, "asc"]] // Ordenar por sexta columna y luego por séptima columna (ambas de forma ascendente)
+      "columns": [
+        { "width": "1%" },
+        { "width": "6%" },  // Ingreso
+        { "width": "6%" },
+        { "width": "11%" },
+        { "width": "7%" },
+        { "width": "6%" },
+        { "width": "5%" },
+        { "width": "10%" },
+        { "width": "10%" },
+        { "width": "10%" }
+      ],
+
+      // CLAVE: decirle a DataTables que la columna 1 (Ingreso) es date-eu
+      "columnDefs": [
+        { "targets": 1, "type": "date-eu" }, // Ingreso
+        { "targets": 5, "type": "date-eu" }  // Fecha
+      ],
+
+      // Tu orden actual (por Visita/Fecha/Hora) queda igual:
+      "order": [[4, "desc"], [5, "asc"], [6, "asc"]]
     }).buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
   });
 </script>
+
 </body>
 </html>
 <script src="../07-funciones_js/presupuestosAcciones.js"></script>
