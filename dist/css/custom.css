@@ -172,6 +172,15 @@ th {
     width: 100%; /* Ancho por defecto completo */
 }
 
+/* Presupuesto: no heredar min-width global dentro de tablas */
+.tabla-presupuesto .form-control {
+  min-width: 0 !important;
+}
+
+.tabla-presupuesto input[type="number"] {
+  min-width: 0 !important;
+}
+
 .ayuda {
     position: fixed;
     top: 0;
@@ -951,43 +960,6 @@ textarea.is-invalid {
   line-height: 1.2 !important;
 }
 
-/* Anchos para 6 columnas (suman 100%) */
-.tabla-presupuesto th:nth-child(1),
-.tabla-presupuesto td:nth-child(1) { width: 40%; } /* Material/Tipo */
-.tabla-presupuesto th:nth-child(2),
-.tabla-presupuesto td:nth-child(2) { width: 10%; } /* Cantidad */
-.tabla-presupuesto th:nth-child(3),
-.tabla-presupuesto td:nth-child(3) { width: 15%; } /* Precio unitario / Valor jornal */
-.tabla-presupuesto th:nth-child(4),
-.tabla-presupuesto td:nth-child(4) { width: 15%; } /* Monto extra fijo */
-.tabla-presupuesto th:nth-child(5),
-.tabla-presupuesto td:nth-child(5) { width: 10%; } /* % Extra */
-.tabla-presupuesto th:nth-child(6),
-.tabla-presupuesto td:nth-child(6) {
-  width: 10%;       /* Subtotal */
-  text-align: right;
-}
-
-.tabla-presupuesto {
-  table-layout: fixed;  /* Fuerza a respetar los anchos */
-}
-.tabla-presupuesto th,
-.tabla-presupuesto td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-
-/* 2) Quédate con esta y dale un padding horizontal amplio */
-.tabla-presupuesto input[type="number"] {
-  min-width: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 4px 8px;   /* 4px arriba/abajo, 8px izquierda/derecha */
-  margin: 0;          /* asegúrate de resetear cualquier margen */
-}
-
 /* Solo para el popover que tenga la clase .popover-wide */
 .popover-wide {
   max-width: none;
@@ -1059,9 +1031,81 @@ textarea.is-invalid {
 /* Espaciado entre ícono y texto */
 .btn-tarea i { margin-right: .35rem; }
 
+/* ===== Presupuesto: tablas Materiales / Mano de Obra ===== */
+.tabla-presupuesto {
+  width: 100%;
+  table-layout: fixed; /* fija el layout por columnas */
+}
 
+/* Alineación general */
+.tabla-presupuesto th,
+.tabla-presupuesto td {
+  vertical-align: middle;
+}
 
+/* Solo la primera columna (Material/Tipo) hace ellipsis */
+.tabla-presupuesto td:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  
-  
+/* Inputs ocupan la celda sin desbordar */
+.tabla-presupuesto input.form-control {
+  width: 100%;
+  box-sizing: border-box;
+}
 
+/* -------- Materiales (5 columnas) --------
+  1 Material
+  2 Cantidad
+  3 Precio Unitario
+  4 % Extra
+  5 Subtotal
+*/
+.tarea-materiales .tabla-presupuesto th:nth-child(2),
+.tarea-materiales .tabla-presupuesto td:nth-child(2) { width: 110px; }
+
+.tarea-materiales .tabla-presupuesto th:nth-child(3),
+.tarea-materiales .tabla-presupuesto td:nth-child(3) { width: 170px; }
+
+.tarea-materiales .tabla-presupuesto th:nth-child(4),
+.tarea-materiales .tabla-presupuesto td:nth-child(4) { width: 170px; }
+
+.tarea-materiales .tabla-presupuesto th:nth-child(5),
+.tarea-materiales .tabla-presupuesto td:nth-child(5) { width: 140px; }
+
+/* -------- Mano de Obra (6 columnas) --------
+  1 Tipo
+  2 Cantidad
+  3 Jornales
+  4 Valor Jornal
+  5 % Extra
+  6 Subtotal
+*/
+.tarea-mano-obra .tabla-presupuesto th:nth-child(2),
+.tarea-mano-obra .tabla-presupuesto td:nth-child(2) { width: 110px; }
+
+.tarea-mano-obra .tabla-presupuesto th:nth-child(3),
+.tarea-mano-obra .tabla-presupuesto td:nth-child(3) { width: 130px; }
+
+.tarea-mano-obra .tabla-presupuesto th:nth-child(4),
+.tarea-mano-obra .tabla-presupuesto td:nth-child(4) { width: 170px; }
+
+.tarea-mano-obra .tabla-presupuesto th:nth-child(5),
+.tarea-mano-obra .tabla-presupuesto td:nth-child(5) { width: 170px; }
+
+.tarea-mano-obra .tabla-presupuesto th:nth-child(6),
+.tarea-mano-obra .tabla-presupuesto td:nth-child(6) { width: 140px; }
+
+/* Mano de Obra: input de jornales solo visual (parece texto) */
+.mano-obra-table .jornales-mano-obra,
+.tarea-mano-obra .jornales-mano-obra {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  text-align: center;       /* alinea como subtotal */
+  pointer-events: none;   /* evita foco/edición */
+}
