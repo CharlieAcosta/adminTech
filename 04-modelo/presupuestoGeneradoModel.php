@@ -60,43 +60,32 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             }
 
 
-        if ($id_presupuesto === null) {
-            // No había uno previo: insertamos cabecera nueva
-            $stmt = mysqli_prepare($db, "
-                INSERT INTO presupuestos (id_previsita, id_visita, estado, moneda, version, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 1, NOW(), NOW())
-            ");
-            mysqli_stmt_bind_param($stmt, "iiss", $id_previsita, $id_visita, $estado, $moneda);
-            if (!mysqli_stmt_execute($stmt)) {
-                throw new RuntimeException('Error al insertar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+            if ($id_presupuesto === null) {
+                // No había uno previo: insertamos cabecera nueva
+                $stmt = mysqli_prepare($db, "
+                    INSERT INTO presupuestos (id_previsita, id_visita, estado, moneda, version, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 1, NOW(), NOW())
+                ");
+                mysqli_stmt_bind_param($stmt, "iiss", $id_previsita, $id_visita, $estado, $moneda);
+                if (!mysqli_stmt_execute($stmt)) {
+                    throw new RuntimeException('Error al insertar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                }
+                $id_presupuesto = mysqli_insert_id($db);
+                mysqli_stmt_close($stmt);
+            } else {
+                // Reutilizamos el existente: actualizamos cabecera (NO borrar hijos / NO borrar carpeta)
+                $stmt = mysqli_prepare($db, "
+                    UPDATE presupuestos
+                    SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
+                    WHERE id_presupuesto = ?
+                ");
+                mysqli_stmt_bind_param($stmt, "iisi", $id_previsita, $id_visita, $estado, $id_presupuesto);
+                if (!mysqli_stmt_execute($stmt)) {
+                    throw new RuntimeException('Error al actualizar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                }
+                mysqli_stmt_close($stmt);
             }
-            $id_presupuesto = mysqli_insert_id($db);
-            mysqli_stmt_close($stmt);
-        } else {
-            // Reutilizamos el existente: actualizamos cabecera y BORRAMOS hijos para reinsertar
-            $stmt = mysqli_prepare($db, "
-                UPDATE presupuestos
-                SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
-                WHERE id_presupuesto = ?
-            ");
-            mysqli_stmt_bind_param($stmt, "iisi", $id_previsita, $id_visita, $estado, $id_presupuesto);
-            if (!mysqli_stmt_execute($stmt)) {
-                throw new RuntimeException('Error al actualizar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
-            }
-            mysqli_stmt_close($stmt);
-
-            // Reemplazo completo de hijos
-            borrarHijosPresupuesto($db, $id_presupuesto);
-
-            // Limpieza física: borrar carpeta completa del presupuesto
-            $dir = rutaBaseFotosPresupuesto($id_presupuesto);
-            if (is_dir($dir)) {
-            eliminarDirectorioRecursivo($dir);
-    }
-
-        }
-
-
+          
         // === Insertar tareas e hijos desde payload ===
         $tareasPayload = $payload['tareas'] ?? [];
         $total_mostrado_cab = 0.0;
@@ -114,13 +103,50 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             $otros_materiales   = isset($t['otros_materiales']) ? (float)$t['otros_materiales'] : 0.0;
             $otros_mano_obra    = isset($t['otros_mano_obra']) ? (float)$t['otros_mano_obra'] : 0.0;
 
-            // Tarea
+
+        // Tarea (UPSERT por nro para mantener id_presu_tarea estable y preservar fotos)
+        $id_presu_tarea = obtenerIdPresuTareaPorNro($db, $id_presupuesto, $nro);
+
+        if ($id_presu_tarea) {
+            // Update tarea existente
+            $stmt = mysqli_prepare($db, "
+                UPDATE presupuesto_tareas
+                SET descripcion = ?,
+                    incluir_en_total = ?,
+                    utilidad_materiales_pct = ?,
+                    utilidad_mano_obra_pct = ?,
+                    otros_materiales_monto = ?,
+                    otros_mano_obra_monto = ?,
+                    updated_at = NOW()
+                WHERE id_presu_tarea = ?
+            ");
+            mysqli_stmt_bind_param(
+                $stmt,
+                "siddddi",
+                $descripcion,
+                $incluir_en_total,
+                $util_mat_pct,
+                $util_mo_pct,
+                $otros_materiales,
+                $otros_mano_obra,
+                $id_presu_tarea
+            );
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('Error al actualizar tarea: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+            }
+            mysqli_stmt_close($stmt);
+
+            // Borramos SOLO detalle recalculable (materiales/MO). Fotos NO.
+            borrarDetalleRecalculableDeTarea($db, $id_presu_tarea);
+
+        } else {
+            // Insert tarea nueva
             $stmt = mysqli_prepare($db, "
                 INSERT INTO presupuesto_tareas
                 (id_presupuesto, nro, descripcion, incluir_en_total,
-                 utilidad_materiales_pct, utilidad_mano_obra_pct,
-                 otros_materiales_monto, otros_mano_obra_monto,
-                 created_at, updated_at)
+                utilidad_materiales_pct, utilidad_mano_obra_pct,
+                otros_materiales_monto, otros_mano_obra_monto,
+                created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             ");
             mysqli_stmt_bind_param(
@@ -134,6 +160,8 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             }
             $id_presu_tarea = mysqli_insert_id($db);
             mysqli_stmt_close($stmt);
+        }
+        
 
             // === Materiales
             $suma_mat_filas = 0.0;
@@ -666,6 +694,41 @@ function borrarHijosPresupuesto(mysqli $db, int $id_presupuesto): void
     mysqli_query($db, "DELETE FROM presupuesto_tarea_material  WHERE id_presu_tarea IN ($in)");
     mysqli_query($db, "DELETE FROM presupuesto_tareas          WHERE id_presupuesto = " . (int)$id_presupuesto);
 }
+
+/**
+ * Devuelve id_presu_tarea existente para (id_presupuesto, nro) o null si no existe.
+ */
+function obtenerIdPresuTareaPorNro(mysqli $db, int $id_presupuesto, int $nro): ?int
+{
+    $stmt = mysqli_prepare($db, "
+        SELECT id_presu_tarea
+        FROM presupuesto_tareas
+        WHERE id_presupuesto = ? AND nro = ?
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        throw new RuntimeException('Error prepare obtenerIdPresuTareaPorNro: ' . mysqli_error($db));
+    }
+
+    mysqli_stmt_bind_param($stmt, "ii", $id_presupuesto, $nro);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = $res ? mysqli_fetch_assoc($res) : null;
+    mysqli_stmt_close($stmt);
+
+    return ($row && !empty($row['id_presu_tarea'])) ? (int)$row['id_presu_tarea'] : null;
+}
+
+/**
+ * Borra SOLO el detalle recalculable de una tarea (materiales y mano de obra).
+ * NO borra fotos (para preservarlas entre guardados).
+ */
+function borrarDetalleRecalculableDeTarea(mysqli $db, int $id_presu_tarea): void
+{
+    mysqli_query($db, "DELETE FROM presupuesto_tarea_mano_obra WHERE id_presu_tarea = " . (int)$id_presu_tarea);
+    mysqli_query($db, "DELETE FROM presupuesto_tarea_material  WHERE id_presu_tarea = " . (int)$id_presu_tarea);
+}
+
 
 /* ============================
  * Helpers de archivos/rutas

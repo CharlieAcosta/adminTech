@@ -358,20 +358,20 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 <input type="number" class="form-control form-control-sm precio-unitario '. $e($clase) .'"
                        value="'. $e($pu) .'" min="0" step="any" '. $e($ro) .'>
               </td>
-              <td></td>
               <td>
                 <input type="number" class="form-control form-control-sm porcentaje-extra"
                        value="'. $e($pctExtra) .'" min="0" step="any">
               </td>
               <td class="text-right subtotal-material">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
             </tr>';
+
         }
 
-        // --- Mano de obra
+        // --- Mano de obra (DB -> igual a visita: Operarios + Días + Jornales)
         $rowsMo = [];
         foreach (($t['mano_obra'] ?? []) as $mo) {
             $nombre   = $mo['nombre_jornal'] ?? '';
-            $cant     = $mo['cantidad'] ?? '0';
+            $operarios= $mo['operarios'] ?? $mo['cantidad'] ?? '0';          // en DB hoy viene como "cantidad"
             $valorJ   = $mo['valor_jornal_usado'] ?? '0';
             $pctExtra = $mo['porcentaje_extra'] ?? '0';
             $subfila  = $mo['subtotal_fila'] ?? '0.00';
@@ -381,23 +381,71 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $fechaRef = $mo['updated_at_origen'] ?? $mo['updated_at'] ?? null;
             [$clase, $ro] = $vigencia($fechaRef);
 
+            // Normalizamos numéricos para cálculo
+            $opNum   = (float)$operarios;
+            $jValNum = (float)$valorJ;
+            $pctNum  = (float)$pctExtra;
+            $subNum  = (float)$subfila;
+
+            // Días y jornales: si existen en DB los usamos; si no, deducimos desde subtotal
+            $diasDb     = $mo['dias'] ?? null;
+            $jornalesDb = $mo['jornales'] ?? null;
+
+            if ($diasDb !== null) {
+                $diasNum = (float)$diasDb;
+            } else {
+                // Deducción: base = subtotal / (1 + pctExtra/100)
+                // jornales = base / valorJ
+                // dias = jornales / operarios
+                if ($opNum > 0 && $jValNum > 0) {
+                    $factor = 1 + ($pctNum / 100);
+                    $base   = ($factor != 0) ? ($subNum / $factor) : 0;
+                    $jornalesCalc = ($jValNum != 0) ? ($base / $jValNum) : 0;
+                    $diasNum = ($opNum != 0) ? ($jornalesCalc / $opNum) : 0;
+                } else {
+                    $diasNum = 0;
+                }
+            }
+
+            if ($jornalesDb !== null) {
+                $jornalesNum = (float)$jornalesDb;
+            } else {
+                $jornalesNum = $opNum * $diasNum;
+            }
+
             $rowsMo[] = '
             <tr data-jornal_id="'. $e($jId) .'">
               <td>'. $e($nombre) .'</td>
+
+              <!-- Operarios -->
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-mano-obra"
-                       value="'. $e($cant) .'" min="0" step="any">
+                      value="'. $e($opNum) .'" min="0" step="any">
               </td>
+
+              <!-- Días -->
+              <td>
+                <input type="number" class="form-control form-control-sm dias-mano-obra"
+                      value="'. $e($diasNum) .'" min="0" step="any">
+              </td>
+
+              <!-- Jornales (Operarios × Días) -->
+              <td>
+                <input type="number" class="form-control form-control-sm jornales-mano-obra"
+                      value="'. $e($jornalesNum) .'" min="0" step="any" readonly>
+              </td>
+
               <td>
                 <input type="number" class="form-control form-control-sm valor-jornal '. $e($clase) .'"
-                       value="'. $e($valorJ) .'" min="0" step="any" '. $e($ro) .'>
+                      value="'. $e($jValNum) .'" min="0" step="any" '. $e($ro) .'>
               </td>
-              <td></td>
+
               <td>
                 <input type="number" class="form-control form-control-sm porcentaje-extra"
-                       value="'. $e($pctExtra) .'" min="0" step="any">
+                      value="'. $e($pctNum) .'" min="0" step="any">
               </td>
-              <td class="text-right subtotal-mano">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
+
+              <td class="text-right subtotal-mano">$'. $e(number_format((float)$subNum, 2, '.', '')) .'</td>
             </tr>';
         }
 
@@ -457,42 +505,44 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
               <!-- Derecha -->
               <div class="col-md-8 d-flex flex-column justify-content-start">
-                <!-- Materiales -->
-                <div class="tarea-materiales mb-0 mt-0 pt-0">
-                  <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
-                  <table class="tabla-presupuesto tabla-presupuesto-sm">
-                    <thead>
-                      <tr>
-                        <th>Material</th>
-                        <th>Cantidad</th>
-                        <th>Precio Unitario</th>
-                        <th>% Utilidad Materiales</th>
-                        <th>% Extra</th>
-                        <th>Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>'
-                    . implode('', $rowsMat) .
-                    '
-                      <tr class="fila-otros-materiales">
-                        <td><b>Otros</b></td><td></td><td></td><td></td><td></td>
-                        <td class="text-right">
-                          <input type="number" min="0" step="0.01"
-                                 class="form-control form-control-sm input-otros-materiales"
-                                 id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'">
-                        </td>
-                      </tr>
-                      <tr class="fila-subtotal">
-                        <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
-                        <td>
-                          <input type="number" class="form-control form-control-sm utilidad-global-materiales"
-                                 min="0" '. $roUtil .' value="'. $e($utilMatPct ?? '') .'" placeholder="%">
-                        </td>
-                        <td class="text-right"><b>$0.00</b></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+              <!-- Materiales -->
+              <div class="tarea-materiales mb-0 mt-0 pt-0">
+                <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+                <table class="tabla-presupuesto tabla-presupuesto-sm">
+                  <thead>
+                    <tr>
+                      <th>Material</th>
+                      <th>Cantidad</th>
+                      <th>Precio Unitario</th>
+                      <th>% Extra</th>
+                      <th>Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>'
+                  . implode('', $rowsMat) .
+                  '
+                    <tr class="fila-otros-materiales">
+                      <td><b>Otros</b></td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td class="text-right">
+                        <input type="number" min="0" step="0.01"
+                               class="form-control form-control-sm input-otros-materiales"
+                               id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'">
+                      </td>
+                    </tr>
+                    <tr class="fila-subtotal">
+                      <td colspan="3" class="text-right"><b>Subtotal Materiales</b></td>
+                      <td>
+                        <input type="number" class="form-control form-control-sm utilidad-global-materiales"
+                               min="0" '. $roUtil .' value="'. $e($utilMatPct ?? '') .'" placeholder="%">
+                      </td>
+                      <td class="text-right"><b>$0.00</b></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
 
                 <!-- Mano de Obra -->
                 <div class="tarea-mano-obra">
@@ -501,32 +551,38 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                     <thead>
                       <tr>
                         <th>Tipo</th>
-                        <th>Cantidad</th>
+                        <th>Operarios</th>
+                        <th>Días</th>
+                        <th>Jornales</th>
                         <th>Valor Jornal</th>
-                        <th>% Utilidad Mano de Obra</th>
                         <th>% Extra</th>
                         <th>Subtotal</th>
                       </tr>
-                    </thead>
+                    </thead>                
                     <tbody>'
                     . implode('', $rowsMo) .
                     '
-                      <tr class="fila-otros-mano">
-                        <td><b>Otros</b></td><td></td><td></td><td></td><td></td>
-                        <td class="text-right">
-                          <input type="number" min="0" step="0.01"
-                                 class="form-control form-control-sm input-otros-mano"
-                                 id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'">
-                        </td>
-                      </tr>
-                      <tr class="fila-subtotal">
-                        <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
-                        <td>
-                          <input type="number" class="form-control form-control-sm utilidad-global-mano-obra"
-                                 min="0" '. $roUtil .' value="'. $e($utilMoPct ?? '') .'" placeholder="%">
-                        </td>
-                        <td class="text-right"><b>$0.00</b></td>
-                      </tr>
+                    <tr class="fila-otros-mano">
+                      <td><b>Otros</b></td>
+                      <td></td> <!-- Operarios -->
+                      <td></td> <!-- Días -->
+                      <td></td> <!-- Jornales -->
+                      <td></td> <!-- Valor Jornal -->
+                      <td></td> <!-- % Extra -->
+                      <td class="text-right">
+                        <input type="number" min="0" step="0.01"
+                              class="form-control form-control-sm input-otros-mano"
+                              id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'">
+                      </td>
+                    </tr>
+                    <tr class="fila-subtotal">
+                      <td colspan="5" class="text-right"><b>Subtotal Mano de Obra</b></td>
+                      <td>
+                        <input type="number" class="form-control form-control-sm utilidad-global-mano-obra"
+                              min="0" '. $roUtil .' value="'. $e($utilMoPct ?? '') .'" placeholder="%">
+                      </td>
+                      <td class="text-right"><b>$0.00</b></td>
+                    </tr>                  
                     </tbody>
                   </table>
                 </div>
