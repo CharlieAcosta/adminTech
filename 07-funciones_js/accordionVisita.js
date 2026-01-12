@@ -306,6 +306,12 @@ $(document).ready(function() {
 
       const index = tabla.find('tr').length + 1;
 
+      // ✅ Días por defecto según tu HTML actual (value="1")
+      const dias = 1;
+
+      // ✅ Jornales = cantidad × días
+      const jornales = (parseFloat(cantidad) || 0) * (parseFloat(dias) || 1);
+
       const fila = `
         <tr data-jornal_id="${idJornal}" data-jornal_valor="${valor}" data-updated_at="${updatedAt}">
           <td>${index}</td>
@@ -319,10 +325,10 @@ $(document).ready(function() {
           </td>
           <td class="text-center align-middle p-0">
             <div style="width: 100%; display: flex; justify-content: center;">
-              <input type="number" class="form-control form-control-sm mano-obra-dias" name="mano_obra_dias[]" value="1" min="1" style="min-width: 60px; max-width: 60px;">
+              <input type="number" class="form-control form-control-sm mano-obra-dias" name="mano_obra_dias[]" value="${dias}" min="1" style="min-width: 60px; max-width: 60px;">
             </div>
           </td>
-          <td class="text-center mano-obra-jornales">${cantidad}</td>               
+          <td class="text-center mano-obra-jornales">${jornales}</td>               
           <td>
             <input type="text" name="mano_obra_observacion[]" class="form-control form-control-sm" placeholder="Observaciones">
           </td>
@@ -336,7 +342,6 @@ $(document).ready(function() {
       $select.val(null).trigger('change');
       $cantidad.val('');
     });
-
 
     // Función para eliminar mano de obra
     $(document).on('click', '.eliminar-mano-obra', function () {
@@ -355,7 +360,19 @@ $(document).ready(function() {
         }
     });
 
+    // ✅ Recalcular jornales (Cantidad × Días) en mano de obra (VISITA)
+    function recalcularJornalesFila($tr) {
+      const cant = parseFloat($tr.find('input[name="mano_obra_cantidad[]"]').val()) || 0;
+      const dias = parseFloat($tr.find('input[name="mano_obra_dias[]"]').val()) || 1;
+      const jornales = cant * dias;
+      $tr.find('.mano-obra-jornales').text(jornales);
+    }
 
+    // Cuando cambia días (input/change)
+    $(document).on('input change', '.mano-obra-dias', function () {
+      recalcularJornalesFila($(this).closest('tr'));
+    });
+    
     $(document).on('change', '.tarea-fotos', function (e) {
           const input = e.target;
           const index = $(input).data('index'); // índice de la tarea
@@ -1225,18 +1242,36 @@ $(document).ready(function() {
      * subtotal = cantidad×valorJornal + extraFijo + %extra sobre el resultado.
      */
     function calcularFilaManoObra($tr) {
-      const cantidad = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0;
-      const jornal   = parseFloat($tr.find('.valor-jornal').val())       || 0;
+      // Operarios (antes "cantidad")
+      const operarios = parseFloat(String($tr.find('.cantidad-mano-obra').val()).replace(',', '.')) || 0;
     
-      let subtotal = cantidad * jornal;
+      // Días (nuevo)
+      const dias = parseFloat(String($tr.find('.dias-mano-obra').val()).replace(',', '.')) || 0;
     
-      const porcentajeExtra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
-      subtotal += subtotal * (porcentajeExtra / 100);
+      // Jornales = Operarios × Días (derivado SIEMPRE)
+      const jornalesCalc = operarios * dias;
+    
+      // Escribimos el valor calculado en el input de jornales para que se vea reflejado
+      const $jornalesInput = $tr.find('.jornales-mano-obra');
+      if ($jornalesInput.length) {
+        $jornalesInput.val(jornalesCalc);
+      }
+    
+      // Valor jornal
+      const jornal = parseFloat(String($tr.find('.valor-jornal').val()).replace(',', '.')) || 0;
+    
+      // Base = jornales × valor
+      const base = jornalesCalc * jornal;
+    
+      // % extra
+      const porcentajeExtra = parseFloat(String($tr.find('.porcentaje-extra').val()).replace(',', '.')) || 0;
+      const subtotal = base + (base * (porcentajeExtra / 100));
     
       $tr.find('.subtotal-mano').text(formatMoney(subtotal));
     }
-    window.calcularFilaManoObra     = calcularFilaManoObra;
-   
+    window.calcularFilaManoObra = calcularFilaManoObra;
+    
+     
     /**
      * Formatea un número como moneda en formato español:
      * miles con punto, decimales con coma.
@@ -1495,40 +1530,39 @@ $(document).ready(function() {
         }
 
         htmlMateriales += `
-          <tr data-material-id="${mat.id_material ?? ''}">
-            <td>${mat.nombre || ''}</td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm cantidad-material"
-                value="${cantidad}"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm precio-unitario ${claseAlerta}"
-                value="${precioUnitario}"
-                min="0"
-                step="any"
-                ${readonly}
-              >
-            </td>
-            <td>
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm porcentaje-extra"
-                value="0"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td class="text-right subtotal-material">$0.00</td>
-          </tr>`;
+        <tr data-material-id="${mat.id_material ?? ''}">
+          <td>${mat.nombre || ''}</td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm cantidad-material"
+              value="${cantidad}"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm precio-unitario ${claseAlerta}"
+              value="${precioUnitario}"
+              min="0"
+              step="any"
+              ${readonly}
+            >
+          </td>
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm porcentaje-extra"
+              value="0"
+              min="0"
+              step="any"
+            >
+          </td>
+          <td class="text-right subtotal-material">$0.00</td>
+        </tr>`;    
+
       });
 
       
@@ -1536,15 +1570,18 @@ $(document).ready(function() {
       let htmlManoObra = '';
       tarea.mano_obra.forEach((mo) => {
         const valorJornal = mo.jornal_valor ?? 0;
-        const cantidadMo = mo.cantidad ?? 0;
+        const cantidadMo  = mo.cantidad ?? 0;
+
+        // Jornales iniciales: los trae la visita.
+        // Priorizamos mo.jornales si viene; si no, intentamos cantidad×días si viene mo.dias; si no, fallback cantidad.
+        const diasMo     = (mo.dias ?? null);
+        const jornalesMo = (mo.jornales ?? (diasMo != null ? (cantidadMo * diasMo) : cantidadMo)) ?? 0;
 
         let claseAlerta = '';
         let readonly = '';
 
         if (mo.updated_at) {
           const fechaMO = new Date(mo.updated_at);
-          // Si está vencido (>30 días) → bg-danger (editable)
-          // Si NO está vencido → bg-success + readonly
           if ((hoy - fechaMO) > (30 * 24 * 60 * 60 * 1000)) {
             claseAlerta = 'bg-danger';
           } else {
@@ -1552,48 +1589,75 @@ $(document).ready(function() {
             readonly = 'readonly';
           }
         } else {
-          // Si no hay updated_at, lo consideramos vigente por defecto
           claseAlerta = 'bg-success';
           readonly = 'readonly';
         }
 
         htmlManoObra += `
-          <tr data-jornal_id="${mo.jornal_id ?? ''}">
-            <td>${mo.nombre || ''}</td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm cantidad-mano-obra"
-                value="${cantidadMo}"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm valor-jornal ${claseAlerta}"
-                value="${valorJornal}"
-                min="0"
-                step="any"
-                ${readonly}
-              >
-            </td>
-            <td>
-            </td>
-            <td>
-              <input
-                type="number"
-                class="form-control form-control-sm porcentaje-extra"
-                value="0"
-                min="0"
-                step="any"
-              >
-            </td>
-            <td class="text-right subtotal-mano">$0.00</td>
-          </tr>`;
-      });
+        <tr data-jornal_id="${mo.jornal_id ?? ''}">
+          <td>${mo.nombre || ''}</td>
+        
+          <!-- Operarios (internamente cantidad) -->
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm cantidad-mano-obra"
+              value="${cantidadMo}"
+              min="0"
+              step="any"
+            >
+          </td>
+        
+          <!-- Días -->
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm dias-mano-obra"
+              value="${diasMo != null ? diasMo : 0}"
+              min="0"
+              step="any"
+            >
+          </td>
+        
+          <!-- Jornales (derivado: Operarios × Días) -->
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm jornales-mano-obra"
+              value="${jornalesMo}"
+              min="0"
+              step="any"
+              readonly
+            >
+          </td>
+        
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm valor-jornal ${claseAlerta}"
+              value="${valorJornal}"
+              min="0"
+              step="any"
+              ${readonly}
+            >
+          </td>
+        
+          <td>
+            <input
+              type="number"
+              class="form-control form-control-sm porcentaje-extra"
+              value="0"
+              min="0"
+              step="any"
+            >
+          </td>
+        
+          <td class="text-right subtotal-mano">$0.00</td>
+        </tr>`;
+        
 
+      
+      });
 
        const claseUtilidades = mostrarVistaDetallada ? '' : 'd-none';
        const claseImpuestos  = mostrarVistaDetallada ? '' : 'd-none';
@@ -1659,16 +1723,14 @@ $(document).ready(function() {
                       <th>Material</th>
                       <th>Cantidad</th>
                       <th>Precio Unitario</th>
-                      <th>% Utilidad Materiales</th>
                       <th>% Extra</th>
                       <th>Subtotal</th>
                     </tr>
-                  </thead>
+                  </thead>              
                   <tbody>
                     ${htmlMateriales}
                     <tr class="fila-otros-materiales">
                     <td><b>Otros</b></td>
-                    <td></td>
                     <td></td>
                     <td></td>
                     <td></td>
@@ -1684,7 +1746,7 @@ $(document).ready(function() {
                       </td>
                     </tr>                 
                     <tr class="fila-subtotal">
-                      <td colspan="4" class="text-right"><b>Subtotal Materiales</b></td>
+                      <td colspan="3" class="text-right"><b>Subtotal Materiales</b></td>
                       <td>
                         <input
                         type="number"
@@ -1707,21 +1769,23 @@ $(document).ready(function() {
                   <thead>
                     <tr>
                       <th>Tipo</th>
-                      <th>Cantidad</th>
+                      <th>Operarios</th>
+                      <th>Días</th>
+                      <th>Jornales</th>
                       <th>Valor Jornal</th>
-                      <th>% Utilidad Mano de Obra</th>
                       <th>% Extra</th>
                       <th>Subtotal</th>
                     </tr>
-                  </thead>
+                  </thead>                          
                   <tbody>
                     ${htmlManoObra}
                     <tr class="fila-otros-mano">
                     <td><b>Otros</b></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
+                    <td></td> <!-- Operarios -->
+                    <td></td> <!-- Días -->
+                    <td></td> <!-- Jornales -->
+                    <td></td> <!-- Valor Jornal -->
+                    <td></td> <!-- % Extra -->
                     <td class="text-right">
                       <input
                         type="number"
@@ -1732,19 +1796,20 @@ $(document).ready(function() {
                         value="${tarea.otros_mano_obra ?? 0}"
                       >
                     </td>
-                  </tr>                 
+                  </tr>                                                   
                     <tr class="fila-subtotal">
-                      <td colspan="4" class="text-right"><b>Subtotal Mano de Obra</b></td>
-                      <td>
+                    <td colspan="5" class="text-right"><b>Subtotal Mano de Obra</b></td>
+                    <td>
                       <input
                         type="number"
                         class="form-control form-control-sm utilidad-global-mano-obra"
                         min="0"
                         value="${tarea.utilidad_mano_obra ?? ''}"
-                        placeholder="%"/>                    
-                      </td>
-                      <td class="text-right"><b>$0.00</b></td>
-                    </tr>
+                        placeholder="%"
+                      />
+                    </td>
+                    <td class="text-right"><b>$0.00</b></td>
+                  </tr>               
                   </tbody>
                 </table>
               </div>

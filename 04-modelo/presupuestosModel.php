@@ -40,11 +40,22 @@ function modGetAllRegistros($filtro){
    }
 
    $query = "
-   SELECT v.*
+   SELECT 
+      v.*,
+      p.estado AS estado_presupuesto
    FROM previsitas AS v
+   LEFT JOIN (
+      SELECT 
+         id_previsita,
+         MAX(id_presupuesto) AS max_id_presupuesto
+      FROM presupuestos
+      GROUP BY id_previsita
+   ) AS up ON up.id_previsita = v.id_previsita
+   LEFT JOIN presupuestos AS p ON p.id_presupuesto = up.max_id_presupuesto
    ".$were."
    ".$orderBy."
    ;";
+
 
    $resultado = $db->query($query);
    while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
