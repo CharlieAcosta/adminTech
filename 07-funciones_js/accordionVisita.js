@@ -1914,21 +1914,29 @@ $(document).ready(function() {
     
     // Bloque total general con botón Guardar
     const htmlTotal = `
-      <div class="presupuesto-total-card">
-        <div class="presupuesto-total-row">
-          <div class="presupuesto-total-actions">
-            <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2" type="button"> 
-              <i class="fas fa-save"></i> Guardar
-            </button>
-            <button class="btn btn-primary mr-2"><i class="fas fa-print"></i> Imprimir</button>
-            <button class="btn btn-primary"><i class="fas fa-envelope"></i> Enviar por mail</button>
-          </div>
-          <div class="presupuesto-total-label">
-            <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
-            <span class="presupuesto-total-valor">$0.00</span>
-          </div>
+    <div class="presupuesto-total-card">
+      <div class="presupuesto-total-row">
+        <div class="presupuesto-total-actions">
+          <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2">
+            <i class="fas fa-save"></i> Guardar(js) 
+          </button>
+  
+          <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto" disabled>
+            <i class="fas fa-print"></i> Imprimir(js) 
+          </button>
+  
+          <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail" disabled>
+            <i class="fas fa-envelope"></i> Enviar por mail(js) 
+          </button>
         </div>
-      </div>`;
+  
+        <div class="presupuesto-total-label">
+          <span class="presupuesto-total-title">TOTAL PRESUPUESTO:</span>
+          <span class="presupuesto-total-valor">$0.00</span>
+        </div>
+      </div>
+    </div>`;
+  
       contenedor.append(htmlTotal);
 
        // === Guardar presupuesto (delegado sobre el contenedor)
@@ -2050,21 +2058,33 @@ $(document).ready(function() {
           });
 
           if (resp && resp.ok) {
+
             if (resp.id_presupuesto) {
+              // Guardar el id en el contenedor (estado “guardado”)
               $('#contenedorPresupuestoGenerado').data('id_presupuesto', resp.id_presupuesto);
             }
+          
             mostrarExito('Presupuesto guardado correctamente.');
-
+          
+            // Recalcular si aplica
             if (typeof window.initRecalculoPresupuestoCargado === 'function') {
               window.initRecalculoPresupuestoCargado();
             }
-                     
-            // (Opcional) limpiar buffers de nuevas si el back ya las guardó
+          
+            // ✅ CLAVE: re-evaluar habilitación de botones (imprimir/mail)
+            if (typeof verificarDatosVencidos === 'function') {
+              verificarDatosVencidos();
+            } else if (typeof window.verificarDatosVencidos === 'function') {
+              window.verificarDatosVencidos();
+            }
+          
+            // (Opcional) limpiar buffers si el back ya las guardó
             presuImagenesPorTarea = {};
             presuFotosEliminadas  = {};
+          
           } else {
             mostrarError(resp?.msg || 'No se pudo guardar el presupuesto.');
-          }
+          }        
         } catch (err) {
           console.log('Error al guardar presupuesto:', err);
           mostrarError('Error al guardar el presupuesto.');
@@ -2360,20 +2380,30 @@ $(document).ready(function() {
 
         }
       } else {
-        // No hay vencidos: habilitar botones y resetear el flag para futuros alerts
-        $botones.prop('disabled', false).each(function () {
-          const $btn = $(this);
-          // Restaurar estilos coherentes
-          if ($btn.text().includes('Guardar')) {
-            $btn.addClass('btn-success').removeClass('btn-secondary');
-          } else {
-            $btn.addClass('btn-primary').removeClass('btn-secondary');
-          }
-        });
-    
+        // ✅ Guardar: se habilita si no hay vencidos
+        $('.presupuesto-total-actions #btn-guardar-presupuesto')
+          .prop('disabled', false)
+          .addClass('btn-success')
+          .removeClass('btn-secondary');
+      
+        // ❌ Imprimir y Mail: SOLO si hay id_presupuesto
+        const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
+      
+        if (idPresupuesto) {
+          $('.btn-imprimir-presupuesto, .btn-enviar-presupuesto-mail')
+            .prop('disabled', false)
+            .addClass('btn-primary')
+            .removeClass('btn-secondary');
+        } else {
+          $('.btn-imprimir-presupuesto, .btn-enviar-presupuesto-mail')
+            .prop('disabled', true)
+            .removeClass('btn-primary')
+            .addClass('btn-secondary');
+        }
+      
         alertaDesactualizadosMostrada = false;
       }
-    }
+      }
   
     // al final del $(document).ready, antes de cerrar:
     if ($('#contenedorPresupuestoGenerado .tarea-card').length) {
