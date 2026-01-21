@@ -2431,6 +2431,381 @@ $(document).ready(function() {
       window.actualizarTotalGeneral();
     })();
 
+// código de impresión ////////////////////////////////////////////
+// ===============================
+// IMPRIMIR PRESUPUESTO (BORRADOR) - HANDLER GLOBAL
+// ===============================
+(function () {
+  // lock global anti doble impresión
+  window.__PRESU_PRINT_LOCK__ = window.__PRESU_PRINT_LOCK__ || false;
+
+  $(document)
+    .off('click', '.btn-imprimir-presupuesto')
+    .on('click', '.btn-imprimir-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      const $btn = $(this);
+
+      // Respeta disabled real si el botón lo trae
+      if ($btn.prop('disabled')) return false;
+
+      // Anti doble disparo (doble click, listeners duplicados, comportamiento raro del navegador)
+      if (window.__PRESU_PRINT_LOCK__) return false;
+      window.__PRESU_PRINT_LOCK__ = true;
+
+      try {
+        // Solo imprimimos si existe id_presupuesto (guardado)
+        const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
+        if (!idPresupuesto) {
+          if (typeof mostrarAdvertencia === 'function') {
+            mostrarAdvertencia('Debe guardar el presupuesto antes de imprimir.', 4);
+          } else {
+            alert('Debe guardar el presupuesto antes de imprimir.');
+          }
+          window.__PRESU_PRINT_LOCK__ = false;
+          return false;
+        }
+
+        // Tomamos datos desde tu recolector (si existe)
+        const datos = (typeof recolectarDatosParaPresupuesto === 'function')
+          ? recolectarDatosParaPresupuesto()
+          : null;
+
+        const cliente = datos?.cliente || {};
+        const obra    = datos?.obra || {};
+        const presup  = datos?.presupuesto || {};
+
+        // Total mostrado
+        const totalTxt = ($('.presupuesto-total-valor').first().text() || '').trim() || 'FALTA COMPLETAR';
+
+        // Helpers
+        const esc = (s) => String(s ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+
+        const valOrFalta = (v) => {
+          const t = String(v ?? '').trim();
+          return t ? esc(t) : '<span class="falta">FALTA COMPLETAR</span>';
+        };
+
+        // Logo (ruta relativa)
+        const logoSrc = 'dist/img/logos_propios/ecotechos-logo_resplandor-624x213.png';
+
+        // Construir HTML de tareas desde el DOM del presupuesto
+        let htmlTareas = '';
+
+        $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
+          const nro = idx + 1;
+          const $card = $(this);
+
+          const desc = ($card.find('.tarea-encabezado b').text() || '').trim()
+            || ($card.find('textarea').first().val() || '').trim()
+            || `Tarea ${nro}`;
+
+          // Materiales
+          let filasMat = '';
+          $card.find('.tarea-materiales tbody tr')
+            .not('.fila-subtotal,.fila-otros-materiales')
+            .each(function () {
+              const $tr = $(this);
+              const material = ($tr.find('td').eq(0).text() || '').trim();
+              const cant = ($tr.find('.cantidad-material').val() ?? '').toString();
+              const pu   = ($tr.find('.precio-unitario').val() ?? '').toString();
+              const pex  = ($tr.find('.porcentaje-extra').val() ?? '').toString();
+              const sub  = ($tr.find('.subtotal-material').text() || '').trim();
+
+              filasMat += `
+                <tr>
+                  <td>${esc(material)}</td>
+                  <td class="num">${esc(cant)}</td>
+                  <td class="num">${esc(pu)}</td>
+                  <td class="num">${esc(pex)}</td>
+                  <td class="num">${esc(sub)}</td>
+                </tr>`;
+            });
+
+          const otrosMat = ($card.find('.input-otros-materiales').val() ?? '').toString();
+          const subtotalMat = ($card.find('.tarea-materiales .fila-subtotal td:last-child b').text() || '').trim();
+
+          // Mano de obra
+          let filasMO = '';
+          $card.find('.tarea-mano-obra tbody tr')
+            .not('.fila-subtotal,.fila-otros-mano')
+            .each(function () {
+              const $tr = $(this);
+              const tipo = ($tr.find('td').eq(0).text() || '').trim();
+              const oper = ($tr.find('.cantidad-mano-obra').val() ?? '').toString();
+              const dias = ($tr.find('.dias-mano-obra').val() ?? '').toString();
+              const jor  = ($tr.find('.jornales-mano-obra').val() ?? '').toString();
+              const valJ = ($tr.find('.valor-jornal').val() ?? '').toString();
+              const pex  = ($tr.find('.porcentaje-extra').val() ?? '').toString();
+              const sub  = ($tr.find('.subtotal-mano').text() || '').trim();
+
+              filasMO += `
+                <tr>
+                  <td>${esc(tipo)}</td>
+                  <td class="num">${esc(oper)}</td>
+                  <td class="num">${esc(dias)}</td>
+                  <td class="num">${esc(jor)}</td>
+                  <td class="num">${esc(valJ)}</td>
+                  <td class="num">${esc(pex)}</td>
+                  <td class="num">${esc(sub)}</td>
+                </tr>`;
+            });
+
+          const otrosMO = ($card.find('.input-otros-mano').val() ?? '').toString();
+          const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
+
+          const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
+
+          // Fotos
+          let fotosHtml = '';
+          const $prev = $(`#presu_preview_${nro}`);
+          if ($prev.length) {
+            $prev.find('img').each(function () {
+              const src = $(this).attr('src');
+              if (!src) return;
+              fotosHtml += `<img class="foto" src="${esc(src)}" alt="Foto tarea ${nro}">`;
+            });
+          }
+          if (!fotosHtml) fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
+
+          htmlTareas += `
+            <section class="bloque">
+              <h3>Tarea ${nro}</h3>
+              <div class="linea"><b>Detalle:</b> ${esc(desc)}</div>
+
+              <div class="grid2">
+                <div>
+                  <h4>Materiales</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Material</th>
+                        <th class="num">Cantidad</th>
+                        <th class="num">Precio Unit.</th>
+                        <th class="num">% Extra</th>
+                        <th class="num">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${filasMat || `<tr><td colspan="5" class="falta">FALTA COMPLETAR</td></tr>`}
+                      <tr>
+                        <td><b>Otros</b></td>
+                        <td colspan="3"></td>
+                        <td class="num">${esc(otrosMat || '0')}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="4" class="num"><b>Subtotal Materiales</b></td>
+                        <td class="num"><b>${esc(subtotalMat || 'FALTA COMPLETAR')}</b></td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <h4 style="margin-top:14px;">Mano de obra</h4>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th class="num">Oper.</th>
+                        <th class="num">Días</th>
+                        <th class="num">Jornales</th>
+                        <th class="num">Valor</th>
+                        <th class="num">% Extra</th>
+                        <th class="num">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${filasMO || `<tr><td colspan="7" class="falta">FALTA COMPLETAR</td></tr>`}
+                      <tr>
+                        <td><b>Otros</b></td>
+                        <td colspan="5"></td>
+                        <td class="num">${esc(otrosMO || '0')}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="6" class="num"><b>Subtotal Mano de Obra</b></td>
+                        <td class="num"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div class="subtarea"><b>${esc(subtTareaTxt)}</b></div>
+                </div>
+
+                <div>
+                  <h4>Imágenes</h4>
+                  <div class="fotos">${fotosHtml}</div>
+                </div>
+              </div>
+            </section>
+          `;
+        });
+
+        // HTML completo (lo usamos para extraer el <body>)
+        const baseHref = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
+        const html = `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <base href="${esc(baseHref)}">
+  <title>Presupuesto (Borrador) #${esc(idPresupuesto)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color:#111; margin: 24px; }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .logo img { max-width: 260px; height:auto; }
+    .doc { text-align:right; }
+    .doc h1 { margin:0; font-size: 20px; }
+    .muted { color:#666; font-size: 12px; }
+    hr { border:0; border-top:1px solid #ddd; margin: 16px 0; }
+
+    .falta { color:#b00020; font-weight:700; }
+    .box { border:1px solid #ddd; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .linea { margin: 4px 0; }
+    .bloque { margin-top: 14px; }
+    h3 { margin: 0 0 10px; font-size: 16px; border-left: 4px solid #111; padding-left: 8px; }
+    h4 { margin: 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color:#333; }
+    table { width:100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border:1px solid #ddd; padding: 6px 8px; vertical-align: top; }
+    th { background:#f5f5f5; text-align:left; }
+    .num { text-align: right; white-space: nowrap; }
+    .grid2 { display:grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+    .fotos { display:flex; flex-wrap:wrap; gap:8px; }
+    .foto { width: 160px; height: 120px; object-fit: cover; border:1px solid #ddd; border-radius: 8px; }
+    .subtarea { margin-top: 10px; padding: 8px 10px; background:#f7f7f7; border:1px solid #ddd; border-radius: 8px; text-align:right; }
+
+    .total { display:flex; justify-content:flex-end; margin-top: 14px; }
+    .total .valor { font-size: 18px; font-weight: 800; padding: 10px 14px; border: 2px solid #111; border-radius: 10px; }
+
+    @media print {
+      body { margin: 10mm; }
+      .box { break-inside: avoid; }
+      .bloque { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div class="logo">
+      <img src="${esc(logoSrc)}" alt="Logo">
+    </div>
+    <div class="doc">
+      <h1>Presupuesto (Borrador)</h1>
+      <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div class="grid">
+    <div class="box">
+      <h4>Cliente</h4>
+      <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
+      <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
+      <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
+      <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
+      <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
+      <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+    </div>
+
+    <div class="box">
+      <h4>Obra / Visita</h4>
+      <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
+      <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
+      <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
+      <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
+      <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+    </div>
+  </div>
+
+  ${htmlTareas || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
+
+  <div class="total">
+    <div class="valor">TOTAL: ${esc(totalTxt)}</div>
+  </div>
+</body>
+</html>`;
+
+        // ====== IMPRIMIR EN LA MISMA PÁGINA (SIN TAB / SIN IFRAME) ======
+        const PRINT_ROOT_ID  = 'presu-print-root';
+        const PRINT_STYLE_ID = 'presu-print-style';
+
+        // 1) Inyectar CSS de impresión una sola vez (con display:none para evitar “basura”)
+        if (!document.getElementById(PRINT_STYLE_ID)) {
+          const st = document.createElement('style');
+          st.id = PRINT_STYLE_ID;
+          st.type = 'text/css';
+          st.textContent = `
+            /* En pantalla: el root no debe verse jamás */
+            #${PRINT_ROOT_ID} { display:none !important; }
+
+            @media print {
+              /* Oculta todo el layout real */
+              body > *:not(#${PRINT_ROOT_ID}) { display:none !important; }
+
+              /* Muestra solo impresión */
+              #${PRINT_ROOT_ID} {
+                display:block !important;
+                position: static !important;
+                width: 100% !important;
+                background: #fff !important;
+              }
+            }
+          `;
+          document.head.appendChild(st);
+        }
+
+        // 2) Crear/obtener el contenedor de impresión
+        let $printRoot = $('#' + PRINT_ROOT_ID);
+        if (!$printRoot.length) {
+          $printRoot = $('<div/>', { id: PRINT_ROOT_ID }).appendTo('body');
+        }
+
+        // 3) Volcar el BODY interno dentro del contenedor
+        const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        const soloBody  = bodyMatch ? bodyMatch[1] : html;
+
+        $printRoot.html(soloBody);
+
+        // 4) Limpieza + unlock (afterprint + fallback)
+        const cleanup = () => {
+          try { $printRoot.empty(); } catch (e) {}
+          window.__PRESU_PRINT_LOCK__ = false;
+        };
+
+        window.onafterprint = cleanup;
+
+        setTimeout(() => {
+          window.print();
+
+          // fallback por si afterprint no dispara
+          setTimeout(cleanup, 600);
+        }, 150);
+
+        return false;
+
+      } catch (err) {
+        console.log('Error al imprimir presupuesto:', err);
+        window.__PRESU_PRINT_LOCK__ = false;
+        if (typeof mostrarError === 'function') {
+          mostrarError('Error al imprimir el presupuesto.');
+        } else {
+          alert('Error al imprimir el presupuesto.');
+        }
+        return false;
+      }
+    });
+})();
+
+// código de impresión ////////////////////////////////////////////
+
 });
 
 // Endpoint (ajustá si cambió)

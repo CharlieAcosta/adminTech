@@ -790,16 +790,13 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   // 0) Título de la tarea = nombre de la plantilla
   const $titulo = $card.find('.tarea-encabezado b');
   if ($titulo.length) {
-    // Conserva el número actual de la card
     const txtActual = ($titulo.text() || '');
     const m = txtActual.match(/Tarea\s+(\d+)/i);
     const nroTxt = m ? m[1] : '';
     $titulo.text(`Tarea ${nroTxt}: ${tareaPlantilla.nombre_plantilla || ''}`);
   }
 
-  // 0.b) Descripción (textarea) = descripcion de la plantilla (o nombre_original como fallback)
-  console.log('Plantilla recibida → descripcion:', tareaPlantilla.descripcion, 'nombre_original:', tareaPlantilla.nombre_original);
-
+  // 0.b) Descripción (textarea)
   let nuevaDescripcion = '';
   if (typeof tareaPlantilla.descripcion === 'string' && tareaPlantilla.descripcion.trim() !== '') {
     nuevaDescripcion = tareaPlantilla.descripcion.trim();
@@ -808,18 +805,13 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   }
 
   let $txt = $card.find('textarea.tarea-descripcion').first();
-  if (!$txt.length) {
-    // Fallback por si la clase difiere en esta vista
-    $txt = $card.find('textarea').first();
-  }
-  if ($txt.length) {
-    $txt.val(nuevaDescripcion).trigger('input');
-  }
+  if (!$txt.length) $txt = $card.find('textarea').first();
+  if ($txt.length) $txt.val(nuevaDescripcion).trigger('input');
 
   // 1) Incluir en total
   $card.find('.incluir-en-total').prop('checked', !!tareaPlantilla.incluir_en_total);
 
-  // 2) Setear utilidades y "otros"
+  // 2) Utilidades y "otros"
   const uMat = tareaPlantilla.utilidad_materiales;
   const uMo  = tareaPlantilla.utilidad_mano_obra;
   $card.find('.utilidad-global-materiales').val(uMat === null ? '' : uMat);
@@ -828,89 +820,123 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   $card.find('.input-otros-materiales').val(tareaPlantilla.otros_materiales || 0);
   $card.find('.input-otros-mano').val(tareaPlantilla.otros_mano_obra || 0);
 
-// 3) Preparar TBODY de Materiales y Mano de Obra preservando el orden correcto
-const $tbMat = $card.find('.tarea-materiales tbody');
-const $tbMo  = $card.find('.tarea-mano-obra tbody');
+  // 3) TBODYs
+  const $tbMat = $card.find('.tarea-materiales tbody');
+  const $tbMo  = $card.find('.tarea-mano-obra tbody');
 
-// --- Materiales: detach de "Otros" y "Subtotal" para reinsertar al final ---
-const $matOtros    = $tbMat.find('tr.fila-otros-materiales').first().detach();
-const $matSubtotal = $tbMat.find('tr.fila-subtotal').first().detach();
-// Limpiar resto
-$tbMat.empty();
+  // =========================
+  // MATERIALS (modo visita)
+  // Header: Material | Cantidad | Precio Unitario | % Extra | Subtotal (5 cols)
+  // =========================
+  const $matOtros    = $tbMat.find('tr.fila-otros-materiales').first().detach();
+  const $matSubtotal = $tbMat.find('tr.fila-subtotal').first().detach();
+  $tbMat.empty();
 
-// 4) Inyectar materiales (6 columnas: Nombre | Cant. | Precio | %Util fila (placeholder) | % Extra | Subtotal)
-(tareaPlantilla.materiales || []).forEach(m => {
-  const row = `
-    <tr data-material-id="${m.id_material != null ? m.id_material : ''}">
-      <td>${m.nombre || ''}</td>
-      <td class="text-center">
-        <input type="number" step="0.01" class="form-control form-control-sm cantidad-material"
-               value="${m.cantidad != null ? m.cantidad : 0}">
-      </td>
-      <td class="text-center">
-        <input type="number" step="0.01" class="form-control form-control-sm precio-unitario"
-               value="${m.precio_unitario != null ? m.precio_unitario : 0}">
-      </td>
-      <!-- Placeholder para la columna "% Utilidad Materiales" por fila (no se usa, mantiene alineación) -->
-      <td class="text-center td-utilidad-fila"></td>
-      <td class="text-center">
-        <input type="number" step="0.01" class="form-control form-control-sm porcentaje-extra"
-               value="${m.porcentaje_extra != null ? m.porcentaje_extra : 0}">
-      </td>
-      <td class="text-right subtotal-material"></td>
-    </tr>`;
-  $tbMat.append(row);
-});
+  (tareaPlantilla.materiales || []).forEach(m => {
+    const idMat = (m.id_material != null ? m.id_material : '');
+    const nombre = (m.nombre || '');
+    const cantidad = (m.cantidad != null ? m.cantidad : 0);
+    const precio = (m.precio_unitario != null ? m.precio_unitario : 0);
+    const extra = (m.porcentaje_extra != null ? m.porcentaje_extra : 0);
 
-// Reinsertar "Otros" y luego "Subtotal" para respetar el orden original
-if ($matOtros && $matOtros.length)    $tbMat.append($matOtros);
-if ($matSubtotal && $matSubtotal.length) $tbMat.append($matSubtotal);
+    const row = `
+      <tr data-material-id="${idMat}">
+        <td>${nombre}</td>
+        <td>
+          <input type="number" class="form-control form-control-sm cantidad-material"
+                 value="${cantidad}" min="0" step="any">
+        </td>
+        <td>
+          <input type="number" class="form-control form-control-sm precio-unitario bg-success"
+                 value="${precio}" min="0" step="any" readonly>
+        </td>
+        <td>
+          <input type="number" class="form-control form-control-sm porcentaje-extra"
+                 value="${extra}" min="0" step="any">
+        </td>
+        <td class="text-right subtotal-material"></td>
+      </tr>`;
+    $tbMat.append(row);
+  });
 
-// --- Mano de Obra: detach de "Otros" y "Subtotal" para reinsertar al final ---
-const $moOtros    = $tbMo.find('tr.fila-otros-mano').first().detach();
-const $moSubtotal = $tbMo.find('tr.fila-subtotal').first().detach();
-// Limpiar resto
-$tbMo.empty();
+  if ($matOtros && $matOtros.length) $tbMat.append($matOtros);
+  if ($matSubtotal && $matSubtotal.length) $tbMat.append($matSubtotal);
 
-// 5) Inyectar mano de obra (6 columnas: Tipo | Cant. | Valor | %Util fila (placeholder) | % Extra | Subtotal)
-(tareaPlantilla.mano_obra || []).forEach(o => {
-  const row = `
-    <tr data-jornal_id="${o.jornal_id != null ? o.jornal_id : ''}">
-      <td>${o.nombre || ''}</td>
-      <td class="text-center">
-        <input type="number" step="0.01" class="form-control form-control-sm cantidad-mano-obra"
-               value="${o.cantidad != null ? o.cantidad : 0}">
-      </td>
-      <td class="text-center">
-        <input type="number" step="0.01" class="form-control form-control-sm valor-jornal"
-               value="${o.jornal_valor != null ? o.jornal_valor : 0}">
-      </td>
-      <!-- Placeholder para la columna "% Utilidad Mano de Obra" por fila (no se usa, mantiene alineación) -->
-      <td class="text-center td-utilidad-fila"></td>
-      <td class="text-center">
-        <input type="number" step="0.01" class="form-control form-control-sm porcentaje-extra"
-               value="${o.porcentaje_extra != null ? o.porcentaje_extra : 0}">
-      </td>
-      <td class="text-right subtotal-mano"></td>
-    </tr>`;
-  $tbMo.append(row);
-});
+  // =========================
+  // MANO DE OBRA (modo visita)
+  // Header: Tipo | Operarios | Días | Jornales | Valor Jornal | % Extra | Subtotal (7 cols)
+  // =========================
+  const $moOtros    = $tbMo.find('tr.fila-otros-mano').first().detach();
+  const $moSubtotal = $tbMo.find('tr.fila-subtotal').first().detach();
+  $tbMo.empty();
 
-// Reinsertar "Otros" y luego "Subtotal" para respetar el orden original
-if ($moOtros && $moOtros.length)       $tbMo.append($moOtros);
-if ($moSubtotal && $moSubtotal.length) $tbMo.append($moSubtotal);
+  (tareaPlantilla.mano_obra || []).forEach(o => {
+    const jornalId = (o.jornal_id != null ? o.jornal_id : '');
+    const nombre = (o.nombre || '');
 
+    // En plantillas puede venir "cantidad" (operarios) y "dias"
+    const operarios = (o.cantidad != null ? o.cantidad : 0);
+    const dias = (o.dias != null ? o.dias : 1);
+    const valor = (o.jornal_valor != null ? o.jornal_valor : 0);
+    const extra = (o.porcentaje_extra != null ? o.porcentaje_extra : 0);
 
-  // 6) Reatachar y recalcular con tus funciones existentes
+    // Jornales = operarios * dias (readonly, como visita)
+    const jornales = (parseFloat(operarios) || 0) * (parseFloat(dias) || 0);
+
+    const row = `
+      <tr data-jornal_id="${jornalId}">
+        <td>${nombre}</td>
+
+        <!-- Operarios -->
+        <td>
+          <input type="number" class="form-control form-control-sm cantidad-mano-obra"
+                 value="${operarios}" min="0" step="any">
+        </td>
+
+        <!-- Días -->
+        <td>
+          <input type="number" class="form-control form-control-sm dias-mano-obra"
+                 value="${dias}" min="0" step="any">
+        </td>
+
+        <!-- Jornales (Operarios × Días) -->
+        <td>
+          <input type="number" class="form-control form-control-sm jornales-mano-obra"
+                 value="${jornales}" min="0" step="any" readonly>
+        </td>
+
+        <!-- Valor Jornal -->
+        <td>
+          <input type="number" class="form-control form-control-sm valor-jornal bg-success"
+                 value="${valor}" min="0" step="any" readonly>
+        </td>
+
+        <!-- % Extra -->
+        <td>
+          <input type="number" class="form-control form-control-sm porcentaje-extra"
+                 value="${extra}" min="0" step="any">
+        </td>
+
+        <!-- Subtotal -->
+        <td class="text-right subtotal-mano"></td>
+      </tr>`;
+    $tbMo.append(row);
+  });
+
+  if ($moOtros && $moOtros.length) $tbMo.append($moOtros);
+  if ($moSubtotal && $moSubtotal.length) $tbMo.append($moSubtotal);
+
+  // 6) Recalcular con tus funciones existentes
   if (typeof window.initRecalculoPresupuestoCargado === 'function') {
     window.initRecalculoPresupuestoCargado();
   }
+
+  // Si tus helpers existen, mejor usar esos (como ya venías haciendo)
   if (typeof window._safeActualizarSubtotalesBloque === 'function') {
-    window._safeActualizarSubtotalesBloque($card, 'materiales');
-    window._safeActualizarSubtotalesBloque($card, 'mano');
+    window._safeActualizarSubtotalesBloque($card, $card[0]);
   }
   if (typeof window._safeActualizarTotalesPorTarea === 'function') {
-    window._safeActualizarTotalesPorTarea($card);
+    window._safeActualizarTotalesPorTarea($card, $card[0]);
   }
   if (typeof window._safeActualizarTotalGeneral === 'function') {
     window._safeActualizarTotalGeneral();
@@ -920,6 +946,7 @@ if ($moSubtotal && $moSubtotal.length) $tbMo.append($moSubtotal);
     mostrarExito('Plantilla aplicada a la tarea.');
   }
 }
+
 
 
 // === Filtro por texto (con debounce simple) ===
