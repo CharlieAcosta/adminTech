@@ -2432,9 +2432,6 @@ $(document).ready(function() {
     })();
 
 // código de impresión ////////////////////////////////////////////
-// ===============================
-// IMPRIMIR PRESUPUESTO (BORRADOR) - HANDLER GLOBAL
-// ===============================
 (function () {
   // lock global anti doble impresión
   window.__PRESU_PRINT_LOCK__ = window.__PRESU_PRINT_LOCK__ || false;
@@ -2655,43 +2652,58 @@ $(document).ready(function() {
   <meta charset="utf-8">
   <base href="${esc(baseHref)}">
   <title>Presupuesto (Borrador) #${esc(idPresupuesto)}</title>
+
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; color:#111; margin: 24px; }
-    .top { display:flex; align-items:center; justify-content:space-between; gap:16px; }
-    .logo img { max-width: 260px; height:auto; }
-    .doc { text-align:right; }
-    .doc h1 { margin:0; font-size: 20px; }
-    .muted { color:#666; font-size: 12px; }
-    hr { border:0; border-top:1px solid #ddd; margin: 16px 0; }
+  * { box-sizing: border-box; }
+  html, body { padding: 0; margin: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; color:#111; margin: 0; }
 
-    .falta { color:#b00020; font-weight:700; }
-    .box { border:1px solid #ddd; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    .linea { margin: 4px 0; }
-    .bloque { margin-top: 14px; }
-    h3 { margin: 0 0 10px; font-size: 16px; border-left: 4px solid #111; padding-left: 8px; }
-    h4 { margin: 8px 0; font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color:#333; }
-    table { width:100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border:1px solid #ddd; padding: 6px 8px; vertical-align: top; }
-    th { background:#f5f5f5; text-align:left; }
-    .num { text-align: right; white-space: nowrap; }
-    .grid2 { display:grid; grid-template-columns: 2fr 1fr; gap: 12px; }
-    .fotos { display:flex; flex-wrap:wrap; gap:8px; }
-    .foto { width: 160px; height: 120px; object-fit: cover; border:1px solid #ddd; border-radius: 8px; }
-    .subtarea { margin-top: 10px; padding: 8px 10px; background:#f7f7f7; border:1px solid #ddd; border-radius: 8px; text-align:right; }
+  @page { size: A4; margin: 10mm; }
 
-    .total { display:flex; justify-content:flex-end; margin-top: 14px; }
-    .total .valor { font-size: 18px; font-weight: 800; padding: 10px 14px; border: 2px solid #111; border-radius: 10px; }
+  .page { padding: 0; }
 
-    @media print {
-      body { margin: 10mm; }
-      .box { break-inside: avoid; }
-      .bloque { break-inside: avoid; }
-    }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .logo img { max-width: 220px; height:auto; }
+  .doc { text-align:right; }
+  .doc h1 { margin:0; font-size: 18px; letter-spacing: .2px; }
+  .muted { color:#666; font-size: 11px; margin-top: 2px; }
+  hr { border:0; border-top:1px solid #ddd; margin: 10px 0 12px; }
+
+  .box { border:1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .linea { margin: 3px 0; font-size: 12px; line-height: 1.25; }
+
+  .falta { color:#b00020; font-weight:700; }
+
+  .bloque { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
+  h3 { margin: 0 0 8px; font-size: 14px; border-left: 4px solid #111; padding-left: 8px; }
+  h4 { margin: 8px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color:#333; }
+
+  .grid2 { display:grid; grid-template-columns: 2fr 1fr; gap:10px; }
+
+  table { width:100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+  th, td { border:1px solid #ddd; padding: 5px 6px; vertical-align: top; }
+  th { background:#f5f5f5; text-align:left; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  table, tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+
+  .subtarea { margin-top: 8px; padding: 7px 9px; background:#f7f7f7; border:1px solid #ddd; border-radius: 8px; text-align:right; font-weight: 700; }
+
+  .fotos { display:flex; flex-wrap:wrap; gap:6px; align-content: flex-start; }
+  .foto { width: 140px; height: 105px; object-fit: cover; border:1px solid #ddd; border-radius: 8px; break-inside: avoid; page-break-inside: avoid; }
+
+  .total { display:flex; justify-content:flex-end; margin-top: 10px; break-inside: avoid; }
+  .total .valor { font-size: 16px; font-weight: 800; padding: 8px 12px; border: 2px solid #111; border-radius: 10px; }
+
+  @media print {
+    body { margin: 0; }
+    .box, .bloque { break-inside: avoid; page-break-inside: avoid; }
+  }
   </style>
 </head>
 <body>
+<div class="page">
   <div class="top">
     <div class="logo">
       <img src="${esc(logoSrc)}" alt="Logo">
@@ -2730,63 +2742,90 @@ $(document).ready(function() {
   <div class="total">
     <div class="valor">TOTAL: ${esc(totalTxt)}</div>
   </div>
+</div>
 </body>
 </html>`;
 
         // ====== IMPRIMIR EN LA MISMA PÁGINA (SIN TAB / SIN IFRAME) ======
-        const PRINT_ROOT_ID  = 'presu-print-root';
+        const PRINT_ROOT_ID = 'presu-print-root';
         const PRINT_STYLE_ID = 'presu-print-style';
 
-        // 1) Inyectar CSS de impresión una sola vez (con display:none para evitar “basura”)
+        // Cleanup (único punto de salida)
+        const cleanup = () => {
+          const $r = $('#' + PRINT_ROOT_ID);
+          if ($r.length) $r.empty();
+          window.__PRESU_PRINT_LOCK__ = false;
+        };
+
+        // 0) Asegurar URL absoluta del logo
+        const logoAbs = (() => {
+          try { return new URL(logoSrc, window.location.href).href; }
+          catch (e) { return logoSrc; }
+        })();
+
+        // 1) CSS host de impresión una sola vez
         if (!document.getElementById(PRINT_STYLE_ID)) {
           const st = document.createElement('style');
           st.id = PRINT_STYLE_ID;
           st.type = 'text/css';
           st.textContent = `
-            /* En pantalla: el root no debe verse jamás */
-            #${PRINT_ROOT_ID} { display:none !important; }
-
-            @media print {
-              /* Oculta todo el layout real */
-              body > *:not(#${PRINT_ROOT_ID}) { display:none !important; }
-
-              /* Muestra solo impresión */
-              #${PRINT_ROOT_ID} {
-                display:block !important;
-                position: static !important;
-                width: 100% !important;
-                background: #fff !important;
-              }
+          @media print {
+            /* Ocultar todo lo que NO sea el print root (y sacarlo del flujo) */
+            body > *:not(#${PRINT_ROOT_ID}) {
+              display: none !important;
             }
-          `;
+        
+            /* Asegurar que el print root quede en flujo normal (NO fixed) */
+            #${PRINT_ROOT_ID} {
+              display: block !important;
+              position: static !important;
+              left: auto !important;
+              top: auto !important;
+              width: 100% !important;
+              background: #fff !important;
+              z-index: auto !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+          }
+        `;
+        
           document.head.appendChild(st);
         }
 
-        // 2) Crear/obtener el contenedor de impresión
+        // 2) Crear/obtener contenedor
         let $printRoot = $('#' + PRINT_ROOT_ID);
         if (!$printRoot.length) {
           $printRoot = $('<div/>', { id: PRINT_ROOT_ID }).appendTo('body');
         }
 
-        // 3) Volcar el BODY interno dentro del contenedor
+        // 3) Extraer CSS y body
+        const cssMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        let cssInterno = cssMatch ? cssMatch[1] : '';
+
         const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-        const soloBody  = bodyMatch ? bodyMatch[1] : html;
+        let soloBody = bodyMatch ? bodyMatch[1] : html;
 
-        $printRoot.html(soloBody);
+        // 4) Corregir logo a absoluto
+        soloBody = soloBody.replace(
+          /<img\s+src="[^"]*"\s+alt="Logo">/i,
+          `<img src="${logoAbs}" alt="Logo">`
+        );
 
-        // 4) Limpieza + unlock (afterprint + fallback)
-        const cleanup = () => {
-          try { $printRoot.empty(); } catch (e) {}
-          window.__PRESU_PRINT_LOCK__ = false;
+        // 5) Inyectar en el root
+        $printRoot.html(`<style>${cssInterno}</style>${soloBody}`);
+
+        // 6) afterprint: usar listener (evita pisadas)
+        const afterPrintHandler = () => {
+          window.removeEventListener('afterprint', afterPrintHandler);
+          cleanup();
         };
+        window.addEventListener('afterprint', afterPrintHandler);
 
-        window.onafterprint = cleanup;
-
+        // 7) Imprimir UNA sola vez + fallback si afterprint no dispara
         setTimeout(() => {
           window.print();
-
-          // fallback por si afterprint no dispara
-          setTimeout(cleanup, 600);
+          setTimeout(cleanup, 1200); // fallback conservador
         }, 150);
 
         return false;
@@ -2803,7 +2842,6 @@ $(document).ready(function() {
       }
     });
 })();
-
 // código de impresión ////////////////////////////////////////////
 
 });
