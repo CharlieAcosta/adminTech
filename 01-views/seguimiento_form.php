@@ -1553,40 +1553,106 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <?= $popoverIntervinientesPresupuesto ?>
 </div>
 
+<style>
+  .popover-wide {
+    max-width: min(400px, calc(100vw - 2rem)) !important;
+    width: min(400px, calc(100vw - 2rem)) !important;
+    max-height: 60vh;
+  }
+
+  .popover-wide .popover-header:empty {
+    display: none;
+  }
+
+  .popover-wide .popover-body {
+    max-height: calc(60vh - 1rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: auto;
+    scrollbar-color: #8a8f98 #e9ecef;
+  }
+
+  .popover-wide .table {
+    margin-bottom: 0;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar {
+    width: 14px;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar-track {
+    background: #e9ecef;
+    border-radius: 10px;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar-thumb {
+    background: #8a8f98;
+    border-radius: 10px;
+    border: 3px solid #e9ecef;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar-thumb:hover {
+    background: #6c757d;
+  }
+</style>
+
 <script>
-$(function(){
-  // inicializa sobre el mismo selector que ya usas
-  $('#headingVisita [data-toggle="popover"]').popover({
-    trigger: 'hover focus',
-    container: 'body',
-    html:     true,
-    sanitize: false,  // desactiva saneamiento para que no borre <table>
-    // inyecta un template con clase propia
-    template: `
-      <div class="popover popover-wide" role="tooltip">
-        <div class="arrow"></div>
-        <h3 class="popover-header"></h3>
-        <div class="popover-body"></div>
-      </div>
-    `,
-    content: function(){
-      return $('#popover-content-visita').html();
+window.bindIntervinoPopoverPersistente = function ($target, getContent) {
+  if (!$target || !$target.length) return;
+
+  const HIDE_DELAY_MS = 180;
+
+  const limpiarTimer = function ($el) {
+    const timer = $el.data('intervinoPopoverHideTimer');
+    if (timer) {
+      clearTimeout(timer);
+      $el.removeData('intervinoPopoverHideTimer');
     }
-  });
-});
-</script>
+  };
 
-<script>
-window.initPopoverIntervinoPresupuesto = function () {
-  const $target = $('#headingPresupuesto .intervino-presupuesto-ultimo[data-toggle="popover"]');
-  if (!$target.length) return;
+  const programarOcultar = function ($el) {
+    limpiarTimer($el);
+    const timer = setTimeout(function () {
+      const tipId = $el.attr('aria-describedby');
+      const $tip = tipId ? $('#' + tipId) : $();
+      const triggerActivo = $el.is(':hover') || $el.is(':focus');
+      const popoverActivo = $tip.length && $tip.is(':hover');
 
+      if (!triggerActivo && !popoverActivo) {
+        $el.popover('hide');
+      }
+    }, HIDE_DELAY_MS);
+
+    $el.data('intervinoPopoverHideTimer', timer);
+  };
+
+  const vincularHoverPopover = function ($el) {
+    const tipId = $el.attr('aria-describedby');
+    if (!tipId) return;
+
+    const $tip = $('#' + tipId);
+    if (!$tip.length) return;
+
+    $tip.off('.intervinoPopoverPersistente');
+    $tip.on('mouseenter.intervinoPopoverPersistente', function () {
+      limpiarTimer($el);
+    });
+    $tip.on('mouseleave.intervinoPopoverPersistente', function () {
+      programarOcultar($el);
+    });
+  };
+
+  $target.off('.intervinoPopoverPersistente');
   $target.popover('dispose');
   $target.popover({
-    trigger: 'hover focus',
+    trigger: 'manual',
     container: 'body',
+    boundary: 'viewport',
     html: true,
     sanitize: false,
+    placement: function () {
+      return $(this).data('placement') || 'bottom';
+    },
     template: `
       <div class="popover popover-wide" role="tooltip">
         <div class="arrow"></div>
@@ -1595,8 +1661,44 @@ window.initPopoverIntervinoPresupuesto = function () {
       </div>
     `,
     content: function () {
-      return $('#popover-content-presupuesto').html();
+      return getContent.call(this);
     }
+  });
+
+  $target.on('mouseenter.intervinoPopoverPersistente focusin.intervinoPopoverPersistente', function () {
+    const $el = $(this);
+    limpiarTimer($el);
+    $el.popover('show');
+    vincularHoverPopover($el);
+  });
+
+  $target.on('mouseleave.intervinoPopoverPersistente focusout.intervinoPopoverPersistente', function () {
+    programarOcultar($(this));
+  });
+
+  $target.on('keydown.intervinoPopoverPersistente', function (e) {
+    if (e.key === 'Escape') {
+      limpiarTimer($(this));
+      $(this).popover('hide');
+    }
+  });
+};
+
+$(function(){
+  window.bindIntervinoPopoverPersistente(
+    $('#headingVisita [data-toggle="popover"]'),
+    function () {
+      return $('#popover-content-visita').html();
+    }
+  );
+});
+
+window.initPopoverIntervinoPresupuesto = function () {
+  const $target = $('#headingPresupuesto .intervino-presupuesto-ultimo[data-toggle="popover"]');
+  if (!$target.length) return;
+
+  window.bindIntervinoPopoverPersistente($target, function () {
+    return $('#popover-content-presupuesto').html();
   });
 };
 
