@@ -25,6 +25,8 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         $id_previsita   = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : null;
         $id_visita      = isset($payload['id_visita']) ? (int)$payload['id_visita'] : null;
         $id_presupuesto = !empty($payload['id_presupuesto']) ? (int)$payload['id_presupuesto'] : null;
+        // Cada nuevo guardado vuelve el presupuesto a BORRADOR.
+        // Si ya fue impreso/enviado/aprobado, una modificación invalida ese estado previo.
         $estado         = 'BORRADOR'; // unificamos a mayúsculas
         $moneda         = 'ARS';
         $version        = 1;
@@ -37,11 +39,11 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
             // Si no vino id_presupuesto, intentamos reutilizar uno existente para esta visita
             $stmt = mysqli_prepare($db, "
-                SELECT id_presupuesto
+                SELECT id_presupuesto, estado
                 FROM presupuestos
                 WHERE id_previsita = ?
                 AND ( ? IS NULL OR id_visita = ? )
-                AND UPPER(estado) IN ('BORRADOR','GENERADO')
+                AND UPPER(estado) IN ('BORRADOR','GENERADO','IMPRESO','ENVIADO','APROBADO','RECHAZADO')
                 ORDER BY updated_at DESC, id_presupuesto DESC
                 LIMIT 1
             ");
@@ -74,6 +76,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 mysqli_stmt_close($stmt);
             } else {
                 // Reutilizamos el existente: actualizamos cabecera (NO borrar hijos / NO borrar carpeta)
+                // y reseteamos el estado a BORRADOR en cada guardado.
                 $stmt = mysqli_prepare($db, "
                     UPDATE presupuestos
                     SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
@@ -806,7 +809,3 @@ function eliminarDirectorioRecursivo(string $dir): void
     }
     @rmdir($dir);
 }
-
-
-
-
