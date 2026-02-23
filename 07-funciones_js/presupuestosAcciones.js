@@ -182,7 +182,7 @@ var dd = {
         var id = $(elemento).closest('tr').data('id');
         const functionsArray = [
             () => dtableRowDelete("current_table", id),
-            () => simpleUpdateInDB('../06-funciones_php/funciones.php', 'previsitas', {estado_visita: 'Eliminada'}, {columna: 'id_previsita', condicion: '=', valorCompara: id})
+            () => simpleUpdateInDB('../06-funciones_php/funciones.php', 'previsitas', { estado_visita: 'Eliminada' }, [{ columna: 'id_previsita', condicion: '=', valorCompara: id }]                    )
         ];
 
         sAlertDialog(
