@@ -256,57 +256,63 @@ function mostrarExito(mensaje, segundos = 3) {
  * @param {string} [tipo='AD']    — Tipo de mensaje: 'AD' (advertencia), 'ER' (error), 'EX' (éxito).
  *                                   Cambia colores, ícono y título. Si se omite, se usa advertencia.
  */
-function mostrarConfirmacion(mensaje, onConfirm, onCancel, tipo = 'AD') {
-    // Configuraciones por tipo
+function mostrarConfirmacion(
+    mensaje,
+    onConfirm,
+    onCancel,
+    tipo = 'AD',
+    textoConfirmar = 'Sí',
+    textoCancelar = 'No'
+) {
     const configuraciones = {
-      AD: {
-        titulo: 'ADVERTENCIA',
-        icono: 'warning',
-        background: '#ffc107',        // amarillo
-        iconColor: '#000000',         // ícono negro
-        tituloColor: '#000000',       // texto negro
-        mensajeColor: '#000000'
-      },
-      ER: {
-        titulo: 'ERROR',
-        icono: 'error',
-        background: '#dc3545',        // rojo
-        iconColor: '#ffffff',
-        tituloColor: '#ffffff',
-        mensajeColor: '#ffffff'
-      },
-      EX: {
-        titulo: 'ÉXITO',
-        icono: 'success',
-        background: '#28a745',        // verde
-        iconColor: '#ffffff',
-        tituloColor: '#ffffff',
-        mensajeColor: '#ffffff'
-      }
+        AD: {
+            titulo: 'ADVERTENCIA',
+            icono: 'warning',
+            background: '#ffc107',
+            iconColor: '#000000',
+            tituloColor: '#000000',
+            mensajeColor: '#000000'
+        },
+        ER: {
+            titulo: 'ERROR',
+            icono: 'error',
+            background: '#dc3545',
+            iconColor: '#ffffff',
+            tituloColor: '#ffffff',
+            mensajeColor: '#ffffff'
+        },
+        EX: {
+            titulo: 'ÉXITO',
+            icono: 'success',
+            background: '#28a745',
+            iconColor: '#ffffff',
+            tituloColor: '#ffffff',
+            mensajeColor: '#ffffff'
+        }
     };
-  
-    const cfg = configuraciones[tipo] || configuraciones['AD']; // fallback a ADVERTENCIA
-  
+
+    const cfg = configuraciones[tipo] || configuraciones['AD'];
+
     Swal.fire({
-      icon: cfg.icono,
-      title: `<h2 class="mb-1" style="color: ${cfg.tituloColor};"><strong>${cfg.titulo}</strong></h2>`,
-      html: `<h4 class="mt-0" style="color: ${cfg.mensajeColor};">${mensaje}</h4>`,
-      background: cfg.background,
-      iconColor: cfg.iconColor,
-      showCancelButton: true,
-      confirmButtonText: 'Sí',
-      cancelButtonText: 'No',
-      confirmButtonColor: '#1e7e34',
-      cancelButtonColor: '#6c757d',   // gris cancel
-      customClass: {
-        confirmButton: 'swal2-confirm custom-success-btn'
-      }
+        icon: cfg.icono,
+        title: `<h2 class="mb-1" style="color:${cfg.tituloColor};"><strong>${cfg.titulo}</strong></h2>`,
+        html: `<h4 class="mt-0" style="color:${cfg.mensajeColor};">${mensaje}</h4>`,
+        background: cfg.background,
+        iconColor: cfg.iconColor,
+        showCancelButton: true,
+        confirmButtonText: textoConfirmar,
+        cancelButtonText: textoCancelar,
+        confirmButtonColor: '#1e7e34',
+        cancelButtonColor: '#6c757d',
+        customClass: {
+            confirmButton: 'swal2-confirm custom-success-btn'
+        }
     }).then(result => {
-      if (result.isConfirmed) {
-        onConfirm && onConfirm();
-      } else {
-        onCancel && onCancel();
-      }
+        if (result.isConfirmed) {
+            onConfirm && onConfirm();
+        } else {
+            onCancel && onCancel();
+        }
     });
 }
 

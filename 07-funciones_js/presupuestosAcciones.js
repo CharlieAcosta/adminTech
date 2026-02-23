@@ -178,28 +178,44 @@ var dd = {
         })  
        break;
 
-      case 'delete': // editar el cliente
-        var id = $(elemento).closest('tr').data('id');
-        const functionsArray = [
-            () => dtableRowDelete("current_table", id),
-            () => simpleUpdateInDB('../06-funciones_php/funciones.php', 'previsitas', { estado_visita: 'Eliminada' }, [{ columna: 'id_previsita', condicion: '=', valorCompara: id }]                    )
-        ];
+        case 'delete':
+            var id = $(elemento).closest('tr').data('id');
 
-        sAlertDialog(
-           'warning',                 
-           '¿Quieres eliminar este item?',  
-           '', 
-           ' Si ',            
-           'success',              
-           ' No ',             
-           'secondary',                 
-            () => someFunctions(functionsArray, 1000),  
-           undefined,   
-           undefined,              
-           undefined,              
-           undefined,              
-           undefined               
-        );       
+            mostrarConfirmacion(
+                'Estás a punto de eliminar un seguimiento completo, ¿confirmás?',
+                () => {
+                    // 1) Primero: borrado lógico en DB
+                    simpleUpdateInDB(
+                        '../06-funciones_php/funciones.php',
+                        'previsitas',
+                        { estado_visita: 'Eliminada' },
+                        [{ columna: 'id_previsita', condicion: '=', valorCompara: id }]
+                    )
+                    .then((ok) => {
+                        // 2) Si OK: eliminar la fila del datatable y avisar éxito
+                        if (ok === true) {
+                            dtableRowDelete("current_table", id);
+                            mostrarExito('Seguimiento eliminado correctamente.');
+                        } else {
+                            // Si no vino true (vino false u otra cosa): avisar error
+                            mostrarError('No se pudo eliminar el seguimiento. No se aplicaron cambios.');
+                        }
+                    })
+                    .catch((err) => {
+                        // Error AJAX / parse / server
+                        console.error(err);
+                        mostrarError('Ocurrió un error al intentar eliminar el seguimiento.');
+                    });
+                },
+                () => {
+                    // Cancelado: no hacer nada
+                },
+                'AD',
+                'Confirmar',
+                'Cancelar'
+            );
+
+        break;    
 
       break;
 
