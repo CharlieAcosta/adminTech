@@ -1,12 +1,25 @@
 <?php  
 session_start();
-define('BASE_URL', $_SESSION["base_url"]);
+define('BASE_URL', $_SESSION["base_url"]);  
 include_once '../06-funciones_php/funciones.php';
+sesion(); //Verifica si hay usuario sesionado
+include_once '../06-funciones_php/auditoria.php';
+registrarNavegacion('SEGUIMIENTO DE OBRA | Listado');
+
+$perfil = $_SESSION['usuario']['perfil'];
+$deleteIcon = array('Super Administrador','Administrador');
+
 include_once '../03-controller/presupuestosController.php'; //conecta a la base de datos
 
 // poblarDatableAll(columnas de la tablas, php o ajax, filtro); [reference] 
-$filas = poblarDatableAll(array('id_previsita', 'log_alta', 'cuit', 'razon_social', 'estado_visita', 'fecha_visita', 'hora_visita'), 'php', 'todos');
-?>
+$filas = poblarDatableAll(
+    array('id_previsita', 'log_alta', 'cuit', 'razon_social', 'estado_visita', 'fecha_visita', 'hora_visita'),
+    'php',
+    'todos',
+    $perfil,
+    $deleteIcon
+);
+?> 
 
 <!DOCTYPE html>
 <html lang="es">

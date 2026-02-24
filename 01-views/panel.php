@@ -4,6 +4,7 @@ define('BASE_URL', $_SESSION["base_url"]);
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 sesion(); //Verifica si hay usuario sesionado
 
+
 include_once '../06-funciones_php/auditoria.php';
 registrarNavegacion('PANEL');
 
