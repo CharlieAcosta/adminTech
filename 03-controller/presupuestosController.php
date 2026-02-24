@@ -2,13 +2,22 @@
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestosModel.php'; //conecta a la base de datos
 
-if( isset($_POST['ajax']) && $_POST['ajax']=='on'){
-	poblarDatableAll($_POST['tds'], 'ajax', $_POST['filtro']);
-}
+if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
 
+    $perfil = $_SESSION['usuario']['perfil'] ?? null;
+    $deleteIcon = array('Super Administrador', 'Administrador');
+
+    poblarDatableAll(
+        $_POST['tds'],
+        'ajax',
+        $_POST['filtro'],
+        $perfil,
+        $deleteIcon
+    );
+}
 //////// function poblarDatableAll(columnas de la base, php o ajax, filtro){  
 
-function poblarDatableAll($tds, $via, $filtro){     
+function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){     
 
    $all_registros = modGetAllRegistros($filtro); 		
 	//var_dump($all_registros); die(); //[DEBUG PERMANENTE]
@@ -109,8 +118,16 @@ function poblarDatableAll($tds, $via, $filtro){
 		  // Presupuesto + Orden de compra (por ahora OC sigue vacía)
 	   	  $filas .= '<td>'.$presupuestoHtml.'</td><td></td>';	  //para relleno en el caso de datos futuros
 
+		  // acciones				
+   		  $filas .= '<td class="text-center">';
+		  $filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i>'; // visualizar
+		  $filas .= '<i class="v-icon-accion p-1 fas fa-edit" data-accion="editar"></i>'; // editar
+		  $filas .= '<i class="v-icon-accion p-1 fas fa-print" data-accion="pdf"></i>'; // imprimir
+		  if (in_array($perfil, $deleteIcon)){ 				
+		  	$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-trash-alt" data-accion="delete" data-id="'.$value_all_registros['id_previsita'].'"></i>';
+		  }				
+		  $filas .= '</td>'; 
 
-   		  $filas .= '<td class="text-center"><i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i><i class="v-icon-accion p-1 fas fa-edit" data-accion="editar"></i><i class="v-icon-accion p-1 fas fa-print" data-accion="pdf"></i><i class="v-icon-accion text-danger p-1 fas fa-trash-alt" data-accion="delete" data-id="'.$value_all_registros['id_previsita'].'"></i></td>'; // acciones
 		  $filas .='</tr>';
    		}	
 
@@ -124,5 +141,3 @@ function poblarDatableAll($tds, $via, $filtro){
 }
 
 ?>
-
-
