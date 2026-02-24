@@ -28,5 +28,7 @@ uploads/**/*
 # ─── Logs de tu sistema ────────────────────
 log/
 
-# ─── MySql de docker ──────────────────────
+# ─── Docker local (datos y secretos) ────────────────────
 docker-local/mysql-data/
+docker-local/.env
+docker-local/logs/
