@@ -1,0 +1,18 @@
+services:
+  web:
+    ports:
+      - "8080:80"
+    volumes:
+      - ..:/var/www/html/admintech:cached
+      - ./apache/000-default.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./php/php.ini:/usr/local/etc/php/conf.d/99-admintech.ini:ro
+    environment:
+      APP_ENV: development
+      DB_HOST: db
+      DB_NAME: ${MYSQL_DATABASE:-techos}
+      DB_USER: ${MYSQL_USER:-root}
+      DB_PASS: ${MYSQL_ROOT_PASSWORD:-root}
+
+  db:
+    ports:
+      - "3306:3306"

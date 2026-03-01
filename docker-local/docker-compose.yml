@@ -3,22 +3,8 @@ services:
     build:
       context: ./php
     container_name: admintech-web
-    ports:
-      - "8080:80"
-    volumes:
-      # Montamos el repo dentro de /var/www/html/admintech
-      - ..:/var/www/html/admintech:cached
-      - ./apache/000-default.conf:/etc/apache2/sites-available/000-default.conf:ro
-      - ./php/php.ini:/usr/local/etc/php/conf.d/99-admintech.ini:ro
     depends_on:
       - db
-    environment:
-      # Por si el código usa estas variables (si no, no molestan)
-      APP_ENV: development
-      DB_HOST: db
-      DB_NAME: techos
-      DB_USER: root
-      DB_PASS: root
     networks:
       - admintech-net
 
@@ -26,19 +12,18 @@ services:
     image: mysql:5.7.44
     container_name: admintech-db
     command: --default-authentication-plugin=mysql_native_password --sql-mode="ONLY_FULL_GROUP_BY,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
-    ports:
-      - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: techos
-      TZ: America/Argentina/Buenos_Aires
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-techos}
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
     volumes:
-      # Datos MySQL (LOCAL) -> esto lo vamos a gitignorear (no viaja a prod)
-      - ./mysql-data:/var/lib/mysql
-      # Scripts de inicialización
+      - admintech-mysql:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
     networks:
       - admintech-net
+
+volumes:
+  admintech-mysql:
 
 networks:
   admintech-net:
