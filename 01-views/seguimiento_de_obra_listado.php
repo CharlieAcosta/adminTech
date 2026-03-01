@@ -1,4 +1,6 @@
 <?php  
+// segumiento_de_obra_listado.php
+
 session_start();
 define('BASE_URL', $_SESSION["base_url"]);  
 include_once '../06-funciones_php/funciones.php';
@@ -119,6 +121,7 @@ $filas = poblarDatableAll(
   </div>
   <!-- /.content-wrapper -->
   <?php include '../01-views/layout/footer_layout.php';?>
+  <?php include '../01-views/modals/modal_historial_presupuesto.php'; ?>
 
   <!-- Control Sidebar -->
   <aside class="control-sidebar control-sidebar-dark">

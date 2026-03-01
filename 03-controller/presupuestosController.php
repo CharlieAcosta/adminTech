@@ -118,17 +118,46 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  // Presupuesto + Orden de compra (por ahora OC sigue vacía)
 	   	  $filas .= '<td>'.$presupuestoHtml.'</td><td></td>';	  //para relleno en el caso de datos futuros
 
-		  // acciones				
-   		  $filas .= '<td class="text-center">';
-		  $filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i>'; // visualizar
-		  $filas .= '<i class="v-icon-accion p-1 fas fa-edit" data-accion="editar"></i>'; // editar
-		  $filas .= '<i class="v-icon-accion p-1 fas fa-print" data-accion="pdf"></i>'; // imprimir
-		  if (in_array($perfil, $deleteIcon)){ 				
-		  	$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-trash-alt" data-accion="delete" data-id="'.$value_all_registros['id_previsita'].'"></i>';
-		  }				
-		  $filas .= '</td>'; 
+			// acciones				
+			$filas .= '<td class="text-center">';
 
-		  $filas .='</tr>';
+			$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" 
+						data-accion="visual" 
+						data-toggle="tooltip" 
+						title="Visualizar"></i>';
+
+			$filas .= '<i class="v-icon-accion p-1 fas fa-edit" 
+						data-accion="editar" 
+						data-toggle="tooltip" 
+						title="Editar"></i>';
+
+			$filas .= '<i class="v-icon-accion p-1 fas fa-print" 
+						style="pointer-events:none;opacity:.4;" 
+						data-accion="pdf" 
+						data-toggle="tooltip" 
+						title="Imprimir PDF"></i>';
+
+			$filas .= '<i class="v-icon-accion p-1 fas fa-paperclip" 
+						style="pointer-events:none;opacity:.4;" 
+						data-accion="adjunto" 
+						data-toggle="tooltip" 
+						title="Ver adjuntos"></i>';
+
+			$filas .= '<i class="v-icon-accion p-1 fas fa-history" 
+						data-accion="historial" 
+						data-toggle="tooltip" 
+						title="Historial de presupuesto"></i>';
+
+			if (in_array($perfil, $deleteIcon)){ 				
+				$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-trash-alt" 
+							data-accion="delete" 
+							data-id="'.$value_all_registros['id_previsita'].'" 
+							data-toggle="tooltip" 
+							title="Eliminar"></i>';
+			}				
+
+			$filas .= '</td>';
+			$filas .='</tr>';
    		}	
 
 	//var_dump($filas); die();

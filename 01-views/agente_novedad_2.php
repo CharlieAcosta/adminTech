@@ -8,12 +8,17 @@ sesion(); //Verifica si hay usuario sesionado
 include_once '../06-funciones_php/auditoria.php';
 registrarNavegacion('NOVEDADES - Agente');
 
-if ($_SERVER['SERVER_NAME'] == 'admintech.ar') {
+// BASE_URL robusto para prod y docker/local (respeta host, puerto y carpeta real)
+if (!empty($_SERVER['HTTP_HOST']) && (strpos($_SERVER['HTTP_HOST'], 'admintech.ar') !== false)) {
     $_SESSION["base_url"] = 'https://admintech.ar/';
 } else {
-    $_SESSION["base_url"] = 'http://127.0.0.1/adminTech/';
+    // En local/docker: usa el host real (incluye puerto) y carpeta en minúsculas
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $_SESSION["base_url"] = $scheme . '://' . $_SERVER['HTTP_HOST'] . '/admintech/';
 }
+
 define('BASE_URL', $_SESSION["base_url"]);
+
 
 $novedadCodigos = db_select_with_filters_V2('novedad_codigos_2', [], [], [], $orderBy = [['orden', 'ASC']]);
 

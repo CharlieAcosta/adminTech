@@ -81,12 +81,21 @@ function poblarDatableActivos($tds, $via, $yearMonth = null) {
             );
         }
 
-        // Determinar la quincena basada en la fecha
-        $dia = intval(substr($value_all_usuarios['fecha'], 8, 2));  // Extraer el día de la fecha
-        $quincena = ($dia <= 15) ? 'pri-qui' : 'seg-qui';  // Determinar si es primera o segunda quincena
+        // Determinar la quincena basada en la fecha (evitar substr(null) en PHP 8.1+)
+        $fecha = $value_all_usuarios['fecha'] ?? '';
+
+        if (!is_string($fecha) || $fecha === '' || strlen($fecha) < 10) {
+            // Si no hay fecha válida, no podemos asignar quincena con confianza.
+            // Opción conservadora: salteamos este registro para no contaminar conteos.
+            continue;
+        }
+
+        $dia = (int) substr($fecha, 8, 2);  // Extraer el día (YYYY-MM-DD -> DD)
+        $quincena = ($dia <= 15) ? 'pri-qui' : 'seg-qui';
 
         // Asignar un valor temporal a $paga para evitar que los null afecten el conteo
         $paga = $value_all_usuarios['paga'] ?? 999; // el número debe ser un número que no contemple ningun case
+            
 
         switch ($paga) {
             case 0.00:
