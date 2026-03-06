@@ -1,13 +1,20 @@
 <?php
-//  filename: configIni.php path: 00-config/configIni.php
+// filename: configIni.php
+// path: 00-config/configIni.php
+
+$appEnv = getenv('APP_ENV') ?: 'production';
+$isDocker = file_exists('/.dockerenv');
 
 // BASE DE DATOS
-if (getenv('APP_ENV') === 'development') {
+if ($appEnv === 'development') {
 
-    define('DB_SERVER', 'db');       // ← importante en Docker
+    // Desarrollo en Docker => host "db"
+    // Desarrollo en WAMP   => host local
+    define('DB_SERVER', $isDocker ? 'db' : '127.0.0.1');
+
     define('DB_USER', 'root');
     define('DB_PASS', 'root');
-    define('DB_NAME', 'techos'); 
+    define('DB_NAME', 'techos');
     define('COLUMN_TYPE', 'COLUMN_TYPE');
 
 } else {
