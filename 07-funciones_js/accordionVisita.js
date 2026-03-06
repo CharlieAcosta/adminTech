@@ -15,6 +15,22 @@ $(document).ready(function() {
     let modoVisualizacion = false;
     let presupuestoGenerado = false;
     window.presupuestoGenerado = window.presupuestoGenerado || false;
+    window.presupuestoDirty = window.presupuestoDirty || false;
+
+    function marcarPresupuestoComoModificado() {
+      if (!$('#contenedorPresupuestoGenerado').length) return;
+      window.presupuestoDirty = true;
+      verificarDatosVencidos();
+    }
+
+    function marcarPresupuestoComoGuardado() {
+      if (!$('#contenedorPresupuestoGenerado').length) return;
+      window.presupuestoDirty = false;
+      verificarDatosVencidos();
+    }
+
+    window.marcarPresupuestoComoModificado = marcarPresupuestoComoModificado;
+    window.marcarPresupuestoComoGuardado = marcarPresupuestoComoGuardado;
 
 
     // === Vista detallada por usuario (sin ojito) ===
@@ -918,7 +934,7 @@ $(document).ready(function() {
       const datosExtraidos = recolectarDatosParaPresupuesto();
       console.log('📦 Datos extraídos para presupuesto:', datosExtraidos);
       renderizarPresupuestoDesdeDatos(datosExtraidos);
-
+      marcarPresupuestoComoModificado();
 
       // 🔗 NUEVO: preparar bloque de fotos para drag&drop y selección
       if (window.PresupuestoFotos && typeof PresupuestoFotos.refresh === 'function') {
@@ -1941,6 +1957,19 @@ $(document).ready(function() {
   
       contenedor.append(htmlTotal);
 
+      // === Dirty state del presupuesto actual
+      contenedor
+        .off('input.presuDirty change.presuDirty', 'textarea, input, .incluir-en-total')
+        .on('input.presuDirty change.presuDirty', 'textarea, input, .incluir-en-total', function () {
+          const $el = $(this);
+
+          if ($el.attr('id') === 'btn-guardar-presupuesto') return;
+          if ($el.hasClass('btn-imprimir-presupuesto')) return;
+          if ($el.hasClass('btn-enviar-presupuesto-mail')) return;
+
+          marcarPresupuestoComoModificado();
+        });      
+
        // === Guardar presupuesto (delegado sobre el contenedor)
       contenedor.off('click', '#btn-guardar-presupuesto')
       .on('click', '#btn-guardar-presupuesto', async function (e) {
@@ -2073,12 +2102,8 @@ $(document).ready(function() {
               window.initRecalculoPresupuestoCargado();
             }
           
-            // ✅ CLAVE: re-evaluar habilitación de botones (imprimir/mail)
-            if (typeof verificarDatosVencidos === 'function') {
-              verificarDatosVencidos();
-            } else if (typeof window.verificarDatosVencidos === 'function') {
-              window.verificarDatosVencidos();
-            }
+            // ✅ El presupuesto actual quedó sincronizado con BD
+            marcarPresupuestoComoGuardado();
           
             // (Opcional) limpiar buffers si el back ya las guardó
             presuImagenesPorTarea = {};
@@ -2131,6 +2156,7 @@ $(document).ready(function() {
 
         // limpiar el input para poder volver a elegir los mismos archivos si hace falta
         input.value = '';
+        marcarPresupuestoComoModificado();
       });
 
       // PRESUPUESTO
@@ -2148,6 +2174,7 @@ $(document).ready(function() {
         if (!presuFotosEliminadas[idx].includes(nombre)) presuFotosEliminadas[idx].push(nombre);
 
         $thumb.remove();
+        marcarPresupuestoComoModificado();
       });
 
       // === PRESUPUESTO: drag & drop sobre la dropzone
@@ -2192,6 +2219,8 @@ $(document).ready(function() {
           };
           reader.readAsDataURL(file);
         });
+
+        marcarPresupuestoComoModificado();        
       });
 
       if (!mostrarVistaDetallada) {
@@ -2347,65 +2376,81 @@ $(document).ready(function() {
     });
 
     function verificarDatosVencidos() {
-      // ¿Hay inputs en rojo?
       const hayVencidos = $('.precio-unitario.bg-danger, .valor-jornal.bg-danger').length > 0;
+      const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
+      const presupuestoDirty = !!window.presupuestoDirty;
     
-      // Botones de acciones del bloque total
-      const $botones = $('.presupuesto-total-actions button');
+      const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
+      const $btnImprimir = $('.btn-imprimir-presupuesto');
+      const $btnMail = $('.btn-enviar-presupuesto-mail');
     
       if (hayVencidos) {
-        // Deshabilitar e indicar visualmente estado bloqueado
-        $botones
+        $btnGuardar
           .prop('disabled', true)
           .addClass('btn-secondary')
-          .removeClass('btn-success btn-primary');
+          .removeClass('btn-success');
     
-        // Mostrar alerta una sola vez hasta que se corrija la situación
+        $btnImprimir.add($btnMail)
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-primary');
+    
         if (!alertaDesactualizadosMostrada) {
           alertaDesactualizadosMostrada = true;
-
+    
           const alertDanger = [
-            false, // icono
-            '<H3><strong>VALORES DESACTUALIZADOS</H3>', // título
-            'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.', // html
-            'OK', // texto del botón
-            false, // pie
-            false, // clic fuera
-            true, // permitir Escape
-            '#dc3545', // color de fondo
-            '#fff',    // 8 - color del texto general
-            '#198754', // 9 - color de fondo del botón (default azul SweetAlert)
-            '#fff'// 10 - color del texto del botón
+            false,
+            '<H3><strong>VALORES DESACTUALIZADOS</H3>',
+            'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.',
+            'OK',
+            false,
+            false,
+            true,
+            '#dc3545',
+            '#fff',
+            '#198754',
+            '#fff'
           ];
-
+    
           sAlertConfirmV2(alertDanger);
-
         }
-      } else {
-        // ✅ Guardar: se habilita si no hay vencidos
-        $('.presupuesto-total-actions #btn-guardar-presupuesto')
+    
+        return;
+      }
+    
+      alertaDesactualizadosMostrada = false;
+    
+      if (presupuestoDirty) {
+        $btnGuardar
           .prop('disabled', false)
           .addClass('btn-success')
           .removeClass('btn-secondary');
-      
-        // ❌ Imprimir y Mail: SOLO si hay id_presupuesto
-        const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
-      
-        if (idPresupuesto) {
-          $('.btn-imprimir-presupuesto, .btn-enviar-presupuesto-mail')
-            .prop('disabled', false)
-            .addClass('btn-primary')
-            .removeClass('btn-secondary');
-        } else {
-          $('.btn-imprimir-presupuesto, .btn-enviar-presupuesto-mail')
-            .prop('disabled', true)
-            .removeClass('btn-primary')
-            .addClass('btn-secondary');
-        }
-      
-        alertaDesactualizadosMostrada = false;
+    
+        $btnImprimir.add($btnMail)
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-primary');
+    
+        return;
       }
+    
+      $btnGuardar
+        .prop('disabled', true)
+        .addClass('btn-secondary')
+        .removeClass('btn-success');
+    
+      if (idPresupuesto) {
+        $btnImprimir.add($btnMail)
+          .prop('disabled', false)
+          .addClass('btn-primary')
+          .removeClass('btn-secondary');
+      } else {
+        $btnImprimir.add($btnMail)
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-primary');
       }
+    }
   
     // al final del $(document).ready, antes de cerrar:
     if ($('#contenedorPresupuestoGenerado .tarea-card').length) {
@@ -2413,25 +2458,33 @@ $(document).ready(function() {
     }
 
     // al final del $(document).ready, después del bloque anterior:
-    (function initRecalculoPresupuestoCargado() {
+    window.initRecalculoPresupuestoCargado = function () {
       const $root = $('#contenedorPresupuestoGenerado');
       if (!$root.length) return;
+    
       // Recalcular filas
       $root.find('.tarea-card').each(function () {
         const $card = $(this);
+    
         $card.find('tbody tr').each(function () {
           const $tr = $(this);
           if ($tr.find('.cantidad-material').length)  window.calcularFilaMaterial($tr);
           if ($tr.find('.cantidad-mano-obra').length) window.calcularFilaManoObra($tr);
         });
+    
         window.actualizarSubtotalesBloque($card);
+    
         // obtener número de tarea desde el botón final
         const idBtn = $card.find('[id^="subt-tarea-"]').attr('id');
         const numero = parseInt(idBtn?.split('-').pop(), 10) || 1;
         window.actualizarTotalesPorTarea(numero, $card);
       });
+    
       window.actualizarTotalGeneral();
-    })();
+    };
+    
+    // Ejecutar una vez si ya hay presupuesto renderizado
+    window.initRecalculoPresupuestoCargado();
 
 // código de impresión ////////////////////////////////////////////
 (function () {
