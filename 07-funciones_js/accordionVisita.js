@@ -1,3 +1,5 @@
+// file: accordionVisita.js 
+
 // Porcentajes por defecto para el presupuesto
 const porcentajesPorDefecto = {
   materiales: 30,      // Utilidad materiales (puedes cambiarlo fácil)

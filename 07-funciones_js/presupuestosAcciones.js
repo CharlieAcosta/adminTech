@@ -1,3 +1,4 @@
+// presupuestosAcciones.js
 $(document).on("click",".v-icon-accion, .v-accion-cancelar, .v-accion-eliminar, .v-accion-ver-todos",function(){
     presupuestoAcciones($(this));
 });
