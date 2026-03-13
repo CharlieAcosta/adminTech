@@ -2547,7 +2547,7 @@ $(document).ready(function() {
 
         // Logo (ruta relativa)
         // Logo
-        const logoSrc = `${window.location.origin}/admintech/dist/img/logos_propios/ecotechos-logo2.png`;
+        const logoSrc = `../dist/img/logos_propios/ecotechos-logo2.png`;
 
         // Construir HTML de tareas desde el DOM del presupuesto
 let htmlTareas = '';
@@ -2736,6 +2736,39 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
 htmlTareas += `
   <section class="print-page-total page-break-before">
+    <div class="top">
+      <div class="logo">
+        <img src="${esc(logoSrc)}" alt="Logo">
+      </div>
+      <div class="doc">
+        <h1>Presupuesto (Borrador)</h1>
+        <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
+      </div>
+    </div>
+
+    <hr>
+
+    <div class="grid">
+      <div class="box">
+        <h4>Cliente</h4>
+        <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
+        <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
+        <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
+        <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
+        <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+      </div>
+
+      <div class="box">
+        <h4>Obra / Visita</h4>
+        <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
+        <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
+        <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
+        <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+      </div>
+    </div>
+
     <div class="total">
       <div class="valor">TOTAL: ${esc(totalTxt)}</div>
     </div>
@@ -2811,50 +2844,64 @@ htmlTareas += `
 
   @media print {
     body { margin: 0; }
-    .box, .bloque { break-inside: avoid; page-break-inside: avoid; }
+  
+    .box, .bloque, .fotos, .foto, table, tr, td, th {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  
+    .print-page-task,
+    .print-page-total {
+      min-height: 100vh;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  
+    .page-break-before {
+      break-before: page;
+      page-break-before: always;
+    }
   }
   </style>
 </head>
 <body>
 <div class="page">
-  <div class="top">
-    <div class="logo">
-      <img src="${esc(logoSrc)}" alt="Logo">
-    </div>
-    <div class="doc">
-      <h1>Presupuesto (Borrador)</h1>
-      <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
-    </div>
-  </div>
-
-  <hr>
-
-  <div class="grid">
-    <div class="box">
-      <h4>Cliente</h4>
-      <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
-      <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
-      <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
-      <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
-      <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
-      <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+  <section class="print-page-task">
+    <div class="top">
+      <div class="logo">
+        <img src="${esc(logoSrc)}" alt="Logo">
+      </div>
+      <div class="doc">
+        <h1>Presupuesto (Borrador)</h1>
+        <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
+      </div>
     </div>
 
-    <div class="box">
-      <h4>Obra / Visita</h4>
-      <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
-      <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
-      <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
-      <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
-      <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+    <hr>
+
+    <div class="grid">
+      <div class="box">
+        <h4>Cliente</h4>
+        <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
+        <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
+        <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
+        <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
+        <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+      </div>
+
+      <div class="box">
+        <h4>Obra / Visita</h4>
+        <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
+        <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
+        <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
+        <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+      </div>
     </div>
-  </div>
 
-  ${htmlTareas || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
-
-  <div class="total">
-    <div class="valor">TOTAL: ${esc(totalTxt)}</div>
-  </div>
+    ${htmlTareas || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
+  </section>
 </div>
 </body>
 </html>`;
