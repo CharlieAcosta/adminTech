@@ -39,34 +39,37 @@
           `${rootSel} .tarea-mano-obra .porcentaje-extra`,
         ].join(',');
 
-      $(document)
-        .off('input.presu change.presu', filaInputs)
-        .on('input.presu change.presu', filaInputs, function () {
-          const $tr   = $(this).closest('tr');
-          const $card = $(this).closest('.tarea-card');
+        $(document)
+          .off('input.presu change.presu', filaInputs)
+          .on('input.presu change.presu', filaInputs, function () {
+            const $tr   = $(this).closest('tr');
+            const $card = $(this).closest('.tarea-card');
 
-          // Recalcular la fila que cambió
-          if ($tr.find('.cantidad-material').length && typeof window.calcularFilaMaterial === 'function') {
-            window.calcularFilaMaterial($tr);
-          }
-          if ($tr.find('.cantidad-mano-obra').length && typeof window.calcularFilaManoObra === 'function') {
-            window.calcularFilaManoObra($tr);
-          }
+            if (typeof window.marcarPresupuestoComoModificado === 'function') {
+              window.marcarPresupuestoComoModificado();
+            }
 
-          // Subtotales del bloque y total de tarea
-          if (typeof window.actualizarSubtotalesBloque === 'function') {
-            window.actualizarSubtotalesBloque($card);
-          }
-          if (typeof window.actualizarTotalesPorTarea === 'function') {
-            // el wrapper ya resuelve firma (numeroTarea, $card) o ($card)
-            _safeActualizarTotalesPorTarea($card, this);
-          }
+            // Recalcular la fila que cambió
+            if ($tr.find('.cantidad-material').length && typeof window.calcularFilaMaterial === 'function') {
+              window.calcularFilaMaterial($tr);
+            }
+            if ($tr.find('.cantidad-mano-obra').length && typeof window.calcularFilaManoObra === 'function') {
+              window.calcularFilaManoObra($tr);
+            }
 
-          // Total general
-          if (typeof window.actualizarTotalGeneral === 'function') {
-            window.actualizarTotalGeneral();
-          }
-        });
+            // Subtotales del bloque y total de tarea
+            if (typeof window.actualizarSubtotalesBloque === 'function') {
+              window.actualizarSubtotalesBloque($card);
+            }
+            if (typeof window.actualizarTotalesPorTarea === 'function') {
+              _safeActualizarTotalesPorTarea($card, this);
+            }
+
+            // Total general
+            if (typeof window.actualizarTotalGeneral === 'function') {
+              window.actualizarTotalGeneral();
+            }
+          });
 
       // 2) “Otros” y utilidades globales por bloque
       const bloqueInputs =
@@ -77,35 +80,43 @@
           `${rootSel} .utilidad-global-mano-obra`,
         ].join(',');
 
-      $(document)
-        .off('input.presu change.presu', bloqueInputs)
-        .on('input.presu change.presu', bloqueInputs, function () {
-          const $card = $(this).closest('.tarea-card');
+        $(document)
+          .off('input.presu change.presu', bloqueInputs)
+          .on('input.presu change.presu', bloqueInputs, function () {
+            const $card = $(this).closest('.tarea-card');
 
-          if (typeof window.actualizarSubtotalesBloque === 'function') {
-            window.actualizarSubtotalesBloque($card);
-          }
-          if (typeof window.actualizarTotalesPorTarea === 'function') {
-            _safeActualizarTotalesPorTarea($card, this);
-          }
-          if (typeof window.actualizarTotalGeneral === 'function') {
-            window.actualizarTotalGeneral();
-          }
-        });
+            if (typeof window.marcarPresupuestoComoModificado === 'function') {
+              window.marcarPresupuestoComoModificado();
+            }
 
-      // 3) Incluir en total (checkbox de la cabecera de tarea)
-      $(document)
-        .off('change.presu', `${rootSel} .incluir-en-total`)
-        .on('change.presu', `${rootSel} .incluir-en-total`, function () {
-          const $card = $(this).closest('.tarea-card');
+            if (typeof window.actualizarSubtotalesBloque === 'function') {
+              window.actualizarSubtotalesBloque($card);
+            }
+            if (typeof window.actualizarTotalesPorTarea === 'function') {
+              _safeActualizarTotalesPorTarea($card, this);
+            }
+            if (typeof window.actualizarTotalGeneral === 'function') {
+              window.actualizarTotalGeneral();
+            }
+          });
 
-          if (typeof window.actualizarTotalesPorTarea === 'function') {
-            _safeActualizarTotalesPorTarea($card, this);
-          }
-          if (typeof window.actualizarTotalGeneral === 'function') {
-            window.actualizarTotalGeneral();
-          }
-        });
+        // 3) Incluir en total (checkbox de la cabecera de tarea)
+        $(document)
+          .off('change.presu', `${rootSel} .incluir-en-total`)
+          .on('change.presu', `${rootSel} .incluir-en-total`, function () {
+            const $card = $(this).closest('.tarea-card');
+
+            if (typeof window.marcarPresupuestoComoModificado === 'function') {
+              window.marcarPresupuestoComoModificado();
+            }
+
+            if (typeof window.actualizarTotalesPorTarea === 'function') {
+              _safeActualizarTotalesPorTarea($card, this);
+            }
+            if (typeof window.actualizarTotalGeneral === 'function') {
+              window.actualizarTotalGeneral();
+            }
+          });
     })();
 
 
@@ -140,25 +151,41 @@
          </div>`
       );
     });
+    if (typeof window.marcarPresupuestoComoModificado === 'function') {
+      window.marcarPresupuestoComoModificado();
+    }
+
     this.value = '';
   });
 
   // 3) eliminar
   $(document).on('click.presu', '.presu-eliminar-imagen', function (e) {
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
+
     const $wrap = $(this).closest('.preview-img-container');
     const idx   = $wrap.closest('.presu-dropzone').data('index');
-    const nombre = $wrap.data('nombre-archivo');     // existente
+    const nombre = $wrap.data('nombre-archivo'); // existente
+
     if (nombre) {
       if (!window.fotosEliminadasPorTarea[idx]) window.fotosEliminadasPorTarea[idx] = [];
       window.fotosEliminadasPorTarea[idx].push(nombre);
       $wrap.remove();
+
+      if (typeof window.marcarPresupuestoComoModificado === 'function') {
+        window.marcarPresupuestoComoModificado();
+      }
       return;
     }
-    const tempId = $wrap.data('temp-id');            // nueva
+
+    const tempId = $wrap.data('temp-id'); // nueva
     if (tempId && window.fotosNuevasPorTarea[idx]) {
       window.fotosNuevasPorTarea[idx] = window.fotosNuevasPorTarea[idx].filter(x => x.tempId !== tempId);
       $wrap.remove();
+
+      if (typeof window.marcarPresupuestoComoModificado === 'function') {
+        window.marcarPresupuestoComoModificado();
+      }
     }
   });
 
@@ -485,6 +512,10 @@ $(document)
         // limpiar buffers correctos
         window.fotosNuevasPorTarea     = {};
         window.fotosEliminadasPorTarea = {};
+
+        if (typeof window.marcarPresupuestoComoGuardado === 'function') {
+          window.marcarPresupuestoComoGuardado();
+        }
       } else {
         const msg = resp?.msg || 'No se pudo guardar el presupuesto.';
         if (typeof mostrarError === 'function') mostrarError(msg);
@@ -933,14 +964,18 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   }
 
   // Si tus helpers existen, mejor usar esos (como ya venías haciendo)
-  if (typeof window._safeActualizarSubtotalesBloque === 'function') {
-    window._safeActualizarSubtotalesBloque($card, $card[0]);
+  if (typeof _safeActualizarSubtotalesBloque === 'function') {
+    _safeActualizarSubtotalesBloque($card, $card[0]);
   }
-  if (typeof window._safeActualizarTotalesPorTarea === 'function') {
-    window._safeActualizarTotalesPorTarea($card, $card[0]);
+  if (typeof _safeActualizarTotalesPorTarea === 'function') {
+    _safeActualizarTotalesPorTarea($card, $card[0]);
   }
-  if (typeof window._safeActualizarTotalGeneral === 'function') {
-    window._safeActualizarTotalGeneral();
+  if (typeof _safeActualizarTotalGeneral === 'function') {
+    _safeActualizarTotalGeneral();
+  }
+
+  if (typeof window.marcarPresupuestoComoModificado === 'function') {
+    window.marcarPresupuestoComoModificado();
   }
 
   if (window.mostrarExito) {

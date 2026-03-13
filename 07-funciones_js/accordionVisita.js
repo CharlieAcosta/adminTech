@@ -2546,157 +2546,201 @@ $(document).ready(function() {
         };
 
         // Logo (ruta relativa)
-        const logoSrc = 'dist/img/logos_propios/ecotechos-logo_resplandor-624x213.png';
+        // Logo
+        const logoSrc = `${window.location.origin}/admintech/dist/img/logos_propios/ecotechos-logo2.png`;
 
         // Construir HTML de tareas desde el DOM del presupuesto
-        let htmlTareas = '';
+let htmlTareas = '';
 
-        $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
-          const nro = idx + 1;
-          const $card = $(this);
+$('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
+  const nro = idx + 1;
+  const $card = $(this);
 
-          const desc = ($card.find('.tarea-encabezado b').text() || '').trim()
-            || ($card.find('textarea').first().val() || '').trim()
-            || `Tarea ${nro}`;
+  const desc = ($card.find('.tarea-encabezado b').text() || '').trim()
+    || ($card.find('textarea').first().val() || '').trim()
+    || `Tarea ${nro}`;
 
-          // Materiales
-          let filasMat = '';
-          $card.find('.tarea-materiales tbody tr')
-            .not('.fila-subtotal,.fila-otros-materiales')
-            .each(function () {
-              const $tr = $(this);
-              const material = ($tr.find('td').eq(0).text() || '').trim();
-              const cant = ($tr.find('.cantidad-material').val() ?? '').toString();
-              const pu   = ($tr.find('.precio-unitario').val() ?? '').toString();
-              const pex  = ($tr.find('.porcentaje-extra').val() ?? '').toString();
-              const sub  = ($tr.find('.subtotal-material').text() || '').trim();
+  // Materiales
+  let filasMat = '';
+  $card.find('.tarea-materiales tbody tr')
+    .not('.fila-subtotal,.fila-otros-materiales')
+    .each(function () {
+      const $tr = $(this);
+      const material = ($tr.find('td').eq(0).text() || '').trim();
+      const cant = ($tr.find('.cantidad-material').val() ?? '').toString();
+      const pu   = ($tr.find('.precio-unitario').val() ?? '').toString();
+      const pex  = ($tr.find('.porcentaje-extra').val() ?? '').toString();
+      const sub  = ($tr.find('.subtotal-material').text() || '').trim();
 
-              filasMat += `
-                <tr>
-                  <td>${esc(material)}</td>
-                  <td class="num">${esc(cant)}</td>
-                  <td class="num">${esc(pu)}</td>
-                  <td class="num">${esc(pex)}</td>
-                  <td class="num">${esc(sub)}</td>
-                </tr>`;
-            });
+      filasMat += `
+        <tr>
+          <td>${esc(material)}</td>
+          <td class="num">${esc(cant)}</td>
+          <td class="num">${esc(pu)}</td>
+          <td class="num">${esc(pex)}</td>
+          <td class="num">${esc(sub)}</td>
+        </tr>`;
+    });
 
-          const otrosMat = ($card.find('.input-otros-materiales').val() ?? '').toString();
-          const subtotalMat = ($card.find('.tarea-materiales .fila-subtotal td:last-child b').text() || '').trim();
+  const otrosMat = ($card.find('.input-otros-materiales').val() ?? '').toString();
+  const subtotalMat = ($card.find('.tarea-materiales .fila-subtotal td:last-child b').text() || '').trim();
 
-          // Mano de obra
-          let filasMO = '';
-          $card.find('.tarea-mano-obra tbody tr')
-            .not('.fila-subtotal,.fila-otros-mano')
-            .each(function () {
-              const $tr = $(this);
-              const tipo = ($tr.find('td').eq(0).text() || '').trim();
-              const oper = ($tr.find('.cantidad-mano-obra').val() ?? '').toString();
-              const dias = ($tr.find('.dias-mano-obra').val() ?? '').toString();
-              const jor  = ($tr.find('.jornales-mano-obra').val() ?? '').toString();
-              const valJ = ($tr.find('.valor-jornal').val() ?? '').toString();
-              const pex  = ($tr.find('.porcentaje-extra').val() ?? '').toString();
-              const sub  = ($tr.find('.subtotal-mano').text() || '').trim();
+  // Mano de obra
+  let filasMO = '';
+  $card.find('.tarea-mano-obra tbody tr')
+    .not('.fila-subtotal,.fila-otros-mano')
+    .each(function () {
+      const $tr = $(this);
+      const tipo = ($tr.find('td').eq(0).text() || '').trim();
+      const oper = ($tr.find('.cantidad-mano-obra').val() ?? '').toString();
+      const dias = ($tr.find('.dias-mano-obra').val() ?? '').toString();
+      const jor  = ($tr.find('.jornales-mano-obra').val() ?? '').toString();
+      const valJ = ($tr.find('.valor-jornal').val() ?? '').toString();
+      const pex  = ($tr.find('.porcentaje-extra').val() ?? '').toString();
+      const sub  = ($tr.find('.subtotal-mano').text() || '').trim();
 
-              filasMO += `
-                <tr>
-                  <td>${esc(tipo)}</td>
-                  <td class="num">${esc(oper)}</td>
-                  <td class="num">${esc(dias)}</td>
-                  <td class="num">${esc(jor)}</td>
-                  <td class="num">${esc(valJ)}</td>
-                  <td class="num">${esc(pex)}</td>
-                  <td class="num">${esc(sub)}</td>
-                </tr>`;
-            });
+      filasMO += `
+        <tr>
+          <td>${esc(tipo)}</td>
+          <td class="num">${esc(oper)}</td>
+          <td class="num">${esc(dias)}</td>
+          <td class="num">${esc(jor)}</td>
+          <td class="num">${esc(valJ)}</td>
+          <td class="num">${esc(pex)}</td>
+          <td class="num">${esc(sub)}</td>
+        </tr>`;
+    });
 
-          const otrosMO = ($card.find('.input-otros-mano').val() ?? '').toString();
-          const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
+  const otrosMO = ($card.find('.input-otros-mano').val() ?? '').toString();
+  const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
+  const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
 
-          const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
+  // Fotos
+  let fotosHtml = '';
+  const $prev = $(`#presu_preview_${nro}`);
+  if ($prev.length) {
+    $prev.find('img').each(function () {
+      const src = $(this).attr('src');
+      if (!src) return;
+      fotosHtml += `<img class="foto" src="${esc(src)}" alt="Foto tarea ${nro}">`;
+    });
+  }
+  if (!fotosHtml) fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
 
-          // Fotos
-          let fotosHtml = '';
-          const $prev = $(`#presu_preview_${nro}`);
-          if ($prev.length) {
-            $prev.find('img').each(function () {
-              const src = $(this).attr('src');
-              if (!src) return;
-              fotosHtml += `<img class="foto" src="${esc(src)}" alt="Foto tarea ${nro}">`;
-            });
-          }
-          if (!fotosHtml) fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
+  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
+  const encabezadoInterno = idx === 0 ? '' : `
+    <div class="top">
+      <div class="logo">
+        <img src="${esc(logoSrc)}" alt="Logo">
+      </div>
+      <div class="doc">
+        <h1>Presupuesto (Borrador)</h1>
+        <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
+      </div>
+    </div>
 
-          htmlTareas += `
-            <section class="bloque">
-              <h3>Tarea ${nro}</h3>
-              <div class="linea"><b>Detalle:</b> ${esc(desc)}</div>
+    <hr>
 
-              <div class="grid2">
-                <div>
-                  <h4>Materiales</h4>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Material</th>
-                        <th class="num">Cantidad</th>
-                        <th class="num">Precio Unit.</th>
-                        <th class="num">% Extra</th>
-                        <th class="num">Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${filasMat || `<tr><td colspan="5" class="falta">FALTA COMPLETAR</td></tr>`}
-                      <tr>
-                        <td><b>Otros</b></td>
-                        <td colspan="3"></td>
-                        <td class="num">${esc(otrosMat || '0')}</td>
-                      </tr>
-                      <tr>
-                        <td colspan="4" class="num"><b>Subtotal Materiales</b></td>
-                        <td class="num"><b>${esc(subtotalMat || 'FALTA COMPLETAR')}</b></td>
-                      </tr>
-                    </tbody>
-                  </table>
+    <div class="grid">
+      <div class="box">
+        <h4>Cliente</h4>
+        <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
+        <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
+        <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
+        <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
+        <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+      </div>
 
-                  <h4 style="margin-top:14px;">Mano de obra</h4>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Tipo</th>
-                        <th class="num">Oper.</th>
-                        <th class="num">Días</th>
-                        <th class="num">Jornales</th>
-                        <th class="num">Valor</th>
-                        <th class="num">% Extra</th>
-                        <th class="num">Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${filasMO || `<tr><td colspan="7" class="falta">FALTA COMPLETAR</td></tr>`}
-                      <tr>
-                        <td><b>Otros</b></td>
-                        <td colspan="5"></td>
-                        <td class="num">${esc(otrosMO || '0')}</td>
-                      </tr>
-                      <tr>
-                        <td colspan="6" class="num"><b>Subtotal Mano de Obra</b></td>
-                        <td class="num"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
-                      </tr>
-                    </tbody>
-                  </table>
+      <div class="box">
+        <h4>Obra / Visita</h4>
+        <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
+        <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
+        <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
+        <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+      </div>
+    </div>
+  `;
 
-                  <div class="subtarea"><b>${esc(subtTareaTxt)}</b></div>
-                </div>
+  const clasePagina = idx === 0 ? 'print-page-task' : 'print-page-task page-break-before';
 
-                <div>
-                  <h4>Imágenes</h4>
-                  <div class="fotos">${fotosHtml}</div>
-                </div>
-              </div>
-            </section>
-          `;
-        });
+  htmlTareas += `
+    <section class="${clasePagina}">
+      ${encabezadoInterno}
+
+      <section class="bloque">
+        <h3>Tarea ${nro}</h3>
+        <div class="linea"><b>Detalle:</b> ${esc(desc)}</div>
+
+        <h4>Materiales</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th class="num">Cantidad</th>
+              <th class="num">Precio Unit.</th>
+              <th class="num">% Extra</th>
+              <th class="num">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasMat || `<tr><td colspan="5" class="falta">FALTA COMPLETAR</td></tr>`}
+            <tr>
+              <td><b>Otros</b></td>
+              <td colspan="3"></td>
+              <td class="num">${esc(otrosMat || '0')}</td>
+            </tr>
+            <tr>
+              <td colspan="4" class="num"><b>Subtotal Materiales</b></td>
+              <td class="num"><b>${esc(subtotalMat || 'FALTA COMPLETAR')}</b></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4 style="margin-top:14px;">Mano de obra</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th class="num">Oper.</th>
+              <th class="num">Días</th>
+              <th class="num">Jornales</th>
+              <th class="num">Valor</th>
+              <th class="num">% Extra</th>
+              <th class="num">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasMO || `<tr><td colspan="7" class="falta">FALTA COMPLETAR</td></tr>`}
+            <tr>
+              <td><b>Otros</b></td>
+              <td colspan="5"></td>
+              <td class="num">${esc(otrosMO || '0')}</td>
+            </tr>
+            <tr>
+              <td colspan="6" class="num"><b>Subtotal Mano de Obra</b></td>
+              <td class="num"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="subtarea"><b>${esc(subtTareaTxt)}</b></div>
+
+        <h4 style="margin-top:16px;">Imágenes</h4>
+        <div class="fotos">${fotosHtml}</div>
+      </section>
+    </section>
+  `;
+});
+
+htmlTareas += `
+  <section class="print-page-total page-break-before">
+    <div class="total">
+      <div class="valor">TOTAL: ${esc(totalTxt)}</div>
+    </div>
+  </section>
+`;
 
         // HTML completo (lo usamos para extraer el <body>)
         const baseHref = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
@@ -2745,8 +2789,22 @@ $(document).ready(function() {
 
   .subtarea { margin-top: 8px; padding: 7px 9px; background:#f7f7f7; border:1px solid #ddd; border-radius: 8px; text-align:right; font-weight: 700; }
 
-  .fotos { display:flex; flex-wrap:wrap; gap:6px; align-content: flex-start; }
-  .foto { width: 140px; height: 105px; object-fit: cover; border:1px solid #ddd; border-radius: 8px; break-inside: avoid; page-break-inside: avoid; }
+  .fotos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-content: flex-start;
+  }
+
+  .foto {
+    width: calc(50% - 5px);
+    height: 180px;
+    object-fit: cover;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 
   .total { display:flex; justify-content:flex-end; margin-top: 10px; break-inside: avoid; }
   .total .valor { font-size: 16px; font-weight: 800; padding: 8px 12px; border: 2px solid #111; border-radius: 10px; }
