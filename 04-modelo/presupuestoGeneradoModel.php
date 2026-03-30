@@ -25,8 +25,9 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         $id_previsita   = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : null;
         $id_visita      = isset($payload['id_visita']) ? (int)$payload['id_visita'] : null;
         $id_presupuesto = !empty($payload['id_presupuesto']) ? (int)$payload['id_presupuesto'] : null;
+        // Cada nuevo guardado vuelve el presupuesto a BORRADOR.
+        // Si ya fue impreso/enviado/aprobado, una modificación invalida ese estado previo.
         $estado         = 'BORRADOR'; // unificamos a mayúsculas
-        $estadoExistente = null;
         $moneda         = 'ARS';
         $version        = 1;
 
@@ -58,7 +59,6 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
             if ($row && !empty($row['id_presupuesto'])) {
                 $id_presupuesto = (int)$row['id_presupuesto'];
-                $estadoExistente = !empty($row['estado']) ? strtoupper(trim((string)$row['estado'])) : null;
             }
 
 
@@ -76,13 +76,13 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 mysqli_stmt_close($stmt);
             } else {
                 // Reutilizamos el existente: actualizamos cabecera (NO borrar hijos / NO borrar carpeta)
-                $estadoGuardar = $estadoExistente ?: $estado;
+                // y reseteamos el estado a BORRADOR en cada guardado.
                 $stmt = mysqli_prepare($db, "
                     UPDATE presupuestos
                     SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
                     WHERE id_presupuesto = ?
                 ");
-                mysqli_stmt_bind_param($stmt, "iisi", $id_previsita, $id_visita, $estadoGuardar, $id_presupuesto);
+                mysqli_stmt_bind_param($stmt, "iisi", $id_previsita, $id_visita, $estado, $id_presupuesto);
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al actualizar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
                 }
