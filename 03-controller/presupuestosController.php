@@ -96,6 +96,9 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  			case 'Borrador':
 		  				$claseEstado = 'text-secondary';
 		  				break;
+		  			case 'Impreso':
+		  				$claseEstado = 'text-info';
+		  				break;
 		  			case 'Enviado':
 		  				$claseEstado = 'text-primary';
 		  				break;

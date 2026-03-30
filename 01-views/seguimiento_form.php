@@ -646,15 +646,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
             <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2">
-              <i class="fas fa-save"></i> Guardar(php)
+              <i class="fas fa-save"></i> Guardar
             </button>
 
             <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto">
-              <i class="fas fa-print"></i> Imprimir(php)
+              <i class="fas fa-print"></i> Imprimir
             </button>
 
             <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail">
-              <i class="fas fa-envelope"></i> Enviar por mail(php)
+              <i class="fas fa-envelope"></i> Enviar por mail
             </button>
           </div>
 

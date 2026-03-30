@@ -1936,15 +1936,15 @@ $(document).ready(function() {
       <div class="presupuesto-total-row">
         <div class="presupuesto-total-actions">
           <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2">
-            <i class="fas fa-save"></i> Guardar(js) 
+            <i class="fas fa-save"></i> Guardar 
           </button>
   
           <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto" disabled>
-            <i class="fas fa-print"></i> Imprimir(js) 
+            <i class="fas fa-print"></i> Imprimir 
           </button>
   
           <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail" disabled>
-            <i class="fas fa-envelope"></i> Enviar por mail(js) 
+            <i class="fas fa-envelope"></i> Enviar por mail 
           </button>
         </div>
   
@@ -2493,7 +2493,7 @@ $(document).ready(function() {
 
   $(document)
     .off('click', '.btn-imprimir-presupuesto')
-    .on('click', '.btn-imprimir-presupuesto', function (e) {
+    .on('click', '.btn-imprimir-presupuesto', async function (e) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -2510,11 +2510,39 @@ $(document).ready(function() {
       try {
         // Solo imprimimos si existe id_presupuesto (guardado)
         const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
+        const idPrevisitaImpresion = String($('#id_previsita').val() || '').trim();
         if (!idPresupuesto) {
           if (typeof mostrarAdvertencia === 'function') {
             mostrarAdvertencia('Debe guardar el presupuesto antes de imprimir.', 4);
           } else {
             alert('Debe guardar el presupuesto antes de imprimir.');
+          }
+          window.__PRESU_PRINT_LOCK__ = false;
+          return false;
+        }
+        if (!idPrevisitaImpresion) {
+          if (typeof mostrarAdvertencia === 'function') {
+            mostrarAdvertencia('No se pudo obtener el Nro de pre-visita para imprimir.', 4);
+          } else {
+            alert('No se pudo obtener el Nro de pre-visita para imprimir.');
+          }
+          window.__PRESU_PRINT_LOCK__ = false;
+          return false;
+        }
+
+        try {
+          await simpleUpdateInDB(
+            '../06-funciones_php/funciones.php',
+            'presupuestos',
+            { estado: 'IMPRESO' },
+            [{ columna: 'id_presupuesto', condicion: '=', valorCompara: String(idPresupuesto) }]
+          );
+        } catch (errEstado) {
+          console.log('Error al actualizar estado del presupuesto a IMPRESO:', errEstado);
+          if (typeof mostrarError === 'function') {
+            mostrarError('No se pudo actualizar el estado del presupuesto a IMPRESO.');
+          } else {
+            alert('No se pudo actualizar el estado del presupuesto a IMPRESO.');
           }
           window.__PRESU_PRINT_LOCK__ = false;
           return false;
@@ -2544,21 +2572,118 @@ $(document).ready(function() {
           const t = String(v ?? '').trim();
           return t ? esc(t) : '<span class="falta">FALTA COMPLETAR</span>';
         };
+        const valOrDash = (v) => {
+          const t = String(v ?? '').trim();
+          return t ? esc(t) : '-';
+        };
+        const cleanSelectText = (selector) => {
+          const t = $(selector).text().trim();
+          if (!t) return '';
+          const invalidos = ['Calle', 'Partido', 'Localidad', 'Provincia'];
+          return invalidos.includes(t) ? '' : t;
+        };
+        const formatFechaCorta = (fecha) => {
+          const t = String(fecha ?? '').trim();
+          if (!t) return '-';
+          const m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+          return esc(t);
+        };
+        const formatTelefono = (telefono) => {
+          const limpio = String(telefono ?? '')
+            .replace(/[()_]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          return limpio || '-';
+        };
+        const resumirTituloTarea = (texto, fallback) => {
+          const limpio = String(texto ?? '').replace(/\s+/g, ' ').trim();
+          if (!limpio) return String(fallback ?? '').toUpperCase();
+
+          const idxPunto = limpio.indexOf('.');
+          if (idxPunto > -1) {
+            return limpio.slice(0, idxPunto).trim().toUpperCase();
+          }
+
+          const idxComa = limpio.indexOf(',');
+          if (idxComa > -1) {
+            return limpio.slice(0, idxComa).trim().toUpperCase();
+          }
+
+          const palabras = limpio.split(' ').filter(Boolean);
+          if (palabras.length <= 10) {
+            return limpio.toUpperCase();
+          }
+
+          return `${palabras.slice(0, 10).join(' ').toUpperCase()}...`;
+        };
+        const limpiarPrefijoTarea = (texto) => String(texto ?? '')
+          .replace(/^\s*tarea\s*\d+\s*[:.-]?\s*/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        const fechaImpresion = new Date();
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const numeroPresupuestoImpresion = `${idPrevisitaImpresion}-${fechaImpresion.getFullYear()}${pad2(fechaImpresion.getMonth() + 1)}${pad2(fechaImpresion.getDate())}-${pad2(fechaImpresion.getHours())}${pad2(fechaImpresion.getMinutes())}${pad2(fechaImpresion.getSeconds())}`;
+        const razonSocialArchivo = String(cliente?.razon_social ?? '')
+          .trim()
+          .replace(/\s+/g, ' ')
+          .replace(/[\\/:*?"<>|]/g, '')
+          .replace(/\s+/g, '-');
+        const nombreArchivoPdf = `${razonSocialArchivo || 'PRESUPUESTO'}-${numeroPresupuestoImpresion}`;
+        const responsableImpresion = ($('.nombre-completo').first().text() || '').trim() || '-';
+        const calleObra = cleanSelectText('#select2-calle_visita-container');
+        const alturaObra = ($('#altura_visita').val() || '').toString().trim();
+        const partidoObra = cleanSelectText('#select2-partido_visita-container');
+        const localidadObra = cleanSelectText('#select2-localidad_visita-container');
+        const calleYAlturaObra = [calleObra, alturaObra].filter((v) => String(v).trim()).join(' ');
+        const resumenObra = [
+          cliente?.razon_social || '',
+          calleYAlturaObra,
+          localidadObra,
+          partidoObra
+        ].filter((v) => String(v).trim()).join(' | ');
+        const requerimientoTecnico = ($('#requerimiento_tecnico').val() || '').trim();
+        const descripcionObra = requerimientoTecnico || 'Requerimiento técnico';
+        const encabezadoDatosHtml = `
+    <div class="grid">
+      <div class="box">
+        <h4><b>CLIENTE</b></h4>
+        <div class="linea"><b>Razón social:</b> ${valOrDash(cliente.razon_social)}</div>
+        <div class="linea"><b>CUIT:</b> ${valOrDash(cliente.cuit)}</div>
+        <div class="linea"><b>Dirección:</b> ${valOrDash(cliente.direccion)}</div>
+        <div class="linea"><b>Contacto:</b> ${valOrDash(cliente.contacto)}</div>
+        <div class="linea"><b>Email:</b> ${valOrDash(cliente.email)}</div>
+        <div class="linea"><b>Teléfono:</b> ${esc(formatTelefono(cliente.telefono))}</div>
+      </div>
+
+      <div class="box">
+        <h4><b>OBRA</b></h4>
+        <div class="linea">${valOrDash(resumenObra)}</div>
+        <div class="linea"><b>Fecha de visita:</b> ${formatFechaCorta(obra.fecha)}</div>
+        <div class="linea"><b>Responsable:</b> ${valOrDash(responsableImpresion)}</div>
+        <div class="linea"><b>Descripción:</b> ${esc(descripcionObra)}</div>
+      </div>
+    </div>
+  `;
 
         // Logo (ruta relativa)
         // Logo
         const logoSrc = `../dist/img/logos_propios/ecotechos-logo2.png`;
 
         // Construir HTML de tareas desde el DOM del presupuesto
-let htmlTareas = '';
+let htmlPrimeraPagina = '';
+let htmlPaginasTareas = '';
 
 $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
   const nro = idx + 1;
   const $card = $(this);
 
-  const desc = ($card.find('.tarea-encabezado b').text() || '').trim()
+  const descOriginal = ($card.find('.tarea-encabezado b').text() || '').trim()
     || ($card.find('textarea').first().val() || '').trim()
     || `Tarea ${nro}`;
+  const desc = limpiarPrefijoTarea(descOriginal);
+  const tituloTarea = resumirTituloTarea(desc, `Tarea ${nro}`);
 
   // Materiales
   let filasMat = '';
@@ -2634,7 +2759,7 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
         <img src="${esc(logoSrc)}" alt="Logo">
       </div>
       <div class="doc">
-        <h1>Presupuesto (Borrador)</h1>
+        <div class="doc-label">Presupuesto Nro:</div>
         <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
       </div>
     </div>
@@ -2663,85 +2788,64 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
     </div>
   `;
 
-  const clasePagina = idx === 0 ? 'print-page-task' : 'print-page-task page-break-before';
-
-  htmlTareas += `
-    <section class="${clasePagina}">
+  const contenidoTarea = `
       ${encabezadoInterno}
 
       <section class="bloque">
-        <h3>Tarea ${nro}</h3>
+        <h3>${esc(tituloTarea)}</h3>
         <div class="linea"><b>Detalle:</b> ${esc(desc)}</div>
 
         <h4>Materiales</h4>
-        <table>
-          <thead>
-            <tr>
-              <th>Material</th>
-              <th class="num">Cantidad</th>
-              <th class="num">Precio Unit.</th>
-              <th class="num">% Extra</th>
-              <th class="num">Subtotal</th>
-            </tr>
-          </thead>
+        <table class="tabla-resumen">
           <tbody>
-            ${filasMat || `<tr><td colspan="5" class="falta">FALTA COMPLETAR</td></tr>`}
-            <tr>
-              <td><b>Otros</b></td>
-              <td colspan="3"></td>
-              <td class="num">${esc(otrosMat || '0')}</td>
-            </tr>
-            <tr>
-              <td colspan="4" class="num"><b>Subtotal Materiales</b></td>
-              <td class="num"><b>${esc(subtotalMat || 'FALTA COMPLETAR')}</b></td>
+              <td class="label"><b>Subtotal Materiales</b></td>
+              <td class="value"><b>${esc(subtotalMat || 'FALTA COMPLETAR')}</b></td>
             </tr>
           </tbody>
         </table>
 
         <h4 style="margin-top:14px;">Mano de obra</h4>
-        <table>
-          <thead>
+        <table class="tabla-resumen">
             <tr>
-              <th>Tipo</th>
-              <th class="num">Oper.</th>
               <th class="num">Días</th>
-              <th class="num">Jornales</th>
-              <th class="num">Valor</th>
-              <th class="num">% Extra</th>
-              <th class="num">Subtotal</th>
-            </tr>
-          </thead>
           <tbody>
-            ${filasMO || `<tr><td colspan="7" class="falta">FALTA COMPLETAR</td></tr>`}
             <tr>
-              <td><b>Otros</b></td>
-              <td colspan="5"></td>
-              <td class="num">${esc(otrosMO || '0')}</td>
+              <td class="label"><b>Otros</b></td>
+              <td class="value">${esc(otrosMO || '0')}</td>
             </tr>
             <tr>
-              <td colspan="6" class="num"><b>Subtotal Mano de Obra</b></td>
-              <td class="num"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
+              <td class="label"><b>Subtotal Mano de Obra</b></td>
+              <td class="value"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
             </tr>
           </tbody>
         </table>
 
-        <div class="subtarea"><b>${esc(subtTareaTxt)}</b></div>
+        <div class="subtarea"><b>${esc(subtTareaTxt.replace(/^Subtotal\s+Tarea\s+\d+\s*:\s*/i, 'Subtotal: '))}</b></div>
 
         <h4 style="margin-top:16px;">Imágenes</h4>
         <div class="fotos">${fotosHtml}</div>
       </section>
-    </section>
   `;
+
+  if (idx === 0) {
+    htmlPrimeraPagina += contenidoTarea;
+  } else {
+    htmlPaginasTareas += `
+      <section class="print-page-task page-break-before">
+        ${contenidoTarea}
+      </section>
+    `;
+  }
 });
 
-htmlTareas += `
+const htmlPaginaTotal = `
   <section class="print-page-total page-break-before">
     <div class="top">
       <div class="logo">
         <img src="${esc(logoSrc)}" alt="Logo">
       </div>
       <div class="doc">
-        <h1>Presupuesto (Borrador)</h1>
+        <div class="doc-label">Presupuesto Nro:</div>
         <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
       </div>
     </div>
@@ -2783,21 +2887,23 @@ htmlTareas += `
 <head>
   <meta charset="utf-8">
   <base href="${esc(baseHref)}">
-  <title>Presupuesto (Borrador) #${esc(idPresupuesto)}</title>
+  <title>${esc(nombreArchivoPdf)}</title>
 
   <style>
   * { box-sizing: border-box; }
-  html, body { padding: 0; margin: 0; }
+  html, body { padding: 0; margin: 0; width: 100%; overflow-x: hidden; }
   body { font-family: Arial, Helvetica, sans-serif; color:#111; margin: 0; }
 
   @page { size: A4; margin: 10mm; }
 
-  .page { padding: 0; }
+  .page { width: 100%; max-width: 100%; padding: 0; overflow-x: hidden; }
 
   .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .logo img { max-width: 220px; height:auto; }
   .doc { text-align:right; }
   .doc h1 { margin:0; font-size: 18px; letter-spacing: .2px; }
+  .doc-label { margin:0; font-size: 18px; font-weight: 400; letter-spacing: .2px; }
+  .doc-code { margin-top: 2px; font-size: 15px; font-weight: 700; line-height: 1.2; }
   .muted { color:#666; font-size: 11px; margin-top: 2px; }
   hr { border:0; border-top:1px solid #ddd; margin: 10px 0 12px; }
 
@@ -2808,15 +2914,18 @@ htmlTareas += `
   .falta { color:#b00020; font-weight:700; }
 
   .bloque { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
-  h3 { margin: 0 0 8px; font-size: 14px; border-left: 4px solid #111; padding-left: 8px; }
+  h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; border-left: 4px solid #111; padding-left: 8px; text-transform: uppercase; text-decoration: underline; }
   h4 { margin: 8px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color:#333; }
 
   .grid2 { display:grid; grid-template-columns: 2fr 1fr; gap:10px; }
 
-  table { width:100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+  table { width:100%; max-width:100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
   th, td { border:1px solid #ddd; padding: 5px 6px; vertical-align: top; }
   th { background:#f5f5f5; text-align:left; }
   .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tabla-resumen td { padding: 6px 10px; }
+  .tabla-resumen .label { width: 86%; text-align: right; }
+  .tabla-resumen .value { width: 14%; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
   table, tr, td, th { page-break-inside: avoid; break-inside: avoid; }
 
@@ -2826,13 +2935,14 @@ htmlTareas += `
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
+    align-items: flex-start;
     align-content: flex-start;
   }
 
   .foto {
     width: calc(50% - 5px);
-    height: 180px;
-    object-fit: cover;
+    height: auto;
+    object-fit: contain;
     border: 1px solid #ddd;
     border-radius: 8px;
     break-inside: avoid;
@@ -2845,6 +2955,12 @@ htmlTareas += `
   @media print {
     body { margin: 0; }
   
+    html, body, .page, .print-page-task, .print-page-total {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
     .box, .bloque, .fotos, .foto, table, tr, td, th {
       break-inside: avoid;
       page-break-inside: avoid;
@@ -2872,7 +2988,7 @@ htmlTareas += `
         <img src="${esc(logoSrc)}" alt="Logo">
       </div>
       <div class="doc">
-        <h1>Presupuesto (Borrador)</h1>
+        <div class="doc-label">Presupuesto Nro:</div>
         <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
       </div>
     </div>
@@ -2900,8 +3016,10 @@ htmlTareas += `
       </div>
     </div>
 
-    ${htmlTareas || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
+    ${htmlPrimeraPagina || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
   </section>
+  ${htmlPaginasTareas}
+  ${htmlPaginaTotal}
 </div>
 </body>
 </html>`;
@@ -2914,6 +3032,10 @@ htmlTareas += `
         const cleanup = () => {
           const $r = $('#' + PRINT_ROOT_ID);
           if ($r.length) $r.empty();
+          if (window.__PRESU_PRINT_OLD_TITLE__ !== undefined) {
+            document.title = window.__PRESU_PRINT_OLD_TITLE__;
+            delete window.__PRESU_PRINT_OLD_TITLE__;
+          }
           window.__PRESU_PRINT_LOCK__ = false;
         };
 
@@ -2966,14 +3088,33 @@ htmlTareas += `
         const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
         let soloBody = bodyMatch ? bodyMatch[1] : html;
 
+        soloBody = soloBody.replace(
+          /<div class="grid">[\s\S]*?<h4>Cliente<\/h4>[\s\S]*?<h4>Obra \/ Visita<\/h4>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/g,
+          encabezadoDatosHtml
+        );
+
+        soloBody = soloBody.replace(
+          /<table class="tabla-resumen">\s*<tr>[\s\S]*?<tbody>/g,
+          '<table class="tabla-resumen"><tbody>'
+        );
+
+        soloBody = soloBody.replace(
+          /<div class="muted">[\s\S]*?<\/div>/g,
+          `<div class="doc-code">${esc(numeroPresupuestoImpresion)}</div>`
+        );
+
         // 4) Corregir logo a absoluto
         soloBody = soloBody.replace(
-          /<img\s+src="[^"]*"\s+alt="Logo">/i,
+          /<img\s+src="[^"]*"\s+alt="Logo">/g,
           `<img src="${logoAbs}" alt="Logo">`
         );
 
         // 5) Inyectar en el root
         $printRoot.html(`<style>${cssInterno}</style>${soloBody}`);
+        if (window.__PRESU_PRINT_OLD_TITLE__ === undefined) {
+          window.__PRESU_PRINT_OLD_TITLE__ = document.title;
+        }
+        document.title = nombreArchivoPdf;
 
         // 6) afterprint: usar listener (evita pisadas)
         const afterPrintHandler = () => {
