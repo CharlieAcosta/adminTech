@@ -286,6 +286,42 @@ function intervinientes_names($b_array){
      return $intervinieron_agentes;
 }
 
+function resumir_titulo_tarea_presupuesto(string $descripcion, int $maxPalabras = 12): string
+{
+    $texto = trim(preg_replace('/\r\n?/', "\n", $descripcion));
+    if ($texto === '') {
+        return '';
+    }
+
+    $lineas = preg_split('/\n+/', $texto) ?: [];
+    $lineas = array_values(array_filter(array_map('trim', $lineas), static function ($linea) {
+        return $linea !== '';
+    }));
+
+    if (count($lineas) > 1) {
+        return $lineas[0];
+    }
+
+    $textoPlano = $lineas[0] ?? $texto;
+
+    $posPunto = strpos($textoPlano, '.');
+    if ($posPunto !== false) {
+        return trim(substr($textoPlano, 0, $posPunto + 1));
+    }
+
+    $posComa = strpos($textoPlano, ',');
+    if ($posComa !== false) {
+        return trim(substr($textoPlano, 0, $posComa + 1));
+    }
+
+    $palabras = preg_split('/\s+/u', $textoPlano, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    if (count($palabras) <= $maxPalabras) {
+        return $textoPlano;
+    }
+
+    return implode(' ', array_slice($palabras, 0, $maxPalabras)) . '...';
+}
+
 function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true): string
 {
     $hoy = new DateTimeImmutable('now');
@@ -327,6 +363,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     foreach ($tareas as $t) {
         $nro          = (int)($t['nro'] ?? 0);
         $descripcion  = $t['descripcion'] ?? '';
+        $tituloTarea  = resumir_titulo_tarea_presupuesto((string)$descripcion);
         $incluido     = (int)($t['incluir_en_total'] ?? 1) === 1 ? 'checked' : '';
         $utilMatPct   = $t['utilidad_materiales_pct'] ?? null;
         $utilMoPct    = $t['utilidad_mano_obra_pct'] ?? null;
@@ -456,7 +493,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
         $html[] = '
         <div class="tarea-card">
           <div class="tarea-encabezado">
-            <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($descripcion) .'</b></span>
+            <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b></span>
             <label class="incluir-presupuesto-label">
               <input type="checkbox" class="incluir-en-total" '. $incluido .'>
               <span>Incluído en el presupuesto</span>

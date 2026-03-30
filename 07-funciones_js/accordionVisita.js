@@ -1521,6 +1521,9 @@ $(document).ready(function() {
       datos.tareas.forEach((tarea, index) => {
         const numeroTarea = index + 1;
         const descripcion = tarea.descripcion || '';
+        const tituloTarea = (typeof window.resumirTituloTareaPresupuesto === 'function')
+          ? window.resumirTituloTareaPresupuesto(descripcion)
+          : descripcion;
     
       // HTML dinámico de materiales
       let htmlMateriales = '';
@@ -1681,11 +1684,11 @@ $(document).ready(function() {
        const claseImpuestos  = mostrarVistaDetallada ? '' : 'd-none';
 
       const htmlTarea = `
-      <div class="tarea-card">
+        <div class="tarea-card">
         <div class="tarea-encabezado">
           <span>
             <i class="fas fa-tasks"></i>
-            <b>Tarea ${numeroTarea}: ${descripcion}</b>
+            <b>Tarea ${numeroTarea}: ${tituloTarea}</b>
           </span>
           <label class="incluir-presupuesto-label">
             <input type="checkbox" class="incluir-en-total" checked>
@@ -2465,6 +2468,10 @@ $(document).ready(function() {
       // Recalcular filas
       $root.find('.tarea-card').each(function () {
         const $card = $(this);
+
+        if (typeof window.syncTituloCardPresupuesto === 'function') {
+          window.syncTituloCardPresupuesto($card);
+        }
     
         $card.find('tbody tr').each(function () {
           const $tr = $(this);
