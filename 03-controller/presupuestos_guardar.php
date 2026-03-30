@@ -6,6 +6,11 @@ $BASE = __DIR__;
 header('Content-Type: application/json; charset=utf-8');
 
 require_once $BASE . '/../04-modelo/presupuestoGeneradoModel.php';
+require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 try {
     // ---- Validaciones básicas
@@ -75,6 +80,28 @@ try {
                 // >>>> de aquí para abajo sigue tu flujo existente de guardar presupuesto <<<<
                 break;
         
+            case 'registrarIntervencionPresupuesto':
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $accionIntervencion = isset($_POST['accion_intervencion']) ? (string)$_POST['accion_intervencion'] : '';
+                $idUsuario = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
+
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesiÃ³n de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                echo json_encode(
+                    registrarIntervencionPresupuesto($idPresupuesto, $idPrevisita, $idUsuario, $accionIntervencion),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
             default:
                 throw new RuntimeException('Función no soportada: ' . $funcion);
     }
@@ -216,6 +243,24 @@ foreach ($_POST as $key => $val) {
 // 3) Llamada al modelo
 $resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea);
 
+    if (!empty($resultado['ok'])) {
+        $idPresupuestoGuardado = isset($resultado['id_presupuesto']) ? (int)$resultado['id_presupuesto'] : 0;
+        $idPrevisitaGuardada = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : 0;
+        $idUsuario = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
+
+        if ($idPresupuestoGuardado > 0 && $idPrevisitaGuardada > 0 && $idUsuario > 0) {
+            $registroIntervencion = registrarIntervencionPresupuesto(
+                $idPresupuestoGuardado,
+                $idPrevisitaGuardada,
+                $idUsuario,
+                'guardar'
+            );
+
+            if (!empty($registroIntervencion['ok']) && isset($registroIntervencion['intervino'])) {
+                $resultado['intervino'] = $registroIntervencion['intervino'];
+            }
+        }
+    }
 
     echo json_encode($resultado, JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
