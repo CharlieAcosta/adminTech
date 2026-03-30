@@ -9,6 +9,64 @@
   window.fotosNuevasPorTarea     = window.fotosNuevasPorTarea     || {};
   window.fotosEliminadasPorTarea = window.fotosEliminadasPorTarea || {};
 
+  function resumirTituloTareaPresupuesto(texto) {
+    const limpio = String(texto ?? '')
+      .replace(/\r/g, '')
+      .trim();
+
+    if (!limpio) return '';
+
+    const lineas = limpio
+      .split('\n')
+      .map((linea) => linea.trim())
+      .filter(Boolean);
+
+    if (lineas.length > 1) {
+      return lineas[0];
+    }
+
+    const textoPlano = lineas[0] || limpio;
+
+    const idxPunto = textoPlano.indexOf('.');
+    if (idxPunto > -1) {
+      return textoPlano.slice(0, idxPunto + 1).trim();
+    }
+
+    const idxComa = textoPlano.indexOf(',');
+    if (idxComa > -1) {
+      return textoPlano.slice(0, idxComa + 1).trim();
+    }
+
+    const palabras = textoPlano.split(/\s+/).filter(Boolean);
+    if (palabras.length <= 12) {
+      return textoPlano;
+    }
+
+    return `${palabras.slice(0, 12).join(' ')}...`;
+  }
+
+  function syncTituloCardPresupuesto($card) {
+    if (!$card || !$card.length) return;
+
+    const $titulo = $card.find('.tarea-encabezado b').first();
+    if (!$titulo.length) return;
+
+    const tituloActual = ($titulo.text() || '').trim();
+    const matchNumero = tituloActual.match(/^Tarea\s+(\d+)/i);
+    const numero = matchNumero ? matchNumero[1] : '';
+
+    let descripcion = $card.find('textarea').first().val();
+    descripcion = String(descripcion ?? '').trim();
+
+    const resumen = resumirTituloTareaPresupuesto(descripcion) || 'Detalle de la tarea';
+    $titulo.text(numero ? `Tarea ${numero}: ${resumen}` : resumen);
+  }
+
+  window.resumirTituloTareaPresupuesto = resumirTituloTareaPresupuesto;
+  window.syncTituloCardPresupuesto = function (cardOrJq) {
+    syncTituloCardPresupuesto($(cardOrJq));
+  };
+
   // limpieza por namespace
   $(document)
     .off('click.presu',  '.presu-dropzone')
@@ -116,6 +174,12 @@
             if (typeof window.actualizarTotalGeneral === 'function') {
               window.actualizarTotalGeneral();
             }
+          });
+
+        $(document)
+          .off('input.presu change.presu', `${rootSel} .tarea-card textarea`)
+          .on('input.presu change.presu', `${rootSel} .tarea-card textarea`, function () {
+            syncTituloCardPresupuesto($(this).closest('.tarea-card'));
           });
     })();
 
@@ -636,9 +700,21 @@ window.initRecalculoPresupuestoCargado = function () {
       );
   }
 
+  if (!window.__presuTitleBound) {
+    window.__presuTitleBound = true;
+
+    $(document)
+      .off('input.presutitle change.presutitle', '#contenedorPresupuestoGenerado .tarea-card textarea')
+      .on('input.presutitle change.presutitle', '#contenedorPresupuestoGenerado .tarea-card textarea', function () {
+        syncTituloCardPresupuesto($(this).closest('.tarea-card'));
+      });
+  }
+
         // 2) Barrido inicial: recalcula TODO lo ya pintado
         $root.find('.tarea-card').each(function () {
           const $card = $(this);
+
+          syncTituloCardPresupuesto($card);
 
           // Recalcular filas
           $card.find('tbody tr').each(function () {
