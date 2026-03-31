@@ -11,6 +11,7 @@ include_once '../04-modelo/callesModel.php'; //conecta a la tabla de usuarios
 include_once '../04-modelo/clientesModel.php'; //conecta a la tabla de clientes
 include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
+include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
@@ -33,6 +34,9 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
 
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
+$presupuestoIntervinoResumen = construirResumenIntervencionesPresupuesto([]);
+$ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
+$popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
 
 if(isset($_GET['id']) && isset($_GET['acci'])){
   $id = $_GET['id'];
@@ -256,6 +260,12 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
               $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
               if ($presupuesto_generado['presupuesto']) {
                 //muestra el accordión de presupuesto generado abierto
+                $presupuestoIntervinoResumen = obtenerResumenIntervencionesPresupuesto(
+                  (int)$datos['id_previsita'],
+                  isset($presupuestoGenerado['id_presupuesto']) ? (int)$presupuestoGenerado['id_presupuesto'] : null
+                );
+                $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
+                $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
                 $presupuesto_card = 'card-success';
                 $presupuesto_show = 'show';
                 $visita_show = '';
@@ -1383,8 +1393,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex justify-content-between align-items-center">
-          <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+        <h2 class="mb-0 d-flex align-items-center">
+          <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title" 
                   type="button" 
                   data-toggle="collapse" 
                   data-target="#collapsePresupuesto" 
@@ -1392,6 +1402,19 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
+          <span class="col-3 card-title text-right">
+            <strong>Intervino: </strong>
+            <span
+              class="intervino-presupuesto-ultimo"
+              tabindex="0"
+              role="button"
+              data-toggle="popover"
+              data-html="true"
+              data-placement="bottom"
+            >
+              <?php echo htmlspecialchars($ultimoIntervinoPresupuesto, ENT_QUOTES); ?>
+            </span>
+          </span>
         </h2>
       </div>
       <div id="collapsePresupuesto" class="collapse <?php echo $presupuesto_show; ?>" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
@@ -1526,6 +1549,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <?= $popoverIntervinientes ?>
 </div>
 
+<div id="popover-content-presupuesto" style="display:none">
+  <?= $popoverIntervinientesPresupuesto ?>
+</div>
+
 <script>
 $(function(){
   // inicializa sobre el mismo selector que ya usas
@@ -1546,6 +1573,45 @@ $(function(){
       return $('#popover-content-visita').html();
     }
   });
+});
+</script>
+
+<script>
+window.initPopoverIntervinoPresupuesto = function () {
+  const $target = $('#headingPresupuesto .intervino-presupuesto-ultimo[data-toggle="popover"]');
+  if (!$target.length) return;
+
+  $target.popover('dispose');
+  $target.popover({
+    trigger: 'hover focus',
+    container: 'body',
+    html: true,
+    sanitize: false,
+    template: `
+      <div class="popover popover-wide" role="tooltip">
+        <div class="arrow"></div>
+        <h3 class="popover-header"></h3>
+        <div class="popover-body"></div>
+      </div>
+    `,
+    content: function () {
+      return $('#popover-content-presupuesto').html();
+    }
+  });
+};
+
+window.actualizarIntervinoPresupuestoUI = function (intervino) {
+  const ultimo = String(intervino?.ultimo_texto || 'Sin intervenciones');
+  const popoverHtml = String(intervino?.popover_html || '');
+
+  $('#popover-content-presupuesto').html(popoverHtml);
+  $('.intervino-presupuesto-ultimo').text(ultimo);
+
+  window.initPopoverIntervinoPresupuesto();
+};
+
+$(function () {
+  window.initPopoverIntervinoPresupuesto();
 });
 </script>
 
@@ -2176,8 +2242,8 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
   <div class="accordion" id="accordionPresupuesto">
     <div class="card card-success accordion_3">
       <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex justify-content-between align-items-center">
-          <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+        <h2 class="mb-0 d-flex align-items-center">
+          <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title" 
                   type="button" 
                   data-toggle="collapse" 
                   data-target="#collapsePresupuesto" 
@@ -2185,7 +2251,19 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          </small>
+          <span class="col-3 card-title text-right">
+            <strong>Intervino: </strong>
+            <span
+              class="intervino-presupuesto-ultimo"
+              tabindex="0"
+              role="button"
+              data-toggle="popover"
+              data-html="true"
+              data-placement="bottom"
+            >
+              Sin intervenciones
+            </span>
+          </span>
         </h2>
       </div>
       <div id="collapsePresupuesto" class="collapse show" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">

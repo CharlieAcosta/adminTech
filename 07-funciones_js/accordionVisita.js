@@ -921,6 +921,9 @@ $(document).ready(function() {
               const clone = tpl.content.cloneNode(true);
               // Insertarlo después del accordion de Visita
               $('#accordionVisita').after(clone);
+              if (typeof window.initPopoverIntervinoPresupuesto === 'function') {
+                window.initPopoverIntervinoPresupuesto();
+              }
           }
       }
 
@@ -2553,6 +2556,22 @@ $(document).ready(function() {
           }
           window.__PRESU_PRINT_LOCK__ = false;
           return false;
+        }
+
+        try {
+          if (typeof window.registrarIntervencionPresupuestoAccion === 'function') {
+            const respIntervino = await window.registrarIntervencionPresupuestoAccion({
+              accion: 'imprimir',
+              id_presupuesto: idPresupuesto,
+              id_previsita: idPrevisitaImpresion
+            });
+
+            if (!respIntervino?.ok) {
+              console.log('No se pudo registrar la intervención de impresión:', respIntervino?.msg || respIntervino);
+            }
+          }
+        } catch (errIntervino) {
+          console.log('Error al registrar la intervención de impresión:', errIntervino);
         }
 
         // Tomamos datos desde tu recolector (si existe)

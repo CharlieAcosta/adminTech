@@ -419,6 +419,42 @@ $(document)
   // Usa el mismo endpoint que ya usa tu flujo "OK"
   const ENDPOINT = '../03-controller/presupuestos_guardar.php';
 
+  window.registrarIntervencionPresupuestoAccion = async function (opts = {}) {
+    const accion = String(opts.accion || '').trim();
+    const idPresupuesto = Number(opts.id_presupuesto || $('#contenedorPresupuestoGenerado').data('id_presupuesto')) || 0;
+    const idPrevisita = Number(opts.id_previsita || $('#id_previsita').val()) || 0;
+
+    if (!accion || !idPresupuesto || !idPrevisita) {
+      return { ok: false, msg: 'Faltan datos para registrar la intervención del presupuesto.' };
+    }
+
+    const resp = await $.ajax({
+      url: ENDPOINT,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'registrarIntervencionPresupuesto',
+        id_presupuesto: idPresupuesto,
+        id_previsita: idPrevisita,
+        accion_intervencion: accion
+      }
+    });
+
+    if (resp?.ok && resp?.intervino && typeof window.actualizarIntervinoPresupuestoUI === 'function') {
+      window.actualizarIntervinoPresupuestoUI(resp.intervino);
+    }
+
+    return resp;
+  };
+
+  window.hookPresupuestoMailEnviado = function (opts = {}) {
+    return window.registrarIntervencionPresupuestoAccion({
+      ...opts,
+      accion: 'enviar_mail'
+    });
+  };
+
   // Reemplazo global: ignora la versión vieja de presupuestoGuardar.js
   window.presupuestoGuardar = async function (idPresuOpcional) {
     try {
@@ -563,7 +599,9 @@ $(document)
         // reflejar id_presupuesto en el DOM si llega
         const nuevoId = resp.id_presupuesto || (resp.presupuesto && resp.presupuesto.id_presupuesto);
         if (nuevoId) {
-          $('#contenedorPresupuestoGenerado').attr('data-id_presupuesto', String(nuevoId));
+          $('#contenedorPresupuestoGenerado')
+            .attr('data-id_presupuesto', String(nuevoId))
+            .data('id_presupuesto', Number(nuevoId));
         }
   
         // feedback (mantengo tu esquema “verde” existente)
@@ -579,6 +617,10 @@ $(document)
 
         if (typeof window.marcarPresupuestoComoGuardado === 'function') {
           window.marcarPresupuestoComoGuardado();
+        }
+
+        if (resp?.intervino && typeof window.actualizarIntervinoPresupuestoUI === 'function') {
+          window.actualizarIntervinoPresupuestoUI(resp.intervino);
         }
       } else {
         const msg = resp?.msg || 'No se pudo guardar el presupuesto.';
