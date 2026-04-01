@@ -479,9 +479,9 @@ function existInDB($tabla, $columnaDB, $valueSearch, $callType, $valueStatus) {
         }
     } else {
         if (empty($rows)) {
-            echo json_encode(array('status' => false));
+            echo json_encode(array('status' => false), JSON_UNESCAPED_UNICODE);
         } else {
-            echo json_encode($rows); // es ajax, devuelve un json
+            echo json_encode($rows, JSON_UNESCAPED_UNICODE); // es ajax, devuelve un json
         }
     }
 }
@@ -589,7 +589,7 @@ function simpleInsertInDB_v2($tabla, $arrayColumnas, $arrayValues, $callType, $v
         if ($callType !== 'ajax') {
             return false;  // En PHP devolvemos false en caso de error
         } else {
-            echo json_encode(['success' => false, 'error' => $error]); // En AJAX devolvemos un JSON con el error
+            echo json_encode(['success' => false, 'error' => $error], JSON_UNESCAPED_UNICODE); // En AJAX devolvemos un JSON con el error
             return;
         }
     }
@@ -600,7 +600,7 @@ function simpleInsertInDB_v2($tabla, $arrayColumnas, $arrayValues, $callType, $v
     if ($callType !== 'ajax') {    
         return true; // En PHP, devuelve true si la consulta fue exitosa
     } else {
-        echo json_encode(['success' => true]); // En AJAX, devolvemos un JSON de éxito
+        echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE); // En AJAX, devolvemos un JSON de éxito
     }
 }
 
@@ -708,7 +708,7 @@ function simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatu
         return $resultado;  // Si no es AJAX, devolver el resultado
     } else {
     //dump('ajax'); //dd($resultado);  
-        echo json_encode($resultado);  // Si es AJAX, devolver JSON
+        echo json_encode($resultado, JSON_UNESCAPED_UNICODE);  // Si es AJAX, devolver JSON
     }
 }
 
@@ -782,7 +782,7 @@ function SelectAllDB($table_name, $column_condition, $condition, $value_conditio
     if ($callType !== 'ajax') {    
         return empty($rows) ? false : $rows;
     } else {
-        echo json_encode(empty($rows) ? ['status' => false] : $rows);
+        echo json_encode(empty($rows) ? ['status' => false] : $rows, JSON_UNESCAPED_UNICODE);
     }
 
 }
@@ -862,7 +862,7 @@ function countColWhere($tabla, $arrayWhere, $callType){
         
    }else{
 
-       if(empty($rows)){ echo json_encode( array('status' => false)); } else { echo json_encode($rows); } // es ajax devuelve un json
+       if(empty($rows)){ echo json_encode( array('status' => false), JSON_UNESCAPED_UNICODE); } else { echo json_encode($rows, JSON_UNESCAPED_UNICODE); } // es ajax devuelve un json
    }
 
 }
@@ -920,7 +920,7 @@ function dataByIdCallelocalidad($idCalle, $idLocalidad, $callType){
         
    }else{
 
-       if(empty($rows)){ echo json_encode( array('status' => false)); } else { echo json_encode($rows); } // es ajax devuelve un json
+       if(empty($rows)){ echo json_encode( array('status' => false), JSON_UNESCAPED_UNICODE); } else { echo json_encode($rows, JSON_UNESCAPED_UNICODE); } // es ajax devuelve un json
    }
 
 }
@@ -1162,9 +1162,9 @@ function existInDBByMultipleValues($tabla, $callType, $columnasDB, $valoresSearc
         }
     } else {
         if (empty($rows)) {
-            echo json_encode(array('status' => false));
+            echo json_encode(array('status' => false), JSON_UNESCAPED_UNICODE);
         } else {
-            echo json_encode($rows); // Es AJAX, devuelve un JSON
+            echo json_encode($rows, JSON_UNESCAPED_UNICODE); // Es AJAX, devuelve un JSON
         }
     }
 }
@@ -1206,7 +1206,7 @@ function db_select_with_filters($table, $columns = array(), $comparisons = array
     if (count($columns) !== count($comparisons) || count($columns) !== count($values)) {
         $error_message = "Error: Los arrays 'columns', 'comparisons' y 'values' deben tener la misma cantidad de elementos.";
         if ($callType === 'ajax') {
-            echo json_encode(array('error' => $error_message));
+            echo json_encode(array('error' => $error_message), JSON_UNESCAPED_UNICODE);
         } else {
             echo $error_message . PHP_EOL;
         }
@@ -1234,7 +1234,7 @@ function db_select_with_filters($table, $columns = array(), $comparisons = array
             if (!is_numeric($value)) {
                 $error_message = "Error: El valor para la columna '$column' debe ser numérico.";
                 if ($callType === 'ajax') {
-                    echo json_encode(array('error' => $error_message));
+                    echo json_encode(array('error' => $error_message), JSON_UNESCAPED_UNICODE);
                 } else {
                     echo $error_message . PHP_EOL;
                 }
@@ -1287,7 +1287,7 @@ function db_select_with_filters($table, $columns = array(), $comparisons = array
     if (!$result) {
         $error_message = "Error en la consulta: " . mysqli_error($db);
         if ($callType === 'ajax') {
-            echo json_encode(array('error' => $error_message));
+            echo json_encode(array('error' => $error_message), JSON_UNESCAPED_UNICODE);
         } else {
             echo $error_message . PHP_EOL;
         }
@@ -1307,7 +1307,7 @@ function db_select_with_filters($table, $columns = array(), $comparisons = array
 
     // Devolver los datos
     if ($callType === 'ajax') {
-        echo json_encode($data);
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
     } else {
         return $data;
     }
@@ -1326,12 +1326,12 @@ function registrosToFilas($registros, $claves, $acciones = [], $clases = [], $tr
 
     // Verificar que $registros sea realmente un array
     if (!is_array($registros)) {
-        die(json_encode(['error' => 'El parámetro "registros" no es un array válido']));
+        die(json_encode(['error' => 'El parámetro "registros" no es un array válido'], JSON_UNESCAPED_UNICODE));
     }
 
     // Verificamos si hay registros. Si no, devolvemos un mensaje.
     if (empty($registros)) {
-        return ($callType === 'ajax') ? json_encode(['html' => "<p>No hay registros para mostrar.</p>"]) : "<p>No hay registros para mostrar.</p>";
+        return ($callType === 'ajax') ? json_encode(['html' => "<p>No hay registros para mostrar.</p>"], JSON_UNESCAPED_UNICODE) : "<p>No hay registros para mostrar.</p>";
     }
 
     // Si $claves está vacío, usamos las claves del primer registro como $claves.
@@ -1450,11 +1450,11 @@ function registrosToFilas($registros, $claves, $acciones = [], $clases = [], $tr
         header('Content-Type: application/json');
 
         // Generar la respuesta en JSON
-        $response = json_encode(['html' => $filas]);
+        $response = json_encode(['html' => $filas], JSON_UNESCAPED_UNICODE);
 
         // Asegurarse de que la respuesta sea exitosa y esté limpia
         if (json_last_error() !== JSON_ERROR_NONE) {
-            die(json_encode(['error' => 'Error al codificar el JSON: ' . json_last_error_msg()]));
+            die(json_encode(['error' => 'Error al codificar el JSON: ' . json_last_error_msg()], JSON_UNESCAPED_UNICODE));
         }
 
         // Imprimir la respuesta y salir
@@ -1589,13 +1589,13 @@ function arrayJoin($arrayRegistros, $keysArray, $callType = '') {
             $jsonResponse = json_encode([
                 'status' => 'success',
                 'data' => $arrayRegistros
-            ]);
+            ], JSON_UNESCAPED_UNICODE);
             
             if ($jsonResponse === false) {
                 echo json_encode([
                     'status' => 'error',
                     'message' => 'Error al codificar JSON: ' . json_last_error_msg()
-                ]);
+                ], JSON_UNESCAPED_UNICODE);
             } else {
                 echo $jsonResponse;
             }
@@ -1853,7 +1853,7 @@ function db_select_with_filters_V2($table, $columns = [], $comparisons = [], $va
     if (count($columns) !== count($comparisons) || count($columns) !== count($values)) {
         $error_message = "Error: Los arrays 'columns', 'comparisons' y 'values' deben tener la misma cantidad de elementos.";
         if ($callType === 'ajax') {
-            echo json_encode(['error' => $error_message]);
+            echo json_encode(['error' => $error_message], JSON_UNESCAPED_UNICODE);
         } else {
             echo $error_message . PHP_EOL;
         }
@@ -1922,7 +1922,7 @@ function db_select_with_filters_V2($table, $columns = [], $comparisons = [], $va
     if (!$stmt) {
         $error_message = "Error en la preparación de la consulta: " . $db->error;
         if ($callType === 'ajax') {
-            echo json_encode(['error' => $error_message]);
+            echo json_encode(['error' => $error_message], JSON_UNESCAPED_UNICODE);
         } else {
             echo $error_message . PHP_EOL;
         }
@@ -1948,7 +1948,7 @@ function db_select_with_filters_V2($table, $columns = [], $comparisons = [], $va
     if (!$stmt->execute()) {
         $error_message = "Error en la ejecución de la consulta: " . $stmt->error;
         if ($callType === 'ajax') {
-            echo json_encode(['error' => $error_message]);
+            echo json_encode(['error' => $error_message], JSON_UNESCAPED_UNICODE);
         } else {
             echo $error_message . PHP_EOL;
         }
@@ -1968,7 +1968,7 @@ function db_select_with_filters_V2($table, $columns = [], $comparisons = [], $va
     // Devolver los datos en el formato correcto
     if ($callType === 'ajax') {
         header('Content-Type: application/json');
-        echo json_encode($data);
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
     } else {
         return $data;
     }

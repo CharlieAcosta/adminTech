@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Evita rutas relativas frágiles tipo "03-controller../..."
 $BASE = __DIR__;
 
@@ -87,12 +87,12 @@ try {
                 $idUsuario = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
 
                 if ($idUsuario <= 0) {
-                    echo json_encode(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesión de usuario activa.'], JSON_UNESCAPED_UNICODE);
                     exit;
                 }
 
                 if ($idUsuario <= 0) {
-                    echo json_encode(['ok' => false, 'msg' => 'No hay sesiÃ³n de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesión de usuario activa.'], JSON_UNESCAPED_UNICODE);
                     exit;
                 }
 
@@ -103,7 +103,7 @@ try {
                 exit;
 
             default:
-                throw new RuntimeException('Función no soportada: ' . $funcion);
+                throw new RuntimeException('Funcion no soportada: ' . $funcion);
     }
     
 
