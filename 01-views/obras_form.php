@@ -1,5 +1,6 @@
 <?php  
 session_start();
+header('Content-Type: text/html; charset=utf-8');
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
@@ -17,18 +18,18 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   if($_GET['acci'] == "v")
   {
     $visualiza="on";
-    registrarVisualizacion('OBRAS | Form - Visualización'); // Registrar visualización en la auditoría
+    registrarVisualizacion('OBRAS | Form - VisualizaciÃ³n'); // Registrar VisualizaciÃ³n en la auditorÃ­a
   }
 
   if($_GET['acci'] == "pdf"){$pdf="on";}
 
   $datos = modGetObrasById($id, 'php');
-  $datos = $datos[0];
+  $datos = $datos[0] ?? array();
   //var_dump($datos); die(); // [DEBUG PERMANENTE]
 //echo utf8_encode( $usuario_datos['0']['provincia'] ); die();
 }else{$datos = array();}
 
-// solo si es edición
+// solo si es EdiciÃ³n
 
 ?>
 
@@ -41,8 +42,8 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title class="v-alta d-none">ADMINTECH | Alta de obra</title>
-  <title class="v-visual d-none">ADMINTECH | Visualización de obra</title>
-  <title class="v-edit d-none">ADMINTECH | Edición de obra</title>
+  <title class="v-visual d-none">ADMINTECH | VisualizaciÃ³n de obra</title>
+  <title class="v-edit d-none">ADMINTECH | EdiciÃ³n de obra</title>
 
   <!-- Google Font: Source Sans Pro -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
@@ -79,7 +80,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1><strong class="v-alta d-none">Alta de obra</strong><strong class="v-visual d-none">Visualización de obra</strong><strong class="v-edit d-none">Edición de obra</strong></h1>
+            <h1><strong class="v-alta d-none">Alta de obra</strong><strong class="v-visual d-none">VisualizaciÃ³n de obra</strong><strong class="v-edit d-none">EdiciÃ³n de obra</strong></h1>
           </div>
           <div class="col-sm-6">
             <ol class="breadcrumb float-sm-right">
@@ -116,7 +117,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                                     <span class="input-group-text"><i class="fas fa-building v-requerido-icon"></i></span>
                                 </div>
                                 <input type="text" class="form-control" placeholder="Nombre de la Obra" id="obra_nombre" name="obra_nombre"
-                                value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'obra_nombre', null, null)); ?>">
+                                value="<?php echo arrayPrintValue(null, $datos, 'obra_nombre', null, null); ?>">
                             </div>
                         </div>
 
@@ -133,7 +134,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                         </div>
 
                         <div class="col-3 form-group mb-0 mt-1">
-                            <label class="mb-0">Fecha de Finalización</label>
+                            <label class="mb-0">Fecha de FinalizaciÃ³n</label>
                             <div class="input-group mb-0">
                                 <div class="input-group-prepend">
                                     <span class="input-group-text"><i class="fas fa-calendar-alt v-requerido-icon"></i></span>
@@ -181,7 +182,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                         <div class="col-12 form-group mb-0 mt-3">
                             <div id="map-container" style="position: relative;">
                                 <div id="map" style="height: 400px;"></div>
-                                <input id="pac-input" class="form-control" type="text" placeholder="Buscar ubicación" style="margin-top: 10px; position: absolute; top: 10px; left: 193px; width: 85%; z-index: 5;">
+                                <input id="pac-input" class="form-control" type="text" placeholder="Buscar ubicaciÃ³n" style="margin-top: 10px; position: absolute; top: 10px; left: 193px; width: 85%; z-index: 5;">
                             </div>
                         </div>
                     </div>
@@ -488,7 +489,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 </script>
 
 <!-- custom functions -->
-<!-- funcion para saber si es un alta, visualización, edición // formatea la vista -->
+<!-- funcion para saber si es un alta, VisualizaciÃ³n, EdiciÃ³n // formatea la vista -->
 <script src="../07-funciones_js/abm_detect.js"></script>
 <!-- funcion para traer las calles de una provincia -->
 <script src="../07-funciones_js/inputEmptyDetect.js"></script>

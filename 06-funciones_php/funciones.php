@@ -967,6 +967,7 @@ function optionsGetEnum($Dbase_name, $tabla_name, $columna_name, $leyenda, $sele
 //var_dump($Dbase_name, $tabla_name, $columna_name, $leyenda, $selected) ; die(); //[DEBUG PERMANENTE]
 
     $db = conectaDB(); 
+    $rows = array();
 
     $query  = "SELECT column_type ";
     $query .= "FROM information_schema.COLUMNS ";
@@ -983,11 +984,12 @@ function optionsGetEnum($Dbase_name, $tabla_name, $columna_name, $leyenda, $sele
 
     mysqli_close($db); // cierra la base de datos
 
-    $is_enum = substr($rows[0][COLUMN_TYPE], 0, 4);
+    $column_type = $rows[0]['column_type'] ?? '';
+    $is_enum = substr($column_type, 0, 4);
     //var_dump($is_enum); die(); //[DEBUG PERMANENTE]
 
     if($is_enum == 'enum'){
-        $items = str_replace("enum(", "", $rows[0][COLUMN_TYPE]);
+        $items = str_replace("enum(", "", $column_type);
         $items = substr($items, 0, -1);
         $items = explode(',', str_replace("'", '', $items));
         //var_dump($items); die(); //[DEBUG PERMANENTE]
@@ -999,7 +1001,8 @@ function optionsGetEnum($Dbase_name, $tabla_name, $columna_name, $leyenda, $sele
 
         foreach ($items as $key => $value) {
            if($value == $selected){$seleccionado = "selected";} else {$seleccionado = "";}
-           $options .= '<option value="'.utf8_encode($value).'" '.$seleccionado.'>'.utf8_encode($value).'</option>';
+           $value_safe = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+           $options .= '<option value="'.$value_safe.'" '.$seleccionado.'>'.$value_safe.'</option>';
 
         }
         //var_dump($options); die(); //[DEBUG PERMANENTE]

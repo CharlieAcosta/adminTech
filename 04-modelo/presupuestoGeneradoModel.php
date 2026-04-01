@@ -3,6 +3,103 @@
 
 require_once __DIR__ . '/conectDB.php';
 
+if (!function_exists('repararTextoMojibakePresupuesto')) {
+    function repararTextoMojibakePresupuesto(?string $texto): string
+    {
+        $texto = (string)($texto ?? '');
+        if ($texto === '') {
+            return '';
+        }
+
+        $marcas = ['Ã', 'Â', 'â', 'ðŸ', '�'];
+        $tieneMojibake = false;
+        foreach ($marcas as $marca) {
+            if (strpos($texto, $marca) !== false) {
+                $tieneMojibake = true;
+                break;
+            }
+        }
+
+        if (!$tieneMojibake) {
+            return $texto;
+        }
+
+        $mejor = $texto;
+        $scoreMejor = 0;
+        foreach ($marcas as $marca) {
+            $scoreMejor += substr_count($texto, $marca);
+        }
+
+        foreach (['Windows-1252', 'ISO-8859-1'] as $origen) {
+            $candidato = @mb_convert_encoding($texto, 'UTF-8', $origen);
+            if (!is_string($candidato) || $candidato === '') {
+                continue;
+            }
+
+            $score = 0;
+            foreach ($marcas as $marca) {
+                $score += substr_count($candidato, $marca);
+            }
+
+            if ($score < $scoreMejor) {
+                $mejor = $candidato;
+                $scoreMejor = $score;
+            }
+        }
+
+        return $mejor;
+    }
+}
+
+if (!function_exists('repararTextoMojibakePresupuestoProfundo')) {
+    function repararTextoMojibakePresupuestoProfundo(?string $texto): string
+    {
+        $texto = (string)($texto ?? '');
+        if ($texto === '') {
+            return '';
+        }
+
+        $marcas = ['Ã', 'Â', 'â', 'ð', 'ï¿½', '�'];
+        $scoreTexto = static function (string $valor) use ($marcas): int {
+            $score = 0;
+            foreach ($marcas as $marca) {
+                $score += substr_count($valor, $marca);
+            }
+            return $score;
+        };
+
+        $mejor = $texto;
+        $scoreMejor = $scoreTexto($texto);
+        if ($scoreMejor === 0) {
+            return $texto;
+        }
+
+        for ($paso = 0; $paso < 4; $paso++) {
+            $huboMejora = false;
+
+            foreach (['Windows-1252', 'ISO-8859-1'] as $origen) {
+                $candidato = @mb_convert_encoding($mejor, 'UTF-8', $origen);
+                if (!is_string($candidato) || $candidato === '') {
+                    continue;
+                }
+
+                $score = $scoreTexto($candidato);
+                if ($score < $scoreMejor) {
+                    $mejor = $candidato;
+                    $scoreMejor = $score;
+                    $huboMejora = true;
+                }
+            }
+
+            if (!$huboMejora) {
+                break;
+            }
+        }
+
+        return $mejor;
+    }
+}
+
 /**
  * Guarda un presupuesto + materiales + MO + fotos.
  *
@@ -664,6 +761,27 @@ function _obtenerTareasConDetalle(mysqli $db, int $id_presupuesto): array
         $t['materiales'] = $materialesPorTarea[$tid] ?? [];
         $t['mano_obra']  = $moPorTarea[$tid] ?? [];
         $t['fotos']      = $fotosPorTarea[$tid] ?? [];
+
+        if (isset($t['descripcion'])) {
+            $t['descripcion'] = repararTextoMojibakePresupuestoProfundo((string)$t['descripcion']);
+        }
+
+        foreach ($t['materiales'] as &$material) {
+            if (isset($material['nombre_material'])) {
+                $material['nombre_material'] = repararTextoMojibakePresupuestoProfundo((string)$material['nombre_material']);
+            }
+        }
+        unset($material);
+
+        foreach ($t['mano_obra'] as &$mano) {
+            if (isset($mano['nombre_jornal'])) {
+                $mano['nombre_jornal'] = repararTextoMojibakePresupuestoProfundo((string)$mano['nombre_jornal']);
+            }
+            if (isset($mano['observacion'])) {
+                $mano['observacion'] = repararTextoMojibakePresupuestoProfundo((string)$mano['observacion']);
+            }
+        }
+        unset($mano);
     }
     unset($t);
 

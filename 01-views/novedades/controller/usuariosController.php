@@ -2,6 +2,7 @@
 include_once 'modelo/usuariosModel.php'; //conecta a la base de dato
 
 if( isset($_POST['ajax']) && $_POST['ajax']=='on'){
+    header('Content-Type: application/json; charset=utf-8');
     switch ($_POST['funcion']) {
         case 'poblarDatableAll':
              poblarDatableAll($_POST['tds'], 'ajax');
@@ -28,7 +29,7 @@ function poblarDatableActivos($tds, $via){
 	if($via != 'ajax'){
 		return $filas;
 	}else{
-		echo json_encode($filas);
+		echo json_encode($filas, JSON_UNESCAPED_UNICODE);
 	}
 
 }
@@ -51,7 +52,7 @@ function poblarDatableAll($tds, $via){
 	if($via != 'ajax'){
 		return $filas;
 	}else{
-		echo json_encode($filas);
+		echo json_encode($filas, JSON_UNESCAPED_UNICODE);
 	}
 
 
@@ -59,5 +60,4 @@ function poblarDatableAll($tds, $via){
 
 
 ?>
-
 

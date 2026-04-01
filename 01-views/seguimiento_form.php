@@ -44,24 +44,24 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   if($_GET['acci'] == "pdf"){$pdf="on";}
 
   $datos = modGetPresupuestoById($id, 'php');
-  $datos = $datos[0];
+  $datos = $datos[0] ?? [];
 
   //dd($datos);
   //dd($datos['log_usuario_id']);
-  $intervino_previsita_agente = db_select_with_filters_V2(
+  $intervino_previsita_agente = !empty($datos['log_usuario_id']) ? db_select_with_filters_V2(
     'usuarios',                // tabla
     ['id_usuario'],            // columnas a filtrar
     ['='],                     // comparaciones
-    [$datos['log_usuario_id']],// valores
+    [$datos['log_usuario_id'] ?? null],// valores
     [],                        // ordenamiento (vacío)
     'php'                      // devuelve array en PHP
-  );
+  ) : [];
 
-  $intervino_previsita_apenom = $intervino_previsita_agente[0]['apellidos']." ".$intervino_previsita_agente[0]['nombres']." | ".strToDateFormat($datos['log_edicion'], 'd/m/Y H:i:s');
+  $intervino_previsita_apenom = ($intervino_previsita_agente[0]['apellidos'] ?? '')." ".($intervino_previsita_agente[0]['nombres'] ?? '')." | ".strToDateFormat($datos['log_edicion'] ?? '', 'd/m/Y H:i:s');
 
   $tareas_visitadas = [];
 
-  if ($datos['estado_visita'] == 'Ejecutada' && isset($datos['id_previsita'])) {
+  if (($datos['estado_visita'] ?? '') == 'Ejecutada' && isset($datos['id_previsita'])) {
       $id_visita = $datos['id_previsita'];
 
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
@@ -76,9 +76,9 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $orden_compra_card = 'card-danger';
     $presupuesto_display = 'd-none';
 
-    if($datos['estado_visita'] !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
+    if(($datos['estado_visita'] ?? '') !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
     
-    if($datos['estado_visita'] == 'Ejecutada'){
+    if(($datos['estado_visita'] ?? '') == 'Ejecutada'){
         $itemNumber = 0;
 
         //$itemNota = SelectAllDB('visita_notas', 'id_visita', '=', arrayPrintValue('', $datos, 'id_previsita', ''), $callType = 'php');
@@ -130,10 +130,10 @@ $provincias = getAllProvincias();
 $provinciasSelect = ""; //para el select de provincias
 foreach ($provincias as $key => $value) {
    if(!isset($cliente_datos)){ 
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
    }else{
     if($cliente_datos['0']['dirfis_provincia'] != $value['id_provincia']){
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
     }
    }
 }
@@ -146,7 +146,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
     $partidosSelect = ""; //para el select de partidos
     foreach ($partidos as $key => $value) {
       if($value['id_partido'] != $cliente_datos['0']['dirfis_partido']){
-        $partidosSelect .= '<option value="'.utf8_encode($value['id_partido']).'">'.utf8_encode($value['partido']).'</option>';
+        $partidosSelect .= '<option value="'.$value['id_partido'].'">'.$value['partido'].'</option>';
       }
     }
 }
@@ -156,7 +156,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
   $localidadesSelect = ""; //para el select de localidades
   foreach ($localidades as $key => $value) {
     if($value['id_localidad'] != $cliente_datos['0']['dirfis_localidad']){
-      $localidadesSelect .= '<option value="'.utf8_encode($value['id_localidad']).'">'.utf8_encode($value['localidad']).'</option>';
+      $localidadesSelect .= '<option value="'.$value['id_localidad'].'">'.$value['localidad'].'</option>';
     }
   }
 }
@@ -166,7 +166,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
   $callesSelect = ""; //para el select de calles
   foreach ($calles as $key => $value) {
     if($value['id_calle'] != $cliente_datos['0']['dirfis_calle']){
-      $callesSelect .= '<option value="'.utf8_encode($value['id_calle']).'">'.utf8_encode($value['calle']).'</option>';
+      $callesSelect .= '<option value="'.$value['id_calle'].'">'.$value['calle'].'</option>';
     }
   }
 }
@@ -928,7 +928,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                               <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
                             </div>
                             <select class="form-control select2bs4 v-select2 provincia <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="provincia_visita" name="provincia_visita">
-                              <option value="<?php if(isset($datos['provincia_visita'])){echo utf8_encode($datos['provincia_visita']);}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['provincianom'])){echo utf8_encode($datos['provincianom']);}else{echo "Provincia";} ?></option>
+                              <option value="<?php if(isset($datos['provincia_visita'])){echo $datos['provincia_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['provincianom'])){echo $datos['provincianom'];}else{echo "Provincia";} ?></option>
                               <?php echo $provinciasSelect;?>
                             </select>
                           </div>

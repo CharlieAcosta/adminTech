@@ -20,7 +20,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 //echo utf8_encode( $usuario_datos['0']['provincia'] ); die();
 }else{$datos = array();}
 
-// solo si es edición
+// solo si es ediciÃƒÂ³n
 
 ?>
 
@@ -33,8 +33,8 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title class="v-alta d-none">ADMINTECH | Alta de material</title>
-  <title class="v-visual d-none">ADMINTECH | Visualización de material</title>
-  <title class="v-edit d-none">ADMINTECH | Edición de material</title>
+  <title class="v-visual d-none">ADMINTECH | VisualizaciÃƒÂ³n de material</title>
+  <title class="v-edit d-none">ADMINTECH | EdiciÃƒÂ³n de material</title>
 
   <!-- Google Font: Source Sans Pro -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
@@ -68,7 +68,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1><strong class="v-alta d-none">Alta de material</strong><strong class="v-visual d-none">Visualización de material</strong><strong class="v-edit d-none">Edición de material</strong></h1>
+            <h1><strong class="v-alta d-none">Alta de material</strong><strong class="v-visual d-none">VisualizaciÃƒÂ³n de material</strong><strong class="v-edit d-none">EdiciÃƒÂ³n de material</strong></h1>
           </div>
           <div class="col-sm-6">
             <ol class="breadcrumb float-sm-right">
@@ -110,7 +110,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <span class="input-group-text"><i class="fas fa-flask-vial v-requerido-icon"></i></span>
                         </div>
                           <input type="text" class="form-control v-input-requerido texto-capital" data-inputmask='' data-mask="" inputmode="" data-cuit="" placeholder="Producto" id="producto" name="producto" 
-                          value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'producto', null, null)); ?>">
+                          value="<?php echo arrayPrintValue(null, $datos, 'producto', null, null); ?>">
                       </div>
                   </div>
 
@@ -121,7 +121,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <span class="input-group-text"><i class="fas fa-registered v-requerido-icon"></i>
                         </div>
                         <input type="text" class="form-control v-input-requerido" placeholder="Marca" id="marca" name="marca" 
-                        value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'marca', null, null)); ?>">
+                        value="<?php echo arrayPrintValue(null, $datos, 'marca', null, null); ?>">
                       </div>
                   </div>          
 
@@ -197,22 +197,22 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                   </div>
 
                   <div class="col-12 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Descripción corta</label></small>
+                      <small class="v-visual-edit d-none"><label class="mb-0">DescripciÃƒÂ³n corta</label></small>
                       <div class="input-group mb-0">
                         <div class="input-group-prepend">
                           <span class="input-group-text"><i class="fas fa-pen-to-square v-requerido-icon"></i>
                         </div>
-                        <input type="text" class="form-control v-input-requerido" placeholder="Descripción corta" id="descripcion_corta" name="descripcion_corta" value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'descripcion_corta', null, null)); ?>">
+                        <input type="text" class="form-control v-input-requerido" placeholder="DescripciÃƒÂ³n corta" id="descripcion_corta" name="descripcion_corta" value="<?php echo arrayPrintValue(null, $datos, 'descripcion_corta', null, null); ?>">
                       </div>
                   </div>
 
                   <div class="col-12 form-group mb-1 mt-1">
-                        <small class="v-visual-edit d-none"><label class="mb-0">Descripción técnica</label></small>
+                        <small class="v-visual-edit d-none"><label class="mb-0">DescripciÃƒÂ³n tÃƒÂ©cnica</label></small>
                         <div class="input-group mb-0">
                           <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fas fa-pen-to-square v-requerido-icon"></i></span>
                           </div>
-                          <textarea type="text" rows="5" class="form-control v-input-requerido" placeholder="Descripción técnica" id="descripcion_tecnica" name="descripcion_tecnica"><?php echo utf8_encode(arrayPrintValue(null, $datos, 'descripcion_tecnica', null, null)); ?></textarea>
+                          <textarea type="text" rows="5" class="form-control v-input-requerido" placeholder="DescripciÃƒÂ³n tÃƒÂ©cnica" id="descripcion_tecnica" name="descripcion_tecnica"><?php echo arrayPrintValue(null, $datos, 'descripcion_tecnica', null, null); ?></textarea>
                         </div>
                   </div>
 
@@ -222,7 +222,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fas fa-sticky-note"></i></span>
                           </div>
-                          <textarea type="text" rows="5" class="form-control" placeholder="Nota" id="nota_material" name="nota_material"><?php echo utf8_encode(arrayPrintValue(null, $datos, 'nota_material', null, null)); ?></textarea>
+                          <textarea type="text" rows="5" class="form-control" placeholder="Nota" id="nota_material" name="nota_material"><?php echo arrayPrintValue(null, $datos, 'nota_material', null, null); ?></textarea>
                         </div>
                   </div>
 
@@ -356,12 +356,12 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
             //alert('Alta');
             simpleInsertInDB('../06-funciones_php/funciones.php', 'materiales', NombresCampos('currentForm'), ValoresCampos('currentForm'))
              .then(data => {
-             // Manejar los datos obtenidos cuando la promesa se resuelva con éxito
+             // Manejar los datos obtenidos cuando la promesa se resuelva con ÃƒÂ©xito
              //   //console.log(data);
                if(data == 1)
                  {
                   mostrarConfirmacion(
-                      '¿Desea seguir ingresando materiales?',
+                      'Ã‚Â¿Desea seguir ingresando materiales?',
                       () => window.location.href = "../01-views/materiales_form.php",
                       () => window.location.href = "../01-views/materiales_listado.php",
                       'EX'
@@ -385,11 +385,11 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                 serializeForm('currentForm'),
                 [{columna: 'id_material', condicion: '=', valorCompara: $(".v-id").val()}]
              ).then(data => {
-             // Manejar los datos obtenidos cuando la promesa se resuelva con éxito
+             // Manejar los datos obtenidos cuando la promesa se resuelva con ÃƒÂ©xito
              //   //console.log(data);
                if(data == true)
                  {
-                  mostrarExito('EL MATERIAL SE MODIFICÓ CORRECTAMENTE');
+                  mostrarExito('EL MATERIAL SE MODIFICÃƒâ€œ CORRECTAMENTE');
                  }
                else
                  {
@@ -469,11 +469,11 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
       },
       contenido: {
         required: "Debe completar este campo",
-        min: "El valor mínimo permitido es 0.01"
+        min: "El valor mÃƒÂ­nimo permitido es 0.01"
       },
       rendimiento: {
         required: "Debe completar este campo",
-        min: "El valor mínimo permitido es 0.01"
+        min: "El valor mÃƒÂ­nimo permitido es 0.01"
       },
       unidad_rendimiento: {
         required: "Debe completar este campo"
@@ -483,7 +483,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
       },
       precio_unidad_venta: {
         required: "Debe completar este campo",
-        min: "El valor mínimo permitido es 0.01"
+        min: "El valor mÃƒÂ­nimo permitido es 0.01"
       }
     },
     errorElement: 'span',
@@ -598,7 +598,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 </script>
 
 <!-- custom functions -->
-<!-- funcion para saber si es un alta, visualización, edición // formatea la vista -->
+<!-- funcion para saber si es un alta, visualizaciÃƒÂ³n, ediciÃƒÂ³n // formatea la vista -->
 <script src="../07-funciones_js/abm_detect.js"></script>
 <!-- funcion para traer las calles de una provincia -->
 <script src="../07-funciones_js/inputEmptyDetect.js"></script>
@@ -611,7 +611,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 <script src="../07-funciones_js/materialesAcciones.js"></script>
 <!-- Guarda usuarios en la base -->
 <script src="../07-funciones_js/materialesGuardar.js"></script>
-<!-- Inicializa bsCustomFileInput después de que el documento se haya cargado -->
+<!-- Inicializa bsCustomFileInput despuÃƒÂ©s de que el documento se haya cargado -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     bsCustomFileInput.init();
@@ -648,14 +648,14 @@ $('input[type="file"]').change(function() {
            navigator.clipboard.writeText('');                  
           }
         else
-          { mostrarError('El link no fue copiado. Posiblemente olvidaste usar el botón derecho. Intentá de nuevo.', 5);
+          { mostrarError('El link no fue copiado. Posiblemente olvidaste usar el botÃƒÂ³n derecho. IntentÃƒÂ¡ de nuevo.', 5);
             campoV.next('.custom-file-label').html('Seleccionar archivo');
             campoV.val('');          
           }  
 
         })
         .catch(function(error) {
-          mostrarError('Ocurrió un error al copiar el link del archivo. Intentalo de nuevo.', 4);
+          mostrarError('OcurriÃƒÂ³ un error al copiar el link del archivo. Intentalo de nuevo.', 4);
         });
 
 });
@@ -663,3 +663,4 @@ $('input[type="file"]').change(function() {
 </script>
 </body>
 </html>
+
