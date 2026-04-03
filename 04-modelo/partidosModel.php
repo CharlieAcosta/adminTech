@@ -1,6 +1,7 @@
 <?php
 if(isset($_POST['ajax']) && $_POST['ajax']=='on'){
     include '../04-modelo/conectDB.php'; //conecta a la tabla de paises
+    header('Content-Type: application/json; charset=utf-8');
     if( isset($_POST['id_provincia']) ){getPartidosByProvincia($_POST['id_provincia'], 'ajax');}
 }
 
@@ -17,7 +18,7 @@ function getPartidosByProvincia($id_provincia, $metodo){
         while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
 
         foreach ($rows as $key => $value) {
-            $rows[$key]['partido'] = utf8_encode($value['partido']);
+            $rows[$key]['partido'] = (string)($value['partido'] ?? '');
         }
 
         mysqli_close($db);                           // cierra la base de datos
@@ -25,7 +26,7 @@ function getPartidosByProvincia($id_provincia, $metodo){
         if($metodo!="ajax"){
             return $rows; // es php devuelve un array()
         }else{
-            echo json_encode($rows); // es ajax devuelve un jason
+            echo json_encode($rows, JSON_UNESCAPED_UNICODE); // es ajax devuelve un jason
         }
 }
  

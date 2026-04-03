@@ -1,6 +1,7 @@
 <?php
 if(isset($_POST['ajax']) && $_POST['ajax']=='on'){
     include '../04-modelo/conectDB.php'; //conecta a la tabla de paises
+    header('Content-Type: application/json; charset=utf-8');
     if( isset($_POST['id_partido']) ){getLocalidadesByPartido($_POST['id_partido'], 'ajax');}
 }
 
@@ -19,7 +20,7 @@ function getLocalidadesByPartido($id_partido, $metodo){
         while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
 
         foreach ($rows as $key => $value) {
-            $rows[$key]['localidad'] = utf8_encode(ucwords(mb_strtolower($value['localidad'])));
+            $rows[$key]['localidad'] = ucwords(mb_strtolower((string)($value['localidad'] ?? '')));
         }
 
         mysqli_close($db);                           // cierra la base de datos
@@ -27,7 +28,7 @@ function getLocalidadesByPartido($id_partido, $metodo){
         if($metodo!="ajax"){
             return $rows; // es php devuelve un array()
         }else{
-            echo json_encode($rows); // es ajax devuelve un jason
+            echo json_encode($rows, JSON_UNESCAPED_UNICODE); // es ajax devuelve un jason
         }
 }
 // end - funcion que devuelve la totalidad de calles correspondientes a un partido

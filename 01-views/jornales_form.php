@@ -1,5 +1,6 @@
 <?php  
 session_start();
+header('Content-Type: text/html; charset=utf-8');
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/conectDB.php';
 include_once '../06-funciones_php/funciones.php';
@@ -28,7 +29,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 );
 
   // Siempre devolvés un array de arrays, así que accedemos al primero
-  $datos = $datos[0];
+  $datos = $datos[0] ?? array();
 }
 ?>
 

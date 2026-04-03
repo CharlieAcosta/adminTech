@@ -5,6 +5,7 @@ include_once '../04-modelo/conectDB.php'; // conecta a la base de datos
 
 
 if( isset($_POST['via']) && $_POST['via']=='ajax'){
+    header('Content-Type: application/json; charset=utf-8');
     
     switch ($_POST['funcion']) {
         case 'modGetClientesById':
@@ -60,7 +61,7 @@ function modGetAllRegistros($filtro){
          return $rows = array();
       }
    }else{
-      echo json_encode($rows); // es ajax devuelve un jason
+      echo json_encode($rows, JSON_UNESCAPED_UNICODE); // es ajax devuelve un jason
    }
 }
 
@@ -82,7 +83,7 @@ function modGetMaterialById($id, $via){
    if($via != 'ajax'){    
       return $rows; // es php devuelve un array()
    }else{
-      echo json_encode($rows); // es ajax devuelve un jason
+      echo json_encode($rows, JSON_UNESCAPED_UNICODE); // es ajax devuelve un jason
    }
 }
 // end - funcion para dar de alta un agente

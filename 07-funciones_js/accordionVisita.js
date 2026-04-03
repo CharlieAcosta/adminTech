@@ -2705,11 +2705,14 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
   const nro = idx + 1;
   const $card = $(this);
 
-  const descOriginal = ($card.find('.tarea-encabezado b').text() || '').trim()
-    || ($card.find('textarea').first().val() || '').trim()
+  let $detalle = $card.find('textarea.tarea-descripcion').first();
+  if (!$detalle.length) $detalle = $card.find('textarea').first();
+  const detalleOriginal = ($detalle.val() || '').trim();
+  const tituloOriginal = detalleOriginal
+    || ($card.find('.tarea-encabezado b').text() || '').trim()
     || `Tarea ${nro}`;
-  const desc = limpiarPrefijoTarea(descOriginal);
-  const tituloTarea = resumirTituloTarea(desc, `Tarea ${nro}`);
+  const detalleTarea = limpiarPrefijoTarea(detalleOriginal || tituloOriginal);
+  const tituloTarea = resumirTituloTarea(detalleTarea, `Tarea ${nro}`);
 
   // Materiales
   let filasMat = '';
@@ -2819,7 +2822,7 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
       <section class="bloque">
         <h3>${esc(tituloTarea)}</h3>
-        <div class="linea"><b>Detalle:</b> ${esc(desc)}</div>
+        <div class="linea detalle-tarea"><b>Detalle:</b> ${esc(detalleTarea || 'FALTA COMPLETAR')}</div>
 
         <h4>Materiales</h4>
         <table class="tabla-resumen">
@@ -2936,6 +2939,7 @@ const htmlPaginaTotal = `
   .box { border:1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
   .linea { margin: 3px 0; font-size: 12px; line-height: 1.25; }
+  .detalle-tarea { white-space: pre-line; overflow-wrap: anywhere; }
 
   .falta { color:#b00020; font-weight:700; }
 

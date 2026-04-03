@@ -44,24 +44,24 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   if($_GET['acci'] == "pdf"){$pdf="on";}
 
   $datos = modGetPresupuestoById($id, 'php');
-  $datos = $datos[0];
+  $datos = $datos[0] ?? [];
 
   //dd($datos);
   //dd($datos['log_usuario_id']);
-  $intervino_previsita_agente = db_select_with_filters_V2(
+  $intervino_previsita_agente = !empty($datos['log_usuario_id']) ? db_select_with_filters_V2(
     'usuarios',                // tabla
     ['id_usuario'],            // columnas a filtrar
     ['='],                     // comparaciones
-    [$datos['log_usuario_id']],// valores
+    [$datos['log_usuario_id'] ?? null],// valores
     [],                        // ordenamiento (vacío)
     'php'                      // devuelve array en PHP
-  );
+  ) : [];
 
-  $intervino_previsita_apenom = $intervino_previsita_agente[0]['apellidos']." ".$intervino_previsita_agente[0]['nombres']." | ".strToDateFormat($datos['log_edicion'], 'd/m/Y H:i:s');
+  $intervino_previsita_apenom = ($intervino_previsita_agente[0]['apellidos'] ?? '')." ".($intervino_previsita_agente[0]['nombres'] ?? '')." | ".strToDateFormat($datos['log_edicion'] ?? '', 'd/m/Y H:i:s');
 
   $tareas_visitadas = [];
 
-  if ($datos['estado_visita'] == 'Ejecutada' && isset($datos['id_previsita'])) {
+  if (($datos['estado_visita'] ?? '') == 'Ejecutada' && isset($datos['id_previsita'])) {
       $id_visita = $datos['id_previsita'];
 
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
@@ -76,9 +76,9 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $orden_compra_card = 'card-danger';
     $presupuesto_display = 'd-none';
 
-    if($datos['estado_visita'] !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
+    if(($datos['estado_visita'] ?? '') !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
     
-    if($datos['estado_visita'] == 'Ejecutada'){
+    if(($datos['estado_visita'] ?? '') == 'Ejecutada'){
         $itemNumber = 0;
 
         //$itemNota = SelectAllDB('visita_notas', 'id_visita', '=', arrayPrintValue('', $datos, 'id_previsita', ''), $callType = 'php');
@@ -130,10 +130,10 @@ $provincias = getAllProvincias();
 $provinciasSelect = ""; //para el select de provincias
 foreach ($provincias as $key => $value) {
    if(!isset($cliente_datos)){ 
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
    }else{
     if($cliente_datos['0']['dirfis_provincia'] != $value['id_provincia']){
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
     }
    }
 }
@@ -146,7 +146,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
     $partidosSelect = ""; //para el select de partidos
     foreach ($partidos as $key => $value) {
       if($value['id_partido'] != $cliente_datos['0']['dirfis_partido']){
-        $partidosSelect .= '<option value="'.utf8_encode($value['id_partido']).'">'.utf8_encode($value['partido']).'</option>';
+        $partidosSelect .= '<option value="'.$value['id_partido'].'">'.$value['partido'].'</option>';
       }
     }
 }
@@ -156,7 +156,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
   $localidadesSelect = ""; //para el select de localidades
   foreach ($localidades as $key => $value) {
     if($value['id_localidad'] != $cliente_datos['0']['dirfis_localidad']){
-      $localidadesSelect .= '<option value="'.utf8_encode($value['id_localidad']).'">'.utf8_encode($value['localidad']).'</option>';
+      $localidadesSelect .= '<option value="'.$value['id_localidad'].'">'.$value['localidad'].'</option>';
     }
   }
 }
@@ -166,7 +166,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
   $callesSelect = ""; //para el select de calles
   foreach ($calles as $key => $value) {
     if($value['id_calle'] != $cliente_datos['0']['dirfis_calle']){
-      $callesSelect .= '<option value="'.utf8_encode($value['id_calle']).'">'.utf8_encode($value['calle']).'</option>';
+      $callesSelect .= '<option value="'.$value['id_calle'].'">'.$value['calle'].'</option>';
     }
   }
 }
@@ -928,7 +928,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                               <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
                             </div>
                             <select class="form-control select2bs4 v-select2 provincia <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="provincia_visita" name="provincia_visita">
-                              <option value="<?php if(isset($datos['provincia_visita'])){echo utf8_encode($datos['provincia_visita']);}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['provincianom'])){echo utf8_encode($datos['provincianom']);}else{echo "Provincia";} ?></option>
+                              <option value="<?php if(isset($datos['provincia_visita'])){echo $datos['provincia_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['provincianom'])){echo $datos['provincianom'];}else{echo "Provincia";} ?></option>
                               <?php echo $provinciasSelect;?>
                             </select>
                           </div>
@@ -1553,40 +1553,106 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <?= $popoverIntervinientesPresupuesto ?>
 </div>
 
+<style>
+  .popover-wide {
+    max-width: min(400px, calc(100vw - 2rem)) !important;
+    width: min(400px, calc(100vw - 2rem)) !important;
+    max-height: 60vh;
+  }
+
+  .popover-wide .popover-header:empty {
+    display: none;
+  }
+
+  .popover-wide .popover-body {
+    max-height: calc(60vh - 1rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: auto;
+    scrollbar-color: #8a8f98 #e9ecef;
+  }
+
+  .popover-wide .table {
+    margin-bottom: 0;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar {
+    width: 14px;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar-track {
+    background: #e9ecef;
+    border-radius: 10px;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar-thumb {
+    background: #8a8f98;
+    border-radius: 10px;
+    border: 3px solid #e9ecef;
+  }
+
+  .popover-wide .popover-body::-webkit-scrollbar-thumb:hover {
+    background: #6c757d;
+  }
+</style>
+
 <script>
-$(function(){
-  // inicializa sobre el mismo selector que ya usas
-  $('#headingVisita [data-toggle="popover"]').popover({
-    trigger: 'hover focus',
-    container: 'body',
-    html:     true,
-    sanitize: false,  // desactiva saneamiento para que no borre <table>
-    // inyecta un template con clase propia
-    template: `
-      <div class="popover popover-wide" role="tooltip">
-        <div class="arrow"></div>
-        <h3 class="popover-header"></h3>
-        <div class="popover-body"></div>
-      </div>
-    `,
-    content: function(){
-      return $('#popover-content-visita').html();
+window.bindIntervinoPopoverPersistente = function ($target, getContent) {
+  if (!$target || !$target.length) return;
+
+  const HIDE_DELAY_MS = 180;
+
+  const limpiarTimer = function ($el) {
+    const timer = $el.data('intervinoPopoverHideTimer');
+    if (timer) {
+      clearTimeout(timer);
+      $el.removeData('intervinoPopoverHideTimer');
     }
-  });
-});
-</script>
+  };
 
-<script>
-window.initPopoverIntervinoPresupuesto = function () {
-  const $target = $('#headingPresupuesto .intervino-presupuesto-ultimo[data-toggle="popover"]');
-  if (!$target.length) return;
+  const programarOcultar = function ($el) {
+    limpiarTimer($el);
+    const timer = setTimeout(function () {
+      const tipId = $el.attr('aria-describedby');
+      const $tip = tipId ? $('#' + tipId) : $();
+      const triggerActivo = $el.is(':hover') || $el.is(':focus');
+      const popoverActivo = $tip.length && $tip.is(':hover');
 
+      if (!triggerActivo && !popoverActivo) {
+        $el.popover('hide');
+      }
+    }, HIDE_DELAY_MS);
+
+    $el.data('intervinoPopoverHideTimer', timer);
+  };
+
+  const vincularHoverPopover = function ($el) {
+    const tipId = $el.attr('aria-describedby');
+    if (!tipId) return;
+
+    const $tip = $('#' + tipId);
+    if (!$tip.length) return;
+
+    $tip.off('.intervinoPopoverPersistente');
+    $tip.on('mouseenter.intervinoPopoverPersistente', function () {
+      limpiarTimer($el);
+    });
+    $tip.on('mouseleave.intervinoPopoverPersistente', function () {
+      programarOcultar($el);
+    });
+  };
+
+  $target.off('.intervinoPopoverPersistente');
   $target.popover('dispose');
   $target.popover({
-    trigger: 'hover focus',
+    trigger: 'manual',
     container: 'body',
+    boundary: 'viewport',
     html: true,
     sanitize: false,
+    placement: function () {
+      return $(this).data('placement') || 'bottom';
+    },
     template: `
       <div class="popover popover-wide" role="tooltip">
         <div class="arrow"></div>
@@ -1595,8 +1661,44 @@ window.initPopoverIntervinoPresupuesto = function () {
       </div>
     `,
     content: function () {
-      return $('#popover-content-presupuesto').html();
+      return getContent.call(this);
     }
+  });
+
+  $target.on('mouseenter.intervinoPopoverPersistente focusin.intervinoPopoverPersistente', function () {
+    const $el = $(this);
+    limpiarTimer($el);
+    $el.popover('show');
+    vincularHoverPopover($el);
+  });
+
+  $target.on('mouseleave.intervinoPopoverPersistente focusout.intervinoPopoverPersistente', function () {
+    programarOcultar($(this));
+  });
+
+  $target.on('keydown.intervinoPopoverPersistente', function (e) {
+    if (e.key === 'Escape') {
+      limpiarTimer($(this));
+      $(this).popover('hide');
+    }
+  });
+};
+
+$(function(){
+  window.bindIntervinoPopoverPersistente(
+    $('#headingVisita [data-toggle="popover"]'),
+    function () {
+      return $('#popover-content-visita').html();
+    }
+  );
+});
+
+window.initPopoverIntervinoPresupuesto = function () {
+  const $target = $('#headingPresupuesto .intervino-presupuesto-ultimo[data-toggle="popover"]');
+  if (!$target.length) return;
+
+  window.bindIntervinoPopoverPersistente($target, function () {
+    return $('#popover-content-presupuesto').html();
   });
 };
 

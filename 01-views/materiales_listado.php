@@ -1,6 +1,7 @@
 <?php  
 session_start();
 define('BASE_URL', $_SESSION["base_url"]);
+header('Content-Type: text/html; charset=utf-8');
 include_once '../06-funciones_php/funciones.php';
 include_once '../03-controller/materialesController.php'; //conecta a la base de datos
 
@@ -171,5 +172,4 @@ $filas = poblarDatableAll(array('id_material', 'producto', 'marca', 'descripcion
 </body>
 </html>
 <script src="../07-funciones_js/materialesAcciones.js"></script>
-
 

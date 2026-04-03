@@ -3,6 +3,7 @@ include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/materialesModel.php'; //conecta a la base de datos
 
 if( isset($_POST['ajax']) && $_POST['ajax']=='on'){
+	header('Content-Type: application/json; charset=utf-8');
 	poblarDatableAll($_POST['tds'], 'ajax', $_POST['filtro']);
 }
 
@@ -51,11 +52,10 @@ function poblarDatableAll($tds, $via, $filtro){
 	if($via != 'ajax'){
 		return $filas;
 	}else{
-		echo json_encode($filas);
+		echo json_encode($filas, JSON_UNESCAPED_UNICODE);
 	}
 
 }
 
 ?>
-
 
