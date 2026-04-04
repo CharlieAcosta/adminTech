@@ -159,6 +159,36 @@ $filas = poblarDatableAll(
 <script src="../07-funciones_js/funciones.js"></script>
 
 <script>
+  const dataTableSeguimientoLanguage = {
+    processing: "Procesando...",
+    lengthMenu: "Mostrar _MENU_ registros",
+    zeroRecords: "No se encontraron resultados",
+    emptyTable: "No hay datos disponibles en esta tabla",
+    info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+    infoEmpty: "Mostrando 0 a 0 de 0 registros",
+    infoFiltered: "(filtrado de _MAX_ registros totales)",
+    loadingRecords: "Cargando...",
+    search: "Buscar:",
+    paginate: {
+      first: "Primero",
+      last: "Ultimo",
+      next: "Siguiente",
+      previous: "Anterior"
+    },
+    aria: {
+      sortAscending: ": Activar para ordenar la columna de manera ascendente",
+      sortDescending: ": Activar para ordenar la columna de manera descendente"
+    },
+    buttons: {
+      copy: "Copiar",
+      csv: "CSV",
+      excel: "Excel",
+      pdf: "PDF",
+      print: "Imprimir",
+      colvis: "Columnas"
+    }
+  };
+
   // --- Orden correcto para fechas en formato DD-MM-YYYY (DataTables) ---
   // Convierte "DD-MM-YYYY" -> número YYYYMMDD para ordenar real, no por texto.
   jQuery.fn.dataTable.ext.type.order['date-eu-pre'] = function (d) {
@@ -188,8 +218,15 @@ $filas = poblarDatableAll(
       "lengthChange": true,
       "autoWidth": false,
       "pageLength": 100,
-      "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
+      "buttons": [
+        { "extend": "copy", "text": "Copiar" },
+        { "extend": "csv", "text": "CSV" },
+        { "extend": "excel", "text": "Excel" },
+        { "extend": "pdf", "text": "PDF" },
+        { "extend": "print", "text": "Imprimir" },
+        { "extend": "colvis", "text": "Columnas" }
+      ],
+      "language": dataTableSeguimientoLanguage,
       "columns": [
         { "width": "1%" },
         { "width": "6%" },  // Ingreso
@@ -218,4 +255,3 @@ $filas = poblarDatableAll(
 </body>
 </html>
 <script src="../07-funciones_js/presupuestosAcciones.js"></script>
-

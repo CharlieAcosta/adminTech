@@ -72,6 +72,7 @@ function construirHtmlDocumentosEmitidos(items) {
         const estiloAccion = archivoDisponible ? '' : 'style="pointer-events:none;opacity:.35;"';
         const tooltipVer = archivoDisponible ? 'Ver documento' : 'Archivo no disponible';
         const tooltipDescargar = archivoDisponible ? 'Descargar documento' : 'Archivo no disponible';
+        const tooltipMail = archivoDisponible ? 'Enviar por mail' : 'Archivo no disponible';
 
         return `
             <tr class="${claseFila}">
@@ -97,6 +98,12 @@ function construirHtmlDocumentosEmitidos(items) {
                         data-nombre="${escapeHtmlDocumentoEmitido(nombreArchivo)}"
                         data-toggle="tooltip"
                         title="${tooltipDescargar}" ${estiloAccion}></i>
+                    <i class="v-icon-accion p-1 fas fa-envelope"
+                        data-accion="mail_documento_emitido"
+                        data-url="${escapeHtmlDocumentoEmitido(url)}"
+                        data-nombre="${escapeHtmlDocumentoEmitido(nombreArchivo)}"
+                        data-toggle="tooltip"
+                        title="${tooltipMail}" ${estiloAccion}></i>
                 </td>
             </tr>
         `;
@@ -111,7 +118,7 @@ function construirHtmlDocumentosEmitidos(items) {
                         <th>Documento</th>
                         <th style="width: 18%">Fecha emisión</th>
                         <th style="width: 22%">Usuario</th>
-                        <th style="width: 12%">Acciones</th>
+                        <th style="width: 14%">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>${filas}</tbody>
@@ -220,6 +227,27 @@ function presupuestoAcciones(elemento){
                 }
 
                 descargarArchivoDocumentoEmitido(urlDescarga, nombreDescarga);
+            break;
+
+            case 'mail_documento_emitido':
+                var urlMail = $(elemento).data('url') || '';
+
+                if (!urlMail) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Documento no disponible',
+                        text: 'No se encontró la ruta del documento seleccionado.',
+                        confirmButtonText: 'OK'
+                    });
+                    break;
+                }
+
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Próxima etapa',
+                    text: 'El envío por mail del documento emitido se va a implementar en la próxima etapa.',
+                    confirmButtonText: 'OK'
+                });
             break;
 
             case 'pdf': // generar pdf del usuario

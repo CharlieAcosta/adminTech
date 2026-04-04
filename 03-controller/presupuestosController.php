@@ -144,7 +144,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 						data-toggle="tooltip" 
 						title="Editar"></i>';
 
-			$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-file-pdf" 
+			$filas .= '<i class="v-icon-accion p-1 fas fa-file-pdf" 
 						data-accion="documentos_emitidos" 
 						data-toggle="tooltip" 
 						title="Documentos emitidos"></i>';
