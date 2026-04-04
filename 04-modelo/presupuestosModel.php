@@ -5,6 +5,7 @@ include_once '../04-modelo/conectDB.php'; // conecta a la base de datos
 
 
 if( isset($_POST['via']) && $_POST['via']=='ajax'){
+    header('Content-Type: application/json; charset=utf-8');
     
     switch ($_POST['funcion']) {
         case 'modGetClientesById':
@@ -71,7 +72,7 @@ function modGetAllRegistros($filtro){
          return $rows = array();
       }
    }else{
-      echo json_encode($rows); // es ajax devuelve un jason
+      echo json_encode($rows, JSON_UNESCAPED_UNICODE); // es ajax devuelve un jason
    }
 }
 
@@ -96,7 +97,7 @@ function modGetPresupuestoById($id, $via){
        loc.localidad  AS localidadnom,
        cal.calle      AS callenom
    FROM previsitas AS pv
-   STRAIGHT_JOIN provincias  AS pro ON pro.id_provincia  = CAST(pv.provincia_visita  AS UNSIGNED)
+   LEFT JOIN     provincias  AS pro ON pro.id_provincia  = CAST(pv.provincia_visita  AS UNSIGNED)
    LEFT JOIN     partidos    AS par ON par.id_partido    = CAST(pv.partido_visita    AS UNSIGNED)
    LEFT JOIN     localidades AS loc ON loc.id_localidad  = CAST(pv.localidad_visita  AS UNSIGNED)
    LEFT JOIN     calles      AS cal ON cal.id_calle      = CAST(pv.calle_visita      AS UNSIGNED)
@@ -113,10 +114,10 @@ function modGetPresupuestoById($id, $via){
 
    if (!empty($rows)) {
        foreach ($rows as $key => $value) {
-           $rows[$key]['provincianom'] = utf8_encode(ucwords(mb_strtolower($value['provincianom'] ?? '')));
-           $rows[$key]['partidonom']   = utf8_encode(ucwords(mb_strtolower($value['partidonom']   ?? '')));
-           $rows[$key]['localidadnom'] = utf8_encode(ucwords(mb_strtolower($value['localidadnom'] ?? '')));
-           $rows[$key]['callenom']     = utf8_encode(ucwords(mb_strtolower($value['callenom']     ?? '')));
+           $rows[$key]['provincianom'] = ucwords(mb_strtolower((string)($value['provincianom'] ?? '')));
+           $rows[$key]['partidonom']   = ucwords(mb_strtolower((string)($value['partidonom']   ?? '')));
+           $rows[$key]['localidadnom'] = ucwords(mb_strtolower((string)($value['localidadnom'] ?? '')));
+           $rows[$key]['callenom']     = ucwords(mb_strtolower((string)($value['callenom']     ?? '')));
        }
    }
 
@@ -125,7 +126,7 @@ function modGetPresupuestoById($id, $via){
    if ($via !== 'ajax'){
        return $rows ?? [];
    } else {
-       echo json_encode($rows ?? []);
+       echo json_encode($rows ?? [], JSON_UNESCAPED_UNICODE);
    }
 }
 // end - funcion para dar de alta un agente

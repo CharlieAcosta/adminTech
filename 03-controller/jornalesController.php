@@ -3,6 +3,7 @@ include_once '../06-funciones_php/funciones.php'; // conecta a la base de datos
 include_once '../04-modelo/jornalesModel.php'; // modelo de tipo_jornales
 
 if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
+	header('Content-Type: application/json; charset=utf-8');
 	poblarDatableAll($_POST['tds'], 'ajax', $_POST['filtro']);
 }
 
@@ -15,10 +16,10 @@ function poblarDatableAll($tds, $via, $filtro) {
 		$filas .= '<tr data-id="' . $value_all_registros['jornal_id'] . '">';
 
 		$filas .= '<td>' . $value_all_registros['jornal_id'] . '</td>';
-		$filas .= '<td>' . htmlspecialchars($value_all_registros['jornal_descripcion']) . '</td>';
-		$filas .= '<td>' . htmlspecialchars($value_all_registros['jornal_codigo']) . '</td>';
+		$filas .= '<td>' . htmlspecialchars($value_all_registros['jornal_descripcion'], ENT_QUOTES, 'UTF-8') . '</td>';
+		$filas .= '<td>' . htmlspecialchars($value_all_registros['jornal_codigo'], ENT_QUOTES, 'UTF-8') . '</td>';
 		$filas .= '<td class="text-right">$ ' . number_format($value_all_registros['jornal_valor'], 2, ',', '.') . '</td>';
-		$filas .= '<td class="text-center">' . $value_all_registros['jornal_estado'] . '</td>';
+		$filas .= '<td class="text-center">' . htmlspecialchars($value_all_registros['jornal_estado'], ENT_QUOTES, 'UTF-8') . '</td>';
 
 		$filas .= '<td class="text-center">';
 		$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i>';
@@ -32,7 +33,7 @@ function poblarDatableAll($tds, $via, $filtro) {
 	if ($via != 'ajax') {
 		return $filas;
 	} else {
-		echo json_encode($filas);
+		echo json_encode($filas, JSON_UNESCAPED_UNICODE);
 	}
 }
 ?>

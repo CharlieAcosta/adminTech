@@ -2867,6 +2867,44 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
   }
 });
 
+const condicionesPresupuestoHtml = `
+    <div class="condiciones-presupuesto">
+      <div class="condiciones-titulo">Condiciones Generales</div>
+
+      <p><strong>Forma de pago:</strong><br>
+      Anticipo 30%<br>
+      Saldo al finalizar las tareas 70%</p>
+
+      <p><strong>No se incluye:</strong></p>
+      <ul class="condiciones-lista">
+        <li>IVA.</li>
+        <li>Seguros especiales.</li>
+        <li>Certificado de disposición final del material.</li>
+      </ul>
+
+      <p><strong>Se incluye:</strong></p>
+      <ul class="condiciones-lista">
+        <li>Programa de seguridad para las tareas detalladas.</li>
+        <li>Todos los requisitos de seg. e higiene (EPP, capacitaciones, ATS).</li>
+        <li>Retiro de obra de materiales sobrantes.</li>
+      </ul>
+
+      <p><strong>Alcance del presupuesto:</strong> El presente presupuesto se ha efectuado en base a un examen in situ. El mismo se extiende por los trabajos cotizados y no es comprensivo de tareas o materiales adicionales que surjan en el hecho y ocasión de la ejecución de los trabajos y que no pudieran advertirse sin desmonte o ejecución previa. Dichos trabajos o materiales serán presupuestados y facturados en forma complementaria.</p>
+
+      <p><strong>Comunicaciones:</strong> Toda comunicación entre las partes se efectuará por medios electrónicos. A tales efectos, constituyen domicilios en el email info@ecotechos.com.ar. La misma tendrá plenos efectos a los fines de la conformación de la voluntad contractual y los alcances del contrato.</p>
+
+      <p><strong>Pólizas:</strong> En caso de que el cliente así lo solicitara y a fin de afianzar el cumplimiento de las obligaciones, se constituirán póliza por adelanto, póliza por fondo de reparo y póliza de responsabilidad civil. En caso de no reintegrarse la póliza en los plazos convenidos, quedará a cargo del cliente el pago del premio de la misma, el que podrá ser facturado como adicional.</p>
+
+      <p><strong>Caución adelanto:</strong> Si así correspondiere, sobre el monto de adelanto se constituirá una póliza de caución a favor del cliente. La misma será reintegrada dentro de los 30 días de haberse cumplimentado con la certificación de avances por un importe igual o mayor al del anticipo.</p>
+
+      <p><strong>Caución sobre fondo de reparo:</strong> Sobre el 5% del monto contratado se constituirá una póliza de caución. La misma será reintegrada dentro de los 30 días de haberse cumplimentado con la entrega de la última certificación de avance, en igual plazo.</p>
+
+      <p><strong>Certificaciones y pagos:</strong> En caso de que corresponda, el proveedor / constructor emitirá las certificaciones de avance, que serán remitidas al domicilio electrónico constituido en el presente, quedando aprobadas a los 10 días de su recepción y en condiciones de facturación. Las observaciones no suspenderán los plazos. Los pagos deberán efectuarse dentro de los 7 días corridos de la emisión de la factura como plazo general, salvo concesión en particular. La mora será de pleno derecho sin necesidad de interpelación y se aplicará ajuste por Índice CAC sobre dichos valores.</p>
+
+      <p><strong>Seguros:</strong> ECOTECHOS SRL cuenta con las coberturas de seguros (ART y vida) que las normas vigentes marcan según lo dispuesto en la Ley 24557 y los decretos reglamentarios 911/96 y 231/96, dejando al cliente libre de reclamos por accidentes personales. Cabe destacar que nuestra empresa posee un departamento de Seguridad e Higiene que inspecciona los elementos de seguridad de nuestro personal, además de capacitarlo permanentemente con respecto a las normas de trabajo seguro.</p>
+    </div>
+`;
+
 const htmlPaginaTotal = `
   <section class="print-page-total page-break-before">
     <div class="top">
@@ -2905,6 +2943,8 @@ const htmlPaginaTotal = `
     <div class="total">
       <div class="valor">TOTAL: ${esc(totalTxt)}</div>
     </div>
+
+    ${condicionesPresupuestoHtml}
   </section>
 `;
 
@@ -2926,6 +2966,7 @@ const htmlPaginaTotal = `
   @page { size: A4; margin: 10mm; }
 
   .page { width: 100%; max-width: 100%; padding: 0; overflow-x: hidden; }
+  .print-page-total { display:flex; flex-direction:column; }
 
   .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .logo img { max-width: 220px; height:auto; }
@@ -2933,6 +2974,7 @@ const htmlPaginaTotal = `
   .doc h1 { margin:0; font-size: 18px; letter-spacing: .2px; }
   .doc-label { margin:0; font-size: 18px; font-weight: 400; letter-spacing: .2px; }
   .doc-code { margin-top: 2px; font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .doc-page { margin-top: 2px; font-size: 10px; font-weight: 700; line-height: 1.2; color:#555; }
   .muted { color:#666; font-size: 11px; margin-top: 2px; }
   hr { border:0; border-top:1px solid #ddd; margin: 10px 0 12px; }
 
@@ -2981,6 +3023,34 @@ const htmlPaginaTotal = `
 
   .total { display:flex; justify-content:flex-end; margin-top: 10px; break-inside: avoid; }
   .total .valor { font-size: 16px; font-weight: 800; padding: 8px 12px; border: 2px solid #111; border-radius: 10px; }
+
+  .condiciones-presupuesto {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid #ddd;
+    font-size: 9px;
+    line-height: 1.32;
+    color:#333;
+  }
+  .condiciones-titulo {
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color:#222;
+  }
+  .condiciones-presupuesto p {
+    margin: 0 0 6px;
+    text-align: justify;
+  }
+  .condiciones-lista {
+    margin: 0 0 6px 0;
+    padding-left: 14px;
+  }
+  .condiciones-lista li {
+    margin-bottom: 1px;
+  }
 
   @media print {
     body { margin: 0; }
@@ -3128,9 +3198,13 @@ const htmlPaginaTotal = `
           '<table class="tabla-resumen"><tbody>'
         );
 
+        let numeroPaginaActual = 0;
         soloBody = soloBody.replace(
           /<div class="muted">[\s\S]*?<\/div>/g,
-          `<div class="doc-code">${esc(numeroPresupuestoImpresion)}</div>`
+          () => {
+            numeroPaginaActual += 1;
+            return `<div class="doc-code">${esc(numeroPresupuestoImpresion)}</div><div class="doc-page">Página Nro: ${esc(numeroPaginaActual)}</div>`;
+          }
         );
 
         // 4) Corregir logo a absoluto

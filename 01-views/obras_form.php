@@ -1,5 +1,6 @@
 <?php  
 session_start();
+header('Content-Type: text/html; charset=utf-8');
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
@@ -17,18 +18,18 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   if($_GET['acci'] == "v")
   {
     $visualiza="on";
-    registrarVisualizacion('OBRAS | Form - Visualización'); // Registrar visualización en la auditoría
+    registrarVisualizacion('OBRAS | Form - Visualización'); // Registrar Visualización en la auditoría
   }
 
   if($_GET['acci'] == "pdf"){$pdf="on";}
 
   $datos = modGetObrasById($id, 'php');
-  $datos = $datos[0];
+  $datos = $datos[0] ?? array();
   //var_dump($datos); die(); // [DEBUG PERMANENTE]
 //echo utf8_encode( $usuario_datos['0']['provincia'] ); die();
 }else{$datos = array();}
 
-// solo si es edición
+// solo si es Edición
 
 ?>
 
@@ -116,7 +117,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                                     <span class="input-group-text"><i class="fas fa-building v-requerido-icon"></i></span>
                                 </div>
                                 <input type="text" class="form-control" placeholder="Nombre de la Obra" id="obra_nombre" name="obra_nombre"
-                                value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'obra_nombre', null, null)); ?>">
+                                value="<?php echo arrayPrintValue(null, $datos, 'obra_nombre', null, null); ?>">
                             </div>
                         </div>
 
@@ -273,7 +274,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                    sAlertDialog(
                        'success',   
                        '<h3 class="text-success"><b>LA OBRA SE REGISTRO CORRECTAMENTE<b></h3>',
-                       '<h5>¿Desea seguir ingresando obras?</h5>', 
+                        '<h5>¿Desea seguir ingresando obras?</h5>', 
                        'SI',            
                        'success',         
                        'NO',
@@ -318,7 +319,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                    sAlertDialog(
                        'success',   
                        '<h3 class="text-success"><b>LA OBRA SE MODIFICO CORRECTAMENTE<b></h3>',
-                       '<h5>¿Desea seguir modificando esta obra?</h5>', 
+                        '<h5>¿Desea seguir modificando esta obra?</h5>', 
                        'SI',            
                        'success',         
                        'NO',
@@ -488,7 +489,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 </script>
 
 <!-- custom functions -->
-<!-- funcion para saber si es un alta, visualización, edición // formatea la vista -->
+<!-- funcion para saber si es un alta, Visualización, Edición // formatea la vista -->
 <script src="../07-funciones_js/abm_detect.js"></script>
 <!-- funcion para traer las calles de una provincia -->
 <script src="../07-funciones_js/inputEmptyDetect.js"></script>

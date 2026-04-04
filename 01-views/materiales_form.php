@@ -1,5 +1,6 @@
 <?php  
 session_start();
+header('Content-Type: text/html; charset=utf-8');
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
@@ -15,7 +16,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   if($_GET['acci'] == "pdf"){$pdf="on";}
 
   $datos = modGetMaterialById($id, 'php');
-  $datos = $datos[0];
+  $datos = $datos[0] ?? array();
   //var_dump($datos); die(); // [DEBUG PERMANENTE]
 //echo utf8_encode( $usuario_datos['0']['provincia'] ); die();
 }else{$datos = array();}
@@ -110,7 +111,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <span class="input-group-text"><i class="fas fa-flask-vial v-requerido-icon"></i></span>
                         </div>
                           <input type="text" class="form-control v-input-requerido texto-capital" data-inputmask='' data-mask="" inputmode="" data-cuit="" placeholder="Producto" id="producto" name="producto" 
-                          value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'producto', null, null)); ?>">
+                          value="<?php echo arrayPrintValue(null, $datos, 'producto', null, null); ?>">
                       </div>
                   </div>
 
@@ -121,7 +122,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <span class="input-group-text"><i class="fas fa-registered v-requerido-icon"></i>
                         </div>
                         <input type="text" class="form-control v-input-requerido" placeholder="Marca" id="marca" name="marca" 
-                        value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'marca', null, null)); ?>">
+                        value="<?php echo arrayPrintValue(null, $datos, 'marca', null, null); ?>">
                       </div>
                   </div>          
 
@@ -202,7 +203,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                         <div class="input-group-prepend">
                           <span class="input-group-text"><i class="fas fa-pen-to-square v-requerido-icon"></i>
                         </div>
-                        <input type="text" class="form-control v-input-requerido" placeholder="Descripción corta" id="descripcion_corta" name="descripcion_corta" value="<?php echo utf8_encode(arrayPrintValue(null, $datos, 'descripcion_corta', null, null)); ?>">
+                        <input type="text" class="form-control v-input-requerido" placeholder="Descripción corta" id="descripcion_corta" name="descripcion_corta" value="<?php echo arrayPrintValue(null, $datos, 'descripcion_corta', null, null); ?>">
                       </div>
                   </div>
 
@@ -212,7 +213,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fas fa-pen-to-square v-requerido-icon"></i></span>
                           </div>
-                          <textarea type="text" rows="5" class="form-control v-input-requerido" placeholder="Descripción técnica" id="descripcion_tecnica" name="descripcion_tecnica"><?php echo utf8_encode(arrayPrintValue(null, $datos, 'descripcion_tecnica', null, null)); ?></textarea>
+                          <textarea type="text" rows="5" class="form-control v-input-requerido" placeholder="Descripción técnica" id="descripcion_tecnica" name="descripcion_tecnica"><?php echo arrayPrintValue(null, $datos, 'descripcion_tecnica', null, null); ?></textarea>
                         </div>
                   </div>
 
@@ -222,7 +223,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
                           <div class="input-group-prepend">
                             <span class="input-group-text"><i class="fas fa-sticky-note"></i></span>
                           </div>
-                          <textarea type="text" rows="5" class="form-control" placeholder="Nota" id="nota_material" name="nota_material"><?php echo utf8_encode(arrayPrintValue(null, $datos, 'nota_material', null, null)); ?></textarea>
+                          <textarea type="text" rows="5" class="form-control" placeholder="Nota" id="nota_material" name="nota_material"><?php echo arrayPrintValue(null, $datos, 'nota_material', null, null); ?></textarea>
                         </div>
                   </div>
 
@@ -648,14 +649,14 @@ $('input[type="file"]').change(function() {
            navigator.clipboard.writeText('');                  
           }
         else
-          { mostrarError('El link no fue copiado. Posiblemente olvidaste usar el botón derecho. Intentá de nuevo.', 5);
+          { mostrarError('El link no fue copiado. Posiblemente olvidaste usar el botón derecho. Inténtalo de nuevo.', 5);
             campoV.next('.custom-file-label').html('Seleccionar archivo');
             campoV.val('');          
           }  
 
         })
         .catch(function(error) {
-          mostrarError('Ocurrió un error al copiar el link del archivo. Intentalo de nuevo.', 4);
+          mostrarError('Ocurrió un error al copiar el link del archivo. Inténtalo de nuevo.', 4);
         });
 
 });
@@ -663,3 +664,4 @@ $('input[type="file"]').change(function() {
 </script>
 </body>
 </html>
+

@@ -1,6 +1,7 @@
 <?php  
 session_start();
 define('BASE_URL', $_SESSION["base_url"]);
+header('Content-Type: text/html; charset=utf-8');
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../04-modelo/paisesModel.php'; //conecta a la tabla de paises
 include_once '../04-modelo/provinciasModel.php'; //conecta a la tabla de provincias
@@ -23,10 +24,10 @@ $provincias = getAllProvincias();
 $provinciasSelect = ""; //para el select de provincias
 foreach ($provincias as $key => $value) {
    if(!isset($cliente_datos)){ 
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
    }else{
     if($cliente_datos['0']['dirfis_provincia'] != $value['id_provincia']){
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
     }
    }
 }
@@ -39,7 +40,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
     $partidosSelect = ""; //para el select de partidos
     foreach ($partidos as $key => $value) {
       if($value['id_partido'] != $cliente_datos['0']['dirfis_partido']){
-        $partidosSelect .= '<option value="'.utf8_encode($value['id_partido']).'">'.utf8_encode($value['partido']).'</option>';
+        $partidosSelect .= '<option value="'.$value['id_partido'].'">'.$value['partido'].'</option>';
       }
     }
 }
@@ -49,7 +50,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
   $localidadesSelect = ""; //para el select de localidades
   foreach ($localidades as $key => $value) {
     if($value['id_localidad'] != $cliente_datos['0']['dirfis_localidad']){
-      $localidadesSelect .= '<option value="'.utf8_encode($value['id_localidad']).'">'.utf8_encode($value['localidad']).'</option>';
+      $localidadesSelect .= '<option value="'.$value['id_localidad'].'">'.$value['localidad'].'</option>';
     }
   }
 }
@@ -59,7 +60,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
   $callesSelect = ""; //para el select de calles
   foreach ($calles as $key => $value) {
     if($value['id_calle'] != $cliente_datos['0']['dirfis_calle']){
-      $callesSelect .= '<option value="'.utf8_encode($value['id_calle']).'">'.utf8_encode($value['calle']).'</option>';
+      $callesSelect .= '<option value="'.$value['id_calle'].'">'.$value['calle'].'</option>';
     }
   }
 }
@@ -242,7 +243,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
                           <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
                         </div>
                         <select class="form-control select2bs4 v-select2 provincia" id="dirfis_provincia" name="dirfis_provincia">
-                          <option value="<?php if(isset($cliente_datos['0']['dirfis_provincia'])){echo utf8_encode($cliente_datos['0']['dirfis_provincia']);}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($cliente_datos['0']['provincianom'])){echo utf8_encode($cliente_datos['0']['provincianom']);}else{echo "Provincia";} ?></option>
+                          <option value="<?php if(isset($cliente_datos['0']['dirfis_provincia'])){echo $cliente_datos['0']['dirfis_provincia'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($cliente_datos['0']['provincianom'])){echo $cliente_datos['0']['provincianom'];}else{echo "Provincia";} ?></option>
                           <?php echo $provinciasSelect;?>
                         </select>
                       </div>

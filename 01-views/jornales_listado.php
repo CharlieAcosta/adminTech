@@ -1,5 +1,6 @@
 <?php  
 session_start();
+header('Content-Type: text/html; charset=utf-8');
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../06-funciones_php/funciones.php';
 include_once '../03-controller/jornalesController.php'; // conecta a la base de datos
@@ -125,4 +126,3 @@ $filas = poblarDatableAll(array('jornal_id', 'jornal_descripcion', 'jornal_codig
 <script src="../07-funciones_js/jornalesAcciones.js"></script>
 </body>
 </html>
-

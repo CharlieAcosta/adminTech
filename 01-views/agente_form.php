@@ -1,6 +1,7 @@
 <?php  
 session_start();
 define('BASE_URL', $_SESSION["base_url"]);
+header('Content-Type: text/html; charset=utf-8');
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../04-modelo/paisesModel.php'; //conecta a la tabla de paises
 include_once '../04-modelo/provinciasModel.php'; //conecta a la tabla de provincias
@@ -27,17 +28,17 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 $paises = getAllPaises();
 $paisesSelect = ""; //para el select de nacionalidad
 foreach ($paises as $key => $value) {
-  $paisesSelect .= '<option value="'.utf8_encode($value['nombre']).'">'.utf8_encode($value['nombre']).'</option>';
+  $paisesSelect .= '<option value="'.$value['nombre'].'">'.$value['nombre'].'</option>';
 }
 
 $provincias = getAllProvincias();
 $provinciasSelect = ""; //para el select de provincias
 foreach ($provincias as $key => $value) {
    if(!isset($usuario_datos)){ 
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
    }else{
     if($usuario_datos['0']['provincia'] != $value['id_provincia']){
-      $provinciasSelect .= '<option value="'.utf8_encode($value['id_provincia']).'">'.utf8_encode($value['provincia']).'</option>';
+      $provinciasSelect .= '<option value="'.$value['id_provincia'].'">'.$value['provincia'].'</option>';
     }
    }
 }
@@ -49,7 +50,7 @@ if(isset($usuario_datos['0']['id_usuario']) && $visualiza == ""){
   $partidosSelect = ""; //para el select de partidos
   foreach ($partidos as $key => $value) {
     if($value['id_partido'] != $usuario_datos['0']['partido']){
-      $partidosSelect .= '<option value="'.utf8_encode($value['id_partido']).'">'.utf8_encode($value['partido']).'</option>';
+      $partidosSelect .= '<option value="'.$value['id_partido'].'">'.$value['partido'].'</option>';
     }
   }
 
@@ -57,7 +58,7 @@ if(isset($usuario_datos['0']['id_usuario']) && $visualiza == ""){
   $localidadesSelect = ""; //para el select de localidades
   foreach ($localidades as $key => $value) {
     if($value['id_localidad'] != $usuario_datos['0']['localidad']){
-      $localidadesSelect .= '<option value="'.utf8_encode($value['id_localidad']).'">'.utf8_encode($value['localidad']).'</option>';
+      $localidadesSelect .= '<option value="'.$value['id_localidad'].'">'.$value['localidad'].'</option>';
     }
   }
 
@@ -65,7 +66,7 @@ if(isset($usuario_datos['0']['id_usuario']) && $visualiza == ""){
   $callesSelect = ""; //para el select de calles
   foreach ($calles as $key => $value) {
     if($value['id_calle'] != $usuario_datos['0']['calle']){
-      $callesSelect .= '<option value="'.utf8_encode($value['id_calle']).'">'.utf8_encode($value['calle']).'</option>';
+      $callesSelect .= '<option value="'.$value['id_calle'].'">'.$value['calle'].'</option>';
     }
   }
 }
@@ -296,7 +297,7 @@ if(isset($usuario_datos['0']['id_usuario']) && $visualiza == ""){
                           <span class="input-group-text"><i class="fas fa-map-marked-alt v-requerido-icon"></i></span>
                         </div>
                         <select class="form-control select2bs4 v-input-requerido v-select2" id="provincia" name="provincia">
-                          <option value="<?php if(isset($usuario_datos['0']['provincia'])){echo utf8_encode($usuario_datos['0']['provincia']);}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($usuario_datos['0']['provincianom'])){echo utf8_encode($usuario_datos['0']['provincianom']);}else{echo "Provincia";} ?></option>
+                          <option value="<?php if(isset($usuario_datos['0']['provincia'])){echo $usuario_datos['0']['provincia'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($usuario_datos['0']['provincianom'])){echo $usuario_datos['0']['provincianom'];}else{echo "Provincia";} ?></option>
                           <?php echo $provinciasSelect;?>
                         </select>
                       </div>
