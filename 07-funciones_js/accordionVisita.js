@@ -1945,12 +1945,8 @@ $(document).ready(function() {
             <i class="fas fa-save"></i> Guardar 
           </button>
   
-          <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto" disabled>
-            <i class="fas fa-print"></i> Imprimir 
-          </button>
-  
-          <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail" disabled>
-            <i class="fas fa-envelope"></i> Enviar por mail 
+          <button type="button" class="btn btn-primary mr-2 btn-emitir-presupuesto" disabled>
+            <i class="fas fa-file-pdf"></i> Generar documento 
           </button>
         </div>
   
@@ -1970,9 +1966,7 @@ $(document).ready(function() {
           const $el = $(this);
 
           if ($el.attr('id') === 'btn-guardar-presupuesto') return;
-          if ($el.hasClass('btn-imprimir-presupuesto')) return;
-          if ($el.hasClass('btn-enviar-presupuesto-mail')) return;
-
+          if ($el.hasClass('btn-emitir-presupuesto')) return;
           marcarPresupuestoComoModificado();
         });      
 
@@ -2387,16 +2381,14 @@ $(document).ready(function() {
       const presupuestoDirty = !!window.presupuestoDirty;
     
       const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
-      const $btnImprimir = $('.btn-imprimir-presupuesto');
-      const $btnMail = $('.btn-enviar-presupuesto-mail');
-    
+      const $btnEmitir = $('.btn-emitir-presupuesto');
       if (hayVencidos) {
         $btnGuardar
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-success');
     
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-primary');
@@ -2432,7 +2424,7 @@ $(document).ready(function() {
           .addClass('btn-success')
           .removeClass('btn-secondary');
     
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-primary');
@@ -2446,12 +2438,12 @@ $(document).ready(function() {
         .removeClass('btn-success');
     
       if (idPresupuesto) {
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', false)
           .addClass('btn-primary')
           .removeClass('btn-secondary');
       } else {
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-primary');
@@ -2496,14 +2488,380 @@ $(document).ready(function() {
     // Ejecutar una vez si ya hay presupuesto renderizado
     window.initRecalculoPresupuestoCargado();
 
-// código de impresión ////////////////////////////////////////////
+// código de emisión de documento ////////////////////////////////////////////
 (function () {
-  // lock global anti doble impresión
+  // lock global anti doble emisión
   window.__PRESU_PRINT_LOCK__ = window.__PRESU_PRINT_LOCK__ || false;
+  const PRINT_ROOT_ID = 'presu-print-root';
+  const PRINT_STYLE_ID = 'presu-print-style';
+  const A4_WIDTH_PX = 794;
+  const A4_HEIGHT_PX = 1123;
+  const A4_MARGIN_PX = 38;
+  const A4_WIDTH_MM = 210;
+  const A4_HEIGHT_MM = 297;
+
+  const limpiarHostRender = () => {
+    const $root = $('#' + PRINT_ROOT_ID);
+    if ($root.length) {
+      $root.empty();
+    }
+  };
+
+  const asegurarHostRenderStyles = () => {
+    if (document.getElementById(PRINT_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = PRINT_STYLE_ID;
+    style.type = 'text/css';
+    style.textContent = `
+      #${PRINT_ROOT_ID} {
+        position: absolute !important;
+        left: -20000px !important;
+        top: 0 !important;
+        width: ${A4_WIDTH_PX}px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #fff !important;
+        pointer-events: none !important;
+      }
+
+      #${PRINT_ROOT_ID} .page {
+        width: ${A4_WIDTH_PX}px !important;
+        max-width: ${A4_WIDTH_PX}px !important;
+      }
+
+      #${PRINT_ROOT_ID} .print-page-task,
+      #${PRINT_ROOT_ID} .print-page-total {
+        width: ${A4_WIDTH_PX}px !important;
+        min-height: ${A4_HEIGHT_PX}px !important;
+        padding: ${A4_MARGIN_PX}px !important;
+        background: #fff !important;
+        overflow: hidden !important;
+      }
+
+      #${PRINT_ROOT_ID} .page-break-before {
+        break-before: auto !important;
+        page-break-before: auto !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+  };
+
+  const obtenerHostRender = () => {
+    let $root = $('#' + PRINT_ROOT_ID);
+    if (!$root.length) {
+      $root = $('<div/>', { id: PRINT_ROOT_ID }).appendTo('body');
+    }
+    return $root;
+  };
+
+  const esperarSiguienteFrame = () => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+
+  const esperarImagenesRender = async ($scope) => {
+    const imagenes = Array.from($scope.find('img'));
+    if (!imagenes.length) return;
+
+    await Promise.all(imagenes.map((img) => new Promise((resolve) => {
+      if (img.complete && img.naturalWidth > 0) {
+        resolve();
+        return;
+      }
+
+      const finalizar = () => {
+        img.removeEventListener('load', finalizar);
+        img.removeEventListener('error', finalizar);
+        resolve();
+      };
+
+      img.addEventListener('load', finalizar, { once: true });
+      img.addEventListener('error', finalizar, { once: true });
+    })));
+  };
+
+  const mostrarSwalGenerandoDocumento = () => {
+    if (!window.Swal || typeof Swal.fire !== 'function') return;
+
+    Swal.fire({
+      icon: 'info',
+      title: '<H2><STRONG style="color: #000000;">GENERANDO DOCUMENTO</STRONG></H2>',
+      html: '<H5 style="color: #000000;">Estamos armando el PDF oficial y guardándolo en el sistema.</H5>',
+      background: '#ffc107',
+      iconColor: '#000000',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+        const loader = Swal.getLoader();
+        if (loader) {
+          loader.style.borderColor = '#000000';
+          loader.style.borderRightColor = 'transparent';
+        }
+      }
+    });
+  };
+
+  const mostrarSwalDocumentoExito = (mensajeHtml) => {
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      if (typeof mostrarExito === 'function') {
+        mostrarExito('Documento generado, guardado y descargado correctamente.', 4);
+      }
+      return;
+    }
+
+    const config = {
+      icon: 'success',
+      title: '<H2><STRONG style="color: #ffffff;">DOCUMENTO DESCARGADO</STRONG></H2>',
+      html: `<H5 style="color: #ffffff;">${mensajeHtml}</H5>`,
+      background: '#28a745',
+      iconColor: '#ffffff',
+      showConfirmButton: true,
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#1e7e34',
+      allowOutsideClick: true,
+      allowEscapeKey: true
+    };
+
+    if (Swal.isVisible()) {
+      Swal.hideLoading();
+      Swal.update(config);
+      return;
+    }
+
+    Swal.fire(config);
+  };
+
+  const mostrarSwalDocumentoError = (mensajeHtml) => {
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      if (typeof mostrarError === 'function') {
+        mostrarError(mensajeHtml.replace(/<[^>]*>/g, ' ').trim() || 'Error al generar el documento del presupuesto.');
+      }
+      return;
+    }
+
+    const config = {
+      icon: 'error',
+      title: '<H2><STRONG style="color: #ffffff;">NO SE PUDO GENERAR EL DOCUMENTO</STRONG></H2>',
+      html: `<H5 style="color: #ffffff;">${mensajeHtml}</H5>`,
+      background: '#dc3545',
+      iconColor: '#ffffff',
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#b02a37',
+      allowOutsideClick: true,
+      allowEscapeKey: true
+    };
+
+    if (Swal.isVisible()) {
+      Swal.hideLoading();
+      Swal.update(config);
+      return;
+    }
+
+    Swal.fire(config);
+  };
+
+  const descargarBlobDocumento = (blob, nombreArchivo) => {
+    const nombreBase = String(nombreArchivo || 'documento.pdf').trim() || 'documento.pdf';
+    const nombreFinal = /\.pdf$/i.test(nombreBase) ? nombreBase : `${nombreBase}.pdf`;
+    const urlBlob = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = urlBlob;
+    link.download = nombreFinal;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(urlBlob), 1000);
+  };
+
+  const renderizarDocumentoComoPdf = async ($printRoot) => {
+    if (typeof window.html2canvas !== 'function' || !window.jspdf?.jsPDF) {
+      throw new Error('No se pudieron cargar las librerías para generar el PDF.');
+    }
+
+    if (document.fonts?.ready) {
+      try {
+        await document.fonts.ready;
+      } catch (err) {
+        console.log('No se pudo esperar la carga completa de fuentes:', err);
+      }
+    }
+
+    await esperarImagenesRender($printRoot);
+    await esperarSiguienteFrame();
+
+    const paginas = Array.from(
+      $printRoot[0].querySelectorAll('.print-page-task, .print-page-total')
+    );
+
+    if (!paginas.length) {
+      throw new Error('No se encontraron páginas para renderizar el documento.');
+    }
+
+    const pdf = new window.jspdf.jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true
+    });
+    const altoCanvasPorPagina = Math.ceil((A4_HEIGHT_MM / A4_WIDTH_MM) * (A4_WIDTH_PX * 2));
+    const toleranciaResiduoPx = 8;
+    let paginaPdfAgregada = false;
+
+    for (let index = 0; index < paginas.length; index += 1) {
+      const pagina = paginas[index];
+      const canvas = await window.html2canvas(pagina, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        windowWidth: A4_WIDTH_PX,
+        windowHeight: A4_HEIGHT_PX
+      });
+
+      for (let offsetY = 0; offsetY < canvas.height; offsetY += altoCanvasPorPagina) {
+        const altoRestante = canvas.height - offsetY;
+        if (paginaPdfAgregada && altoRestante <= toleranciaResiduoPx) {
+          break;
+        }
+
+        const altoSlice = Math.min(altoCanvasPorPagina, altoRestante);
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = altoSlice;
+
+        const ctx = sliceCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('No se pudo preparar el recorte del PDF emitido.');
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+        ctx.drawImage(
+          canvas,
+          0,
+          offsetY,
+          canvas.width,
+          altoSlice,
+          0,
+          0,
+          sliceCanvas.width,
+          sliceCanvas.height
+        );
+
+        if (paginaPdfAgregada) {
+          pdf.addPage();
+        }
+
+        const altoSliceMm = (A4_WIDTH_MM * altoSlice) / canvas.width;
+        const imgData = sliceCanvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH_MM, altoSliceMm, undefined, 'FAST');
+        paginaPdfAgregada = true;
+      }
+    }
+
+    return pdf.output('blob');
+  };
+
+  const parsearRespuestaJsonDocumento = (rawResponse) => {
+    if (typeof rawResponse === 'object' && rawResponse !== null) {
+      return rawResponse;
+    }
+
+    const texto = String(rawResponse ?? '').trim();
+    if (texto === '') {
+      throw new Error('El servidor devolvió una respuesta vacía al emitir el documento.');
+    }
+
+    try {
+      return JSON.parse(texto);
+    } catch (errJson) {
+      const ini = texto.indexOf('{');
+      const fin = texto.lastIndexOf('}');
+      if (ini !== -1 && fin !== -1 && fin > ini) {
+        const posibleJson = texto.slice(ini, fin + 1);
+        try {
+          return JSON.parse(posibleJson);
+        } catch (errJsonRecortado) {
+          // sigue al fallback de error legible
+        }
+      }
+
+      const resumen = texto.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      throw new Error(
+        resumen
+          ? `Respuesta inválida del servidor al emitir el documento: ${resumen.slice(0, 220)}`
+          : 'Respuesta inválida del servidor al emitir el documento.'
+      );
+    }
+  };
+
+  const subirDocumentoEmitido = async ({ idPresupuesto, idPrevisita, nombreArchivoPdf, pdfBlob }) => {
+    const formData = new FormData();
+    const idUsuarioActivo = Number(window.ACTIVE_USER_ID || 0) || 0;
+    formData.append('via', 'ajax');
+    formData.append('funcion', 'emitirDocumentoPresupuesto');
+    formData.append('id_presupuesto', String(idPresupuesto));
+    formData.append('id_previsita', String(idPrevisita));
+    formData.append('nombre_archivo', nombreArchivoPdf);
+    if (idUsuarioActivo > 0) {
+      formData.append('id_usuario', String(idUsuarioActivo));
+    }
+    formData.append('documento_pdf', pdfBlob, `${nombreArchivoPdf}.pdf`);
+
+    const rawResponse = await $.ajax({
+      url: ENDPOINT,
+      method: 'POST',
+      dataType: 'text',
+      data: formData,
+      processData: false,
+      contentType: false
+    });
+
+    return parsearRespuestaJsonDocumento(rawResponse);
+  };
+
+  const extraerMensajeErrorDocumento = (err) => {
+    if (typeof err === 'string' && err.trim() !== '') {
+      return err.trim();
+    }
+
+    if (err?.message) {
+      return String(err.message).trim();
+    }
+
+    const respuestaTexto = err?.responseText;
+    if (typeof respuestaTexto === 'string' && respuestaTexto.trim() !== '') {
+      try {
+        const data = JSON.parse(respuestaTexto);
+        if (data?.msg) {
+          return String(data.msg).trim();
+        }
+      } catch (jsonErr) {
+        const textoPlano = respuestaTexto.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (textoPlano !== '') {
+          return textoPlano.slice(0, 220);
+        }
+      }
+    }
+
+    const status = err?.status ? `HTTP ${err.status}` : '';
+    const statusText = err?.statusText ? String(err.statusText).trim() : '';
+    const combinado = [status, statusText].filter(Boolean).join(' ');
+    if (combinado) {
+      return combinado;
+    }
+
+    return 'Ocurrió un error inesperado.';
+  };
 
   $(document)
-    .off('click', '.btn-imprimir-presupuesto')
-    .on('click', '.btn-imprimir-presupuesto', async function (e) {
+    .off('click', '.btn-emitir-presupuesto')
+    .on('click', '.btn-emitir-presupuesto', async function (e) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -2516,63 +2874,32 @@ $(document).ready(function() {
       // Anti doble disparo (doble click, listeners duplicados, comportamiento raro del navegador)
       if (window.__PRESU_PRINT_LOCK__) return false;
       window.__PRESU_PRINT_LOCK__ = true;
+      $btn.prop('disabled', true);
 
       try {
-        // Solo imprimimos si existe id_presupuesto (guardado)
+        // Solo emitimos si existe id_presupuesto (guardado)
         const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
         const idPrevisitaImpresion = String($('#id_previsita').val() || '').trim();
         if (!idPresupuesto) {
           if (typeof mostrarAdvertencia === 'function') {
-            mostrarAdvertencia('Debe guardar el presupuesto antes de imprimir.', 4);
+            mostrarAdvertencia('Debe guardar el presupuesto antes de generar el documento.', 4);
           } else {
-            alert('Debe guardar el presupuesto antes de imprimir.');
+            alert('Debe guardar el presupuesto antes de generar el documento.');
           }
           window.__PRESU_PRINT_LOCK__ = false;
           return false;
         }
         if (!idPrevisitaImpresion) {
           if (typeof mostrarAdvertencia === 'function') {
-            mostrarAdvertencia('No se pudo obtener el Nro de pre-visita para imprimir.', 4);
+            mostrarAdvertencia('No se pudo obtener el Nro de pre-visita para generar el documento.', 4);
           } else {
-            alert('No se pudo obtener el Nro de pre-visita para imprimir.');
+            alert('No se pudo obtener el Nro de pre-visita para generar el documento.');
           }
           window.__PRESU_PRINT_LOCK__ = false;
           return false;
         }
 
-        try {
-          await simpleUpdateInDB(
-            '../06-funciones_php/funciones.php',
-            'presupuestos',
-            { estado: 'IMPRESO' },
-            [{ columna: 'id_presupuesto', condicion: '=', valorCompara: String(idPresupuesto) }]
-          );
-        } catch (errEstado) {
-          console.log('Error al actualizar estado del presupuesto a IMPRESO:', errEstado);
-          if (typeof mostrarError === 'function') {
-            mostrarError('No se pudo actualizar el estado del presupuesto a IMPRESO.');
-          } else {
-            alert('No se pudo actualizar el estado del presupuesto a IMPRESO.');
-          }
-          window.__PRESU_PRINT_LOCK__ = false;
-          return false;
-        }
-
-        try {
-          if (typeof window.registrarIntervencionPresupuestoAccion === 'function') {
-            const respIntervino = await window.registrarIntervencionPresupuestoAccion({
-              accion: 'imprimir',
-              id_presupuesto: idPresupuesto,
-              id_previsita: idPrevisitaImpresion
-            });
-
-            if (!respIntervino?.ok) {
-              console.log('No se pudo registrar la intervención de impresión:', respIntervino?.msg || respIntervino);
-            }
-          }
-        } catch (errIntervino) {
-          console.log('Error al registrar la intervención de impresión:', errIntervino);
-        }
+        mostrarSwalGenerandoDocumento();
 
         // Tomamos datos desde tu recolector (si existe)
         const datos = (typeof recolectarDatosParaPresupuesto === 'function')
@@ -2650,13 +2977,14 @@ $(document).ready(function() {
 
         const fechaImpresion = new Date();
         const pad2 = (n) => String(n).padStart(2, '0');
-        const numeroPresupuestoImpresion = `${idPrevisitaImpresion}-${fechaImpresion.getFullYear()}${pad2(fechaImpresion.getMonth() + 1)}${pad2(fechaImpresion.getDate())}-${pad2(fechaImpresion.getHours())}${pad2(fechaImpresion.getMinutes())}${pad2(fechaImpresion.getSeconds())}`;
+        const numeroPresupuestoImpresion = `${idPrevisitaImpresion}_${fechaImpresion.getFullYear()}${pad2(fechaImpresion.getMonth() + 1)}${pad2(fechaImpresion.getDate())}_${pad2(fechaImpresion.getHours())}${pad2(fechaImpresion.getMinutes())}${pad2(fechaImpresion.getSeconds())}`;
+        const numeroPresupuestoVisual = numeroPresupuestoImpresion.replaceAll('_', '-');
         const razonSocialArchivo = String(cliente?.razon_social ?? '')
           .trim()
           .replace(/\s+/g, ' ')
           .replace(/[\\/:*?"<>|]/g, '')
           .replace(/\s+/g, '-');
-        const nombreArchivoPdf = `${razonSocialArchivo || 'PRESUPUESTO'}-${numeroPresupuestoImpresion}`;
+        const nombreArchivoPdf = `${razonSocialArchivo || 'PRESUPUESTO'}_${numeroPresupuestoImpresion}`;
         const responsableImpresion = ($('.nombre-completo').first().text() || '').trim() || '-';
         const calleObra = cleanSelectText('#select2-calle_visita-container');
         const alturaObra = ($('#altura_visita').val() || '').toString().trim();
@@ -3121,23 +3449,8 @@ const htmlPaginaTotal = `
   ${htmlPaginasTareas}
   ${htmlPaginaTotal}
 </div>
-</body>
+        </body>
 </html>`;
-
-        // ====== IMPRIMIR EN LA MISMA PÁGINA (SIN TAB / SIN IFRAME) ======
-        const PRINT_ROOT_ID = 'presu-print-root';
-        const PRINT_STYLE_ID = 'presu-print-style';
-
-        // Cleanup (único punto de salida)
-        const cleanup = () => {
-          const $r = $('#' + PRINT_ROOT_ID);
-          if ($r.length) $r.empty();
-          if (window.__PRESU_PRINT_OLD_TITLE__ !== undefined) {
-            document.title = window.__PRESU_PRINT_OLD_TITLE__;
-            delete window.__PRESU_PRINT_OLD_TITLE__;
-          }
-          window.__PRESU_PRINT_LOCK__ = false;
-        };
 
         // 0) Asegurar URL absoluta del logo
         const logoAbs = (() => {
@@ -3145,43 +3458,10 @@ const htmlPaginaTotal = `
           catch (e) { return logoSrc; }
         })();
 
-        // 1) CSS host de impresión una sola vez
-        if (!document.getElementById(PRINT_STYLE_ID)) {
-          const st = document.createElement('style');
-          st.id = PRINT_STYLE_ID;
-          st.type = 'text/css';
-          st.textContent = `
-          @media print {
-            /* Ocultar todo lo que NO sea el print root (y sacarlo del flujo) */
-            body > *:not(#${PRINT_ROOT_ID}) {
-              display: none !important;
-            }
-        
-            /* Asegurar que el print root quede en flujo normal (NO fixed) */
-            #${PRINT_ROOT_ID} {
-              display: block !important;
-              position: static !important;
-              left: auto !important;
-              top: auto !important;
-              width: 100% !important;
-              background: #fff !important;
-              z-index: auto !important;
-              padding: 0 !important;
-              margin: 0 !important;
-            }
-          }
-        `;
-        
-          document.head.appendChild(st);
-        }
+        asegurarHostRenderStyles();
+        const $printRoot = obtenerHostRender();
 
-        // 2) Crear/obtener contenedor
-        let $printRoot = $('#' + PRINT_ROOT_ID);
-        if (!$printRoot.length) {
-          $printRoot = $('<div/>', { id: PRINT_ROOT_ID }).appendTo('body');
-        }
-
-        // 3) Extraer CSS y body
+        // Extraer CSS y body
         const cssMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
         let cssInterno = cssMatch ? cssMatch[1] : '';
 
@@ -3203,7 +3483,7 @@ const htmlPaginaTotal = `
           /<div class="muted">[\s\S]*?<\/div>/g,
           () => {
             numeroPaginaActual += 1;
-            return `<div class="doc-code">${esc(numeroPresupuestoImpresion)}</div><div class="doc-page">Página Nro: ${esc(numeroPaginaActual)}</div>`;
+            return `<div class="doc-code">${esc(numeroPresupuestoVisual)}</div><div class="doc-page">Página Nro: ${esc(numeroPaginaActual)}</div>`;
           }
         );
 
@@ -3213,41 +3493,50 @@ const htmlPaginaTotal = `
           `<img src="${logoAbs}" alt="Logo">`
         );
 
-        // 5) Inyectar en el root
+        // Inyectar en el host offscreen para renderizar el PDF
         $printRoot.html(`<style>${cssInterno}</style>${soloBody}`);
-        if (window.__PRESU_PRINT_OLD_TITLE__ === undefined) {
-          window.__PRESU_PRINT_OLD_TITLE__ = document.title;
+
+        const pdfBlob = await renderizarDocumentoComoPdf($printRoot);
+        const respuestaEmision = await subirDocumentoEmitido({
+          idPresupuesto,
+          idPrevisita: idPrevisitaImpresion,
+          nombreArchivoPdf,
+          pdfBlob
+        });
+
+        if (!respuestaEmision?.ok) {
+          throw new Error(respuestaEmision?.msg || 'No se pudo guardar el documento emitido.');
         }
-        document.title = nombreArchivoPdf;
 
-        // 6) afterprint: usar listener (evita pisadas)
-        const afterPrintHandler = () => {
-          window.removeEventListener('afterprint', afterPrintHandler);
-          cleanup();
-        };
-        window.addEventListener('afterprint', afterPrintHandler);
+        if (respuestaEmision?.intervino && typeof window.actualizarIntervinoPresupuestoUI === 'function') {
+          window.actualizarIntervinoPresupuestoUI(respuestaEmision.intervino);
+        }
 
-        // 7) Imprimir UNA sola vez + fallback si afterprint no dispara
-        setTimeout(() => {
-          window.print();
-          setTimeout(cleanup, 1200); // fallback conservador
-        }, 150);
+        descargarBlobDocumento(
+          pdfBlob,
+          String(respuestaEmision?.nombre_archivo || `${nombreArchivoPdf}.pdf`)
+        );
+        mostrarSwalDocumentoExito('El documento fue generado, guardado en el sistema y descargado correctamente.');
 
         return false;
 
       } catch (err) {
-        console.log('Error al imprimir presupuesto:', err);
-        window.__PRESU_PRINT_LOCK__ = false;
-        if (typeof mostrarError === 'function') {
-          mostrarError('Error al imprimir el presupuesto.');
-        } else {
-          alert('Error al imprimir el presupuesto.');
-        }
+        console.log('Error al generar documento del presupuesto:', err);
+        const mensajeErrorDocumento = extraerMensajeErrorDocumento(err);
+        const mensajeErrorDocumentoHtml = mensajeErrorDocumento
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;');
+        mostrarSwalDocumentoError(mensajeErrorDocumentoHtml);
         return false;
+      } finally {
+        limpiarHostRender();
+        window.__PRESU_PRINT_LOCK__ = false;
+        $btn.prop('disabled', false);
       }
     });
 })();
-// código de impresión ////////////////////////////////////////////
+// código de emisión de documento ////////////////////////////////////////////
 
 });
 

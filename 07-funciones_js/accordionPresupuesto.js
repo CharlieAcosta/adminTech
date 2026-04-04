@@ -423,6 +423,7 @@ $(document)
     const accion = String(opts.accion || '').trim();
     const idPresupuesto = Number(opts.id_presupuesto || $('#contenedorPresupuestoGenerado').data('id_presupuesto')) || 0;
     const idPrevisita = Number(opts.id_previsita || $('#id_previsita').val()) || 0;
+    const idUsuario = Number(opts.id_usuario || window.ACTIVE_USER_ID || 0) || 0;
 
     if (!accion || !idPresupuesto || !idPrevisita) {
       return { ok: false, msg: 'Faltan datos para registrar la intervención del presupuesto.' };
@@ -437,7 +438,8 @@ $(document)
         funcion: 'registrarIntervencionPresupuesto',
         id_presupuesto: idPresupuesto,
         id_previsita: idPrevisita,
-        accion_intervencion: accion
+        accion_intervencion: accion,
+        id_usuario: idUsuario
       }
     });
 

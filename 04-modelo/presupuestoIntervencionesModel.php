@@ -6,7 +6,7 @@ if (!function_exists('normalizarAccionIntervencionPresupuesto')) {
     function normalizarAccionIntervencionPresupuesto(string $accion): ?string
     {
         $accion = strtolower(trim($accion));
-        $permitidas = ['guardar', 'imprimir', 'enviar_mail'];
+        $permitidas = ['guardar', 'imprimir', 'emitir', 'enviar_mail'];
 
         return in_array($accion, $permitidas, true) ? $accion : null;
     }
@@ -17,7 +17,8 @@ if (!function_exists('etiquetaAccionIntervencionPresupuesto')) {
     {
         $map = [
             'guardar' => 'Guardar',
-            'imprimir' => 'Imprimir',
+            'imprimir' => 'Emitir documento',
+            'emitir' => 'Emitir documento',
             'enviar_mail' => 'Enviar por mail',
         ];
 

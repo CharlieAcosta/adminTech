@@ -92,29 +92,39 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  		// Mapeo de colores por estado
 		  		$claseEstado = 'text-secondary'; // default conservador
 
-		  		switch ($estadoPresupuesto) {
-		  			case 'Borrador':
+		  		$estadoPresupuestoKey = strtoupper(trim((string)$estadoPresupuesto));
+		  		$estadoPresupuestoLabel = trim((string)$estadoPresupuesto);
+
+		  		switch ($estadoPresupuestoKey) {
+		  			case 'BORRADOR':
 		  				$claseEstado = 'text-secondary';
+		  				$estadoPresupuestoLabel = 'Borrador';
 		  				break;
-		  			case 'Impreso':
+		  			case 'IMPRESO':
+		  			case 'EMITIDO':
 		  				$claseEstado = 'text-info';
+		  				$estadoPresupuestoLabel = 'Emitido';
 		  				break;
-		  			case 'Enviado':
+		  			case 'ENVIADO':
 		  				$claseEstado = 'text-primary';
+		  				$estadoPresupuestoLabel = 'Enviado';
 		  				break;
-		  			case 'Aprobado':
+		  			case 'APROBADO':
 		  				$claseEstado = 'text-success';
+		  				$estadoPresupuestoLabel = 'Aprobado';
 		  				break;
-		  			case 'Rechazado':
+		  			case 'RECHAZADO':
 		  				$claseEstado = 'text-danger';
+		  				$estadoPresupuestoLabel = 'Rechazado';
 		  				break;
-		  			case 'Pendiente':
+		  			case 'PENDIENTE':
 		  				// Si el registro existe pero está en Pendiente, lo mantenemos en rojo también
 		  				$claseEstado = 'text-danger';
+		  				$estadoPresupuestoLabel = 'Pendiente';
 		  				break;
 		  		}
 
-		  		$presupuestoHtml = '<span class="'.$claseEstado.'"><strong>'.$estadoPresupuesto.'</strong></span>';
+		  		$presupuestoHtml = '<span class="'.$claseEstado.'"><strong>'.$estadoPresupuestoLabel.'</strong></span>';
 		  	}
 		  }
 
@@ -134,11 +144,10 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 						data-toggle="tooltip" 
 						title="Editar"></i>';
 
-			$filas .= '<i class="v-icon-accion p-1 fas fa-print" 
-						style="pointer-events:none;opacity:.4;" 
-						data-accion="pdf" 
+			$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-file-pdf" 
+						data-accion="documentos_emitidos" 
 						data-toggle="tooltip" 
-						title="Imprimir PDF"></i>';
+						title="Documentos emitidos"></i>';
 
 			$filas .= '<i class="v-icon-accion p-1 fas fa-paperclip" 
 						style="pointer-events:none;opacity:.4;" 

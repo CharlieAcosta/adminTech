@@ -140,7 +140,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 FROM presupuestos
                 WHERE id_previsita = ?
                 AND ( ? IS NULL OR id_visita = ? )
-                AND UPPER(estado) IN ('BORRADOR','GENERADO','IMPRESO','ENVIADO','APROBADO','RECHAZADO')
+                AND UPPER(estado) IN ('BORRADOR','GENERADO','EMITIDO','IMPRESO','ENVIADO','APROBADO','RECHAZADO')
                 ORDER BY updated_at DESC, id_presupuesto DESC
                 LIMIT 1
             ");
@@ -569,11 +569,20 @@ if (!function_exists('bind_params_dynamic')) {
 // === Helper: check si existe tabla (para fotos opcionales) ===
 if (!function_exists('tabla_existe')) {
     function tabla_existe(mysqli $db, string $table): bool {
-        $sql = "SHOW TABLES LIKE ?";
+        $sql = "
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+            LIMIT 1
+        ";
         $st  = mysqli_prepare($db, $sql);
         if (!$st) return false;
         mysqli_stmt_bind_param($st, "s", $table);
-        mysqli_stmt_execute($st);
+        if (!mysqli_stmt_execute($st)) {
+            mysqli_stmt_close($st);
+            return false;
+        }
         $rs = mysqli_stmt_get_result($st);
         $ok = ($rs && mysqli_fetch_row($rs));
         mysqli_stmt_close($st);

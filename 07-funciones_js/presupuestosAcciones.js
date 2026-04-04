@@ -3,6 +3,158 @@ $(document).on("click",".v-icon-accion, .v-accion-cancelar, .v-accion-eliminar, 
     presupuestoAcciones($(this));
 });
 
+function escapeHtmlDocumentoEmitido(valor) {
+    return String(valor ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function resolverUrlDocumentoEmitido(item) {
+    const ruta = String(item && item.ruta_archivo ? item.ruta_archivo : '').replace(/^\/+/, '');
+    if (ruta) {
+        return '../' + ruta;
+    }
+
+    return String(item && item.url_publica ? item.url_publica : '');
+}
+
+function descargarArchivoDocumentoEmitido(url, nombreArchivo) {
+    const link = document.createElement('a');
+    link.href = url;
+    if (nombreArchivo) {
+        link.download = nombreArchivo;
+    }
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function inicializarTooltipsDocumentosEmitidos() {
+    const $modal = $('#modalDocumentosEmitidosPresupuesto');
+    const $items = $modal.find('[data-toggle="tooltip"]');
+
+    if (!$items.length) {
+        return;
+    }
+
+    $items.tooltip('dispose');
+    $items.tooltip({
+        container: 'body',
+        trigger: 'hover',
+        boundary: 'window',
+        animation: false,
+        template: '<div class="tooltip" role="tooltip" style="pointer-events:none;"><div class="arrow"></div><div class="tooltip-inner"></div></div>'
+    });
+}
+
+function construirHtmlDocumentosEmitidos(items) {
+    if (!Array.isArray(items) || !items.length) {
+        return `
+            <div class="alert alert-light border mb-0">
+                <div class="font-weight-bold mb-1">Todavía no hay documentos emitidos</div>
+                <div class="text-muted">Cuando generes un documento desde el presupuesto, va a aparecer listado acá.</div>
+            </div>
+        `;
+    }
+
+    const filas = items.map((item) => {
+        const documentoNumero = item.numero_documento || item.nombre_base || item.nombre_archivo || ('Documento #' + (item.id_documento_emitido || ''));
+        const nombreArchivo = item.nombre_archivo || '';
+        const url = resolverUrlDocumentoEmitido(item);
+        const archivoDisponible = item.archivo_disponible !== false;
+        const claseFila = archivoDisponible ? '' : 'table-warning';
+        const leyendaDisponibilidad = archivoDisponible
+            ? ''
+            : '<div class="text-warning small font-weight-bold">Archivo no disponible en el servidor</div>';
+        const estiloAccion = archivoDisponible ? '' : 'style="pointer-events:none;opacity:.35;"';
+        const tooltipVer = archivoDisponible ? 'Ver documento' : 'Archivo no disponible';
+        const tooltipDescargar = archivoDisponible ? 'Descargar documento' : 'Archivo no disponible';
+
+        return `
+            <tr class="${claseFila}">
+                <td class="text-center align-middle text-danger">
+                    <i class="fas fa-file-pdf fa-lg"></i>
+                </td>
+                <td class="align-middle">
+                    <div class="font-weight-bold">${escapeHtmlDocumentoEmitido(documentoNumero)}</div>
+                    <div class="text-muted small">${escapeHtmlDocumentoEmitido(nombreArchivo)}</div>
+                    ${leyendaDisponibilidad}
+                </td>
+                <td class="align-middle">${escapeHtmlDocumentoEmitido(item.fecha_texto || '-')}</td>
+                <td class="align-middle">${escapeHtmlDocumentoEmitido(item.usuario_nombre || '-')}</td>
+                <td class="text-center align-middle">
+                    <i class="v-icon-accion p-1 fas fa-eye"
+                        data-accion="ver_documento_emitido"
+                        data-url="${escapeHtmlDocumentoEmitido(url)}"
+                        data-toggle="tooltip"
+                        title="${tooltipVer}" ${estiloAccion}></i>
+                    <i class="v-icon-accion p-1 fas fa-download"
+                        data-accion="descargar_documento_emitido"
+                        data-url="${escapeHtmlDocumentoEmitido(url)}"
+                        data-nombre="${escapeHtmlDocumentoEmitido(nombreArchivo)}"
+                        data-toggle="tooltip"
+                        title="${tooltipDescargar}" ${estiloAccion}></i>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 6%">PDF</th>
+                        <th>Documento</th>
+                        <th style="width: 18%">Fecha emisión</th>
+                        <th style="width: 22%">Usuario</th>
+                        <th style="width: 12%">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>${filas}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function cargarDocumentosEmitidosPresupuesto(idPrevisita) {
+    $.ajax({
+        url: '../03-controller/presupuestos_guardar.php',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            via: 'ajax',
+            funcion: 'listarDocumentosEmitidosPresupuesto',
+            id_previsita: idPrevisita
+        },
+        success: function (response) {
+            if (!response || response.ok !== true) {
+                const mensaje = response && response.msg
+                    ? response.msg
+                    : 'No se pudieron cargar los documentos emitidos.';
+
+                $('#modalDocumentosEmitidosPresupuestoBody').html(
+                    `<div class="alert alert-danger mb-0">${escapeHtmlDocumentoEmitido(mensaje)}</div>`
+                );
+                return;
+            }
+
+            $('#modalDocumentosEmitidosPresupuestoBody').html(
+                construirHtmlDocumentosEmitidos(response.items || [])
+            );
+
+            inicializarTooltipsDocumentosEmitidos();
+        },
+        error: function () {
+            $('#modalDocumentosEmitidosPresupuestoBody').html(
+                '<div class="alert alert-danger mb-0">Ocurrió un error al consultar los documentos emitidos.</div>'
+            );
+        }
+    });
+}
 
 function presupuestoAcciones(elemento){
       switch($(elemento).data('accion')) {
@@ -15,6 +167,59 @@ function presupuestoAcciones(elemento){
             case 'editar': // editar el presupuesto
                 var id = $(elemento).closest('tr').data('id');
                 window.location.href='seguimiento_form.php?acci=e&id='+id;
+            break;
+
+            case 'documentos_emitidos':
+                var fila = $(elemento).closest('tr');
+                var idPrevisita = Number(fila.data('id')) || 0;
+                var razonSocial = fila.find('td').eq(3).text().trim();
+
+                $('#modalDocumentosEmitidosContexto').html(
+                    'ID: ' + idPrevisita + ' | ' + escapeHtmlDocumentoEmitido(razonSocial)
+                );
+
+                $('#modalDocumentosEmitidosPresupuesto')
+                    .data('id', idPrevisita)
+                    .modal('show');
+
+                $('#modalDocumentosEmitidosPresupuestoBody').html(
+                    '<div class="text-muted">Cargando documentos...</div>'
+                );
+
+                cargarDocumentosEmitidosPresupuesto(idPrevisita);
+            break;
+
+            case 'ver_documento_emitido':
+                var urlDocumento = $(elemento).data('url') || '';
+
+                if (!urlDocumento) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Documento no disponible',
+                        text: 'No se encontró la ruta del documento seleccionado.',
+                        confirmButtonText: 'OK'
+                    });
+                    break;
+                }
+
+                window.open(urlDocumento, '_blank', 'noopener');
+            break;
+
+            case 'descargar_documento_emitido':
+                var urlDescarga = $(elemento).data('url') || '';
+                var nombreDescarga = $(elemento).data('nombre') || 'documento.pdf';
+
+                if (!urlDescarga) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Documento no disponible',
+                        text: 'No se encontró la ruta del documento seleccionado.',
+                        confirmButtonText: 'OK'
+                    });
+                    break;
+                }
+
+                descargarArchivoDocumentoEmitido(urlDescarga, nombreDescarga);
             break;
 
             case 'pdf': // generar pdf del usuario
@@ -320,6 +525,6 @@ function presupuestoAcciones(elemento){
     }
 }
 
-
-
-
+$(document).on('hidden.bs.modal', '#modalDocumentosEmitidosPresupuesto', function(){
+    $(this).find('[data-toggle="tooltip"]').tooltip('dispose');
+});
