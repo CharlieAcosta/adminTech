@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/conectDB.php';
 require_once __DIR__ . '/presupuestoGeneradoModel.php';
+require_once __DIR__ . '/presupuestoMailConfigModel.php';
 
 if (!function_exists('baseRutaDocumentosEmitidosPresupuesto')) {
     function baseRutaDocumentosEmitidosPresupuesto(int $idPresupuesto): string
@@ -175,11 +176,22 @@ if (!function_exists('emitirDocumentoPresupuesto')) {
             mysqli_begin_transaction($db);
             $transaccionIniciada = true;
 
-            $sqlEstado = "
-                UPDATE presupuestos
-                SET estado = 'Emitido', updated_at = NOW()
-                WHERE id_presupuesto = ?
-            ";
+            $tieneEstadosComerciales = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion')
+                && columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
+            $sqlEstado = $tieneEstadosComerciales
+                ? "
+                    UPDATE presupuestos
+                    SET estado = 'Emitido',
+                        estado_comercial_simulacion = NULL,
+                        estado_comercial_smtp = NULL,
+                        updated_at = NOW()
+                    WHERE id_presupuesto = ?
+                "
+                : "
+                    UPDATE presupuestos
+                    SET estado = 'Emitido', updated_at = NOW()
+                    WHERE id_presupuesto = ?
+                ";
             $stmtEstado = stmt_or_throw($db, $sqlEstado);
             mysqli_stmt_bind_param($stmtEstado, 'i', $idPresupuesto);
             mysqli_stmt_execute($stmtEstado);
@@ -333,6 +345,48 @@ if (!function_exists('listarDocumentosEmitidosPresupuesto')) {
                 return [];
             }
 
+            $modoActivo = obtenerModoActivoCircuitoComercialPresupuestos();
+            $tablaEnviosExiste = tabla_existe($db, 'presupuesto_documentos_emitidos_envios');
+            $selectEnvios = $tablaEnviosExiste
+                ? "
+                        COALESCE(ev.total_envios_activos, 0) AS total_envios_activos,
+                        ev.ultimo_envio_activo"
+                : "
+                        0 AS total_envios_activos,
+                        NULL AS ultimo_envio_activo";
+            $joinEnvios = $tablaEnviosExiste
+                ? "
+                    LEFT JOIN (
+                        SELECT
+                            id_documento_emitido,
+                            SUM(
+                                CASE
+                                    WHEN modo_envio = '" . mysqli_real_escape_string($db, $modoActivo) . "'
+                                     AND (
+                                        ('" . mysqli_real_escape_string($db, $modoActivo) . "' = 'smtp' AND estado_envio = 'enviado')
+                                        OR
+                                        ('" . mysqli_real_escape_string($db, $modoActivo) . "' = 'simulacion' AND estado_envio = 'simulado')
+                                     )
+                                    THEN 1 ELSE 0
+                                END
+                            ) AS total_envios_activos,
+                            MAX(
+                                CASE
+                                    WHEN modo_envio = '" . mysqli_real_escape_string($db, $modoActivo) . "'
+                                     AND (
+                                        ('" . mysqli_real_escape_string($db, $modoActivo) . "' = 'smtp' AND estado_envio = 'enviado')
+                                        OR
+                                        ('" . mysqli_real_escape_string($db, $modoActivo) . "' = 'simulacion' AND estado_envio = 'simulado')
+                                     )
+                                    THEN created_at ELSE NULL
+                                END
+                            ) AS ultimo_envio_activo
+                        FROM presupuesto_documentos_emitidos_envios
+                        GROUP BY id_documento_emitido
+                    ) ev
+                        ON ev.id_documento_emitido = d.id_documento_emitido"
+                : '';
+
             if ($idPresupuesto !== null && $idPresupuesto > 0) {
                 $sql = "
                     SELECT
@@ -346,11 +400,13 @@ if (!function_exists('listarDocumentosEmitidosPresupuesto')) {
                         d.mime_type,
                         d.tamano_bytes,
                         d.created_at,
+                        {$selectEnvios},
                         u.apellidos,
                         u.nombres
                     FROM presupuesto_documentos_emitidos d
                     LEFT JOIN usuarios u
                         ON u.id_usuario = d.id_usuario
+                    {$joinEnvios}
                     WHERE d.id_previsita = ?
                       AND d.id_presupuesto = ?
                     ORDER BY d.created_at DESC, d.id_documento_emitido DESC
@@ -370,11 +426,13 @@ if (!function_exists('listarDocumentosEmitidosPresupuesto')) {
                         d.mime_type,
                         d.tamano_bytes,
                         d.created_at,
+                        {$selectEnvios},
                         u.apellidos,
                         u.nombres
                     FROM presupuesto_documentos_emitidos d
                     LEFT JOIN usuarios u
                         ON u.id_usuario = d.id_usuario
+                    {$joinEnvios}
                     WHERE d.id_previsita = ?
                     ORDER BY d.created_at DESC, d.id_documento_emitido DESC
                 ";
@@ -398,6 +456,20 @@ if (!function_exists('listarDocumentosEmitidosPresupuesto')) {
                 $nombreArchivo = repararTextoMojibakePresupuestoProfundo((string)($row['nombre_archivo'] ?? ''));
                 $nombreBase = preg_replace('/\.pdf$/i', '', $nombreArchivo);
                 $rutaDisponibilidad = resolverDisponibilidadDocumentoEmitidoPresupuesto((string)($row['ruta_archivo'] ?? ''));
+                $totalEnviados = (int)($row['total_envios_activos'] ?? 0);
+                $ultimoEnvioReal = (string)($row['ultimo_envio_activo'] ?? '');
+
+                $envioEstado = 'no_enviado';
+                $envioCantidad = 0;
+                $ultimoEnvio = '';
+                $envioLabel = 'No enviado';
+
+                if ($totalEnviados > 0) {
+                    $envioEstado = 'enviado';
+                    $envioCantidad = $totalEnviados;
+                    $ultimoEnvio = $ultimoEnvioReal;
+                    $envioLabel = 'Enviado (' . $totalEnviados . ')';
+                }
 
                 $rows[] = [
                     'id_documento_emitido' => (int)($row['id_documento_emitido'] ?? 0),
@@ -415,6 +487,11 @@ if (!function_exists('listarDocumentosEmitidosPresupuesto')) {
                     'created_at' => (string)($row['created_at'] ?? ''),
                     'fecha_texto' => formatearFechaDocumentoEmitidoPresupuesto((string)($row['created_at'] ?? '')),
                     'usuario_nombre' => repararTextoMojibakePresupuestoProfundo($usuarioNombre),
+                    'envio_estado' => $envioEstado,
+                    'envio_cantidad' => $envioCantidad,
+                    'envio_label' => $envioLabel,
+                    'ultimo_envio_at' => $ultimoEnvio,
+                    'ultimo_envio_texto' => $ultimoEnvio !== '' ? formatearFechaDocumentoEmitidoPresupuesto($ultimoEnvio) : '',
                 ];
             }
 

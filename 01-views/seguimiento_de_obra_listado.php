@@ -123,6 +123,7 @@ $filas = poblarDatableAll(
   <?php include '../01-views/layout/footer_layout.php';?>
   <?php include '../01-views/modals/modal_historial_presupuesto.php'; ?>
   <?php include '../01-views/modals/modal_documentos_emitidos_presupuesto.php'; ?>
+  <?php include '../01-views/modals/modal_enviar_documento_emitido_presupuesto.php'; ?>
 
   <!-- Control Sidebar -->
   <aside class="control-sidebar control-sidebar-dark">

@@ -1,6 +1,7 @@
 <?php  
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestosModel.php'; //conecta a la base de datos
+include_once '../04-modelo/presupuestoIntervencionesModel.php';
 
 if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
 
@@ -20,6 +21,7 @@ if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
 function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){     
 
    $all_registros = modGetAllRegistros($filtro); 		
+   $modoCircuitoActivo = obtenerModoActivoCircuitoComercialPresupuestos();
 	//var_dump($all_registros); die(); //[DEBUG PERMANENTE]
 
    $filas = "";
@@ -79,10 +81,33 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 
 		  // Columna Presupuesto (solo si la visita está Ejecutada)
 		  $presupuestoHtml = '';
+		  $mostrarIconoDocumentosEmitidos = false;
+		  $mostrarIconoHistorialPresupuesto = false;
 
 		  if (isset($value_all_registros['estado_visita']) && $value_all_registros['estado_visita'] === 'Ejecutada') {
 
 		  	$estadoPresupuesto = isset($value_all_registros['estado_presupuesto']) ? $value_all_registros['estado_presupuesto'] : null;
+		  	$estadoComercialSimulacion = isset($value_all_registros['estado_comercial_simulacion']) ? $value_all_registros['estado_comercial_simulacion'] : '';
+		  	$estadoComercialSmtp = isset($value_all_registros['estado_comercial_smtp']) ? $value_all_registros['estado_comercial_smtp'] : '';
+		  	$totalDocumentosEmitidos = (int)($value_all_registros['total_documentos_emitidos'] ?? 0);
+		  	$totalHistorialComercialActivo = $modoCircuitoActivo === 'smtp'
+		  		? (int)($value_all_registros['total_historial_comercial_smtp'] ?? 0)
+		  		: (int)($value_all_registros['total_historial_comercial_simulacion'] ?? 0);
+
+		  	$presupuestoActual = [
+		  		'estado' => $estadoPresupuesto,
+		  		'estado_comercial_simulacion' => $estadoComercialSimulacion,
+		  		'estado_comercial_smtp' => $estadoComercialSmtp,
+		  	];
+
+		  	$estadoVisiblePresupuesto = resolverEstadoVisiblePresupuestoDesdePresupuesto(
+		  		$presupuestoActual,
+		  		$modoCircuitoActivo
+		  	);
+		  	$estadoComercialActivo = obtenerEstadoComercialActivoDesdePresupuesto(
+		  		$presupuestoActual,
+		  		$modoCircuitoActivo
+		  	);
 
 		  	// Si no existe presupuesto asociado, la leyenda es Pendiente (en rojo)
 		  	if ($estadoPresupuesto === null || $estadoPresupuesto === '') {
@@ -92,8 +117,10 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  		// Mapeo de colores por estado
 		  		$claseEstado = 'text-secondary'; // default conservador
 
-		  		$estadoPresupuestoKey = strtoupper(trim((string)$estadoPresupuesto));
-		  		$estadoPresupuestoLabel = trim((string)$estadoPresupuesto);
+		  		$estadoPresupuestoKey = strtoupper(trim((string)$estadoVisiblePresupuesto));
+		  		$estadoPresupuestoLabel = trim((string)$estadoVisiblePresupuesto);
+		  		$mostrarIconoDocumentosEmitidos = $totalDocumentosEmitidos > 0;
+		  		$mostrarIconoHistorialPresupuesto = $estadoComercialActivo !== '' || $totalHistorialComercialActivo > 0;
 
 		  		switch ($estadoPresupuestoKey) {
 		  			case 'BORRADOR':
@@ -109,6 +136,14 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  				$claseEstado = 'text-primary';
 		  				$estadoPresupuestoLabel = 'Enviado';
 		  				break;
+		  			case 'RECIBIDO':
+		  				$claseEstado = 'text-success';
+		  				$estadoPresupuestoLabel = 'Recibido';
+		  				break;
+		  			case 'RESOLICITADO':
+		  				$claseEstado = 'text-warning';
+		  				$estadoPresupuestoLabel = 'Resolicitado';
+		  				break;
 		  			case 'APROBADO':
 		  				$claseEstado = 'text-success';
 		  				$estadoPresupuestoLabel = 'Aprobado';
@@ -116,6 +151,10 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  			case 'RECHAZADO':
 		  				$claseEstado = 'text-danger';
 		  				$estadoPresupuestoLabel = 'Rechazado';
+		  				break;
+		  			case 'CANCELADO':
+		  				$claseEstado = 'text-dark';
+		  				$estadoPresupuestoLabel = 'Cancelado';
 		  				break;
 		  			case 'PENDIENTE':
 		  				// Si el registro existe pero está en Pendiente, lo mantenemos en rojo también
@@ -132,7 +171,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 	   	  $filas .= '<td>'.$presupuestoHtml.'</td><td></td>';	  //para relleno en el caso de datos futuros
 
 			// acciones				
-			$filas .= '<td class="text-center">';
+			$filas .= '<td class="text-left pl-3" style="white-space: nowrap;">';
 
 			$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" 
 						data-accion="visual" 
@@ -144,21 +183,25 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 						data-toggle="tooltip" 
 						title="Editar"></i>';
 
-			$filas .= '<i class="v-icon-accion p-1 fas fa-file-pdf" 
-						data-accion="documentos_emitidos" 
-						data-toggle="tooltip" 
-						title="Documentos emitidos"></i>';
-
 			$filas .= '<i class="v-icon-accion p-1 fas fa-paperclip" 
 						style="pointer-events:none;opacity:.4;" 
 						data-accion="adjunto" 
 						data-toggle="tooltip" 
 						title="Ver adjuntos"></i>';
 
-			$filas .= '<i class="v-icon-accion p-1 fas fa-history" 
-						data-accion="historial" 
-						data-toggle="tooltip" 
-						title="Historial de presupuesto"></i>';
+			if ($mostrarIconoDocumentosEmitidos) {
+				$filas .= '<i class="v-icon-accion p-1 fas fa-file-pdf" 
+							data-accion="documentos_emitidos" 
+							data-toggle="tooltip" 
+							title="Documentos emitidos"></i>';
+			}
+
+			if ($mostrarIconoHistorialPresupuesto) {
+				$filas .= '<i class="v-icon-accion p-1 fas fa-history" 
+							data-accion="historial" 
+							data-toggle="tooltip" 
+							title="Historial de presupuesto"></i>';
+			}
 
 			if (in_array($perfil, $deleteIcon)){ 				
 				$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-trash-alt" 

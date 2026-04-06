@@ -247,6 +247,54 @@ function mostrarExito(mensaje, segundos = 3) {
     });
 }
 
+function mostrarMensajeConfirmable(mensaje, tipo = 'AD', tituloPersonalizado = '', textoBoton = 'OK') {
+    const configuraciones = {
+        AD: {
+            titulo: 'IMPORTANTE',
+            icono: 'warning',
+            background: '#ffc107',
+            iconColor: '#000000',
+            tituloColor: '#000000',
+            mensajeColor: '#000000',
+            confirmButtonColor: '#6c757d'
+        },
+        ER: {
+            titulo: 'INCONSISTENCIA',
+            icono: 'error',
+            background: '#dc3545',
+            iconColor: '#ffffff',
+            tituloColor: '#ffffff',
+            mensajeColor: '#ffffff',
+            confirmButtonColor: '#b02a37'
+        },
+        EX: {
+            titulo: 'ACCION COMPLETADA',
+            icono: 'success',
+            background: '#28a745',
+            iconColor: '#ffffff',
+            tituloColor: '#ffffff',
+            mensajeColor: '#ffffff',
+            confirmButtonColor: '#1e7e34'
+        }
+    };
+
+    const cfg = configuraciones[tipo] || configuraciones.AD;
+    const titulo = tituloPersonalizado || cfg.titulo;
+
+    Swal.fire({
+        icon: cfg.icono,
+        title: `<H2><STRONG style="color: ${cfg.tituloColor};">${titulo}</STRONG></H2>`,
+        html: `<H5 style="color: ${cfg.mensajeColor};">${mensaje}</H5>`,
+        background: cfg.background,
+        iconColor: cfg.iconColor,
+        showConfirmButton: true,
+        confirmButtonText: textoBoton,
+        confirmButtonColor: cfg.confirmButtonColor,
+        allowOutsideClick: true,
+        allowEscapeKey: true
+    });
+}
+
 /**
  * Muestra un diálogo de confirmación personalizado según el tipo.
  *
@@ -262,7 +310,10 @@ function mostrarConfirmacion(
     onCancel,
     tipo = 'AD',
     textoConfirmar = 'Sí',
-    textoCancelar = 'No'
+    textoCancelar = 'No',
+    tituloPersonalizado = '',
+    clickFuera = true,
+    escape = true
 ) {
     const configuraciones = {
         AD: {
@@ -292,10 +343,11 @@ function mostrarConfirmacion(
     };
 
     const cfg = configuraciones[tipo] || configuraciones['AD'];
+    const titulo = tituloPersonalizado || cfg.titulo;
 
     Swal.fire({
         icon: cfg.icono,
-        title: `<h2 class="mb-1" style="color:${cfg.tituloColor};"><strong>${cfg.titulo}</strong></h2>`,
+        title: `<h2 class="mb-1" style="color:${cfg.tituloColor};"><strong>${titulo}</strong></h2>`,
         html: `<h4 class="mt-0" style="color:${cfg.mensajeColor};">${mensaje}</h4>`,
         background: cfg.background,
         iconColor: cfg.iconColor,
@@ -304,6 +356,8 @@ function mostrarConfirmacion(
         cancelButtonText: textoCancelar,
         confirmButtonColor: '#1e7e34',
         cancelButtonColor: '#6c757d',
+        allowOutsideClick: clickFuera,
+        allowEscapeKey: escape,
         customClass: {
             confirmButton: 'swal2-confirm custom-success-btn'
         }

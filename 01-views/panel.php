@@ -24,6 +24,7 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
+$mailPresupuestos = array('Super Administrador');
 ?>
 
 <!DOCTYPE html>
@@ -210,7 +211,7 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
           <!-- /.info-box -->
           <?php } ?> 
 
-          <?php if (in_array($perfil, $tipoJornales)){ ?>
+         <?php if (in_array($perfil, $tipoJornales)){ ?>
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/jornales_listado.php">
@@ -226,6 +227,19 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
           </div>
           <!-- /.info-box -->
           <?php } ?>           
+
+         <?php if (in_array($perfil, $mailPresupuestos)){ ?>
+         <div class="col-12 col-sm-6 col-md-4">
+            <a href="../01-views/configuracion_mail_presupuestos.php">
+               <div class="info-box">
+                  <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-envelope-open-text"></i></span>
+                  <div class="info-box-content">
+                    <h3 class="info-box-text d-flex align-items-center">Mail presupuestos</h3>
+                  </div>
+              </div>
+            </a>
+          </div>
+          <?php } ?>
 
     </div>
         <!-- /.row -->
@@ -268,5 +282,4 @@ $tipoJornales = array('Super Administrador','Administrador','Administrativo');
 </body>
 </html>
 <script src="../07-funciones_js/usuariosAcciones.js"></script>
-
 
