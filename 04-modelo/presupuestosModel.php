@@ -1,6 +1,8 @@
 <?php
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/conectDB.php'; // conecta a la base de datos
+include_once '../04-modelo/presupuestoGeneradoModel.php';
+include_once '../04-modelo/presupuestoMailConfigModel.php';
 
 
 
@@ -18,6 +20,7 @@ if( isset($_POST['via']) && $_POST['via']=='ajax'){
 // funcion para traer todos los usuarios activos
 function modGetAllRegistros($filtro){     
    $db = conectDB();
+   mysqli_set_charset($db, 'utf8mb4');
    switch ($filtro) {
       case 'todos':
          $were    = "WHERE v.estado_visita <> 'Eliminada'";
@@ -40,10 +43,63 @@ function modGetAllRegistros($filtro){
       //    break;
    }
 
+   $tieneTablaDocumentosEmitidos = tabla_existe($db, 'presupuesto_documentos_emitidos');
+   $tieneTablaHistorialComercial = tabla_existe($db, 'presupuesto_historial_comercial');
+   $tieneEstadoComercialSimulacion = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion');
+   $tieneEstadoComercialSmtp = columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
+
+   $selectEstadoComercialSimulacion = $tieneEstadoComercialSimulacion
+      ? "p.estado_comercial_simulacion"
+      : "'' AS estado_comercial_simulacion";
+   $selectEstadoComercialSmtp = $tieneEstadoComercialSmtp
+      ? "p.estado_comercial_smtp"
+      : "'' AS estado_comercial_smtp";
+
+   $joinDocumentosEmitidos = $tieneTablaDocumentosEmitidos
+      ? "
+   LEFT JOIN (
+      SELECT
+         id_presupuesto,
+         COUNT(*) AS total_documentos_emitidos
+      FROM presupuesto_documentos_emitidos
+      GROUP BY id_presupuesto
+   ) AS pd ON pd.id_presupuesto = p.id_presupuesto"
+      : '';
+
+   $selectDocumentosEmitidos = $tieneTablaDocumentosEmitidos
+      ? 'COALESCE(pd.total_documentos_emitidos, 0) AS total_documentos_emitidos'
+      : '0 AS total_documentos_emitidos';
+
+   $joinHistorialComercial = $tieneTablaHistorialComercial
+      ? "
+   LEFT JOIN (
+      SELECT
+         id_previsita,
+         id_presupuesto,
+         SUM(CASE WHEN modo_circuito = 'simulacion' THEN 1 ELSE 0 END) AS total_historial_comercial_simulacion,
+         SUM(CASE WHEN modo_circuito = 'smtp' THEN 1 ELSE 0 END) AS total_historial_comercial_smtp
+      FROM presupuesto_historial_comercial
+      GROUP BY id_previsita, id_presupuesto
+   ) AS hc ON hc.id_previsita = v.id_previsita
+          AND hc.id_presupuesto = p.id_presupuesto"
+      : '';
+
+   $selectHistorialComercial = $tieneTablaHistorialComercial
+      ? "
+      COALESCE(hc.total_historial_comercial_simulacion, 0) AS total_historial_comercial_simulacion,
+      COALESCE(hc.total_historial_comercial_smtp, 0) AS total_historial_comercial_smtp"
+      : "
+      0 AS total_historial_comercial_simulacion,
+      0 AS total_historial_comercial_smtp";
+
    $query = "
    SELECT 
       v.*,
-      p.estado AS estado_presupuesto
+      p.estado AS estado_presupuesto,
+      {$selectEstadoComercialSimulacion},
+      {$selectEstadoComercialSmtp},
+      {$selectDocumentosEmitidos},
+      {$selectHistorialComercial}
    FROM previsitas AS v
    LEFT JOIN (
       SELECT 
@@ -53,6 +109,8 @@ function modGetAllRegistros($filtro){
       GROUP BY id_previsita
    ) AS up ON up.id_previsita = v.id_previsita
    LEFT JOIN presupuestos AS p ON p.id_presupuesto = up.max_id_presupuesto
+   {$joinDocumentosEmitidos}
+   {$joinHistorialComercial}
    ".$were."
    ".$orderBy."
    ;";

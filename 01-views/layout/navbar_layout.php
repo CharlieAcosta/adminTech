@@ -12,6 +12,7 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $auditoria = array('Super Administrador');
+$mailPresupuestos = array('Super Administrador');
 ?>
 <script>
   window.ACTIVE_USER_ID = <?= (int) $usuario['id_usuario'] ?>;
@@ -34,6 +35,14 @@ $auditoria = array('Super Administrador');
         <li class="nav-item">
             <a href="../01-views/auditoria.php" class="nav-link custom-button bg-warning" data-toggle="tooltip" title="Auditoria">
                 <i class="fas fa-user-secret"></i>
+            </a>
+        </li>
+        <?php } ?>
+
+        <?php if (in_array($perfil, $mailPresupuestos)){ ?>
+        <li class="nav-item">
+            <a href="../01-views/configuracion_mail_presupuestos.php" class="nav-link custom-button bg-secondary" data-toggle="tooltip" title="Mail presupuestos">
+                <i class="fas fa-envelope-open-text"></i>
             </a>
         </li>
         <?php } ?>
@@ -135,4 +144,3 @@ $auditoria = array('Super Administrador');
   <div class="ayuda text-center text-primary p-3 mr-4"></div>
 </aside>  
 <!-- <div class="ayuda text-center"></div> -->
-

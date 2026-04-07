@@ -127,6 +127,8 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         $estado         = 'BORRADOR'; // unificamos a mayúsculas
         $moneda         = 'ARS';
         $version        = 1;
+        $tieneEstadosComerciales = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion')
+            && columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
 
         if (!$id_previsita) {
             throw new RuntimeException('id_previsita es requerido');
@@ -140,7 +142,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 FROM presupuestos
                 WHERE id_previsita = ?
                 AND ( ? IS NULL OR id_visita = ? )
-                AND UPPER(estado) IN ('BORRADOR','GENERADO','IMPRESO','ENVIADO','APROBADO','RECHAZADO')
+                AND UPPER(estado) IN ('BORRADOR','GENERADO','EMITIDO','IMPRESO','ENVIADO','RECIBIDO','RESOLICITADO','APROBADO','RECHAZADO','CANCELADO')
                 ORDER BY updated_at DESC, id_presupuesto DESC
                 LIMIT 1
             ");
@@ -161,10 +163,26 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
             if ($id_presupuesto === null) {
                 // No había uno previo: insertamos cabecera nueva
-                $stmt = mysqli_prepare($db, "
-                    INSERT INTO presupuestos (id_previsita, id_visita, estado, moneda, version, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, 1, NOW(), NOW())
-                ");
+                $stmt = mysqli_prepare($db, $tieneEstadosComerciales
+                    ? "
+                        INSERT INTO presupuestos (
+                            id_previsita,
+                            id_visita,
+                            estado,
+                            estado_comercial_simulacion,
+                            estado_comercial_smtp,
+                            moneda,
+                            version,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, NULL, NULL, ?, 1, NOW(), NOW())
+                    "
+                    : "
+                        INSERT INTO presupuestos (id_previsita, id_visita, estado, moneda, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 1, NOW(), NOW())
+                    "
+                );
                 mysqli_stmt_bind_param($stmt, "iiss", $id_previsita, $id_visita, $estado, $moneda);
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al insertar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
@@ -174,11 +192,23 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             } else {
                 // Reutilizamos el existente: actualizamos cabecera (NO borrar hijos / NO borrar carpeta)
                 // y reseteamos el estado a BORRADOR en cada guardado.
-                $stmt = mysqli_prepare($db, "
-                    UPDATE presupuestos
-                    SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
-                    WHERE id_presupuesto = ?
-                ");
+                $stmt = mysqli_prepare($db, $tieneEstadosComerciales
+                    ? "
+                        UPDATE presupuestos
+                        SET id_previsita = ?,
+                            id_visita = ?,
+                            estado = ?,
+                            estado_comercial_simulacion = NULL,
+                            estado_comercial_smtp = NULL,
+                            updated_at = NOW()
+                        WHERE id_presupuesto = ?
+                    "
+                    : "
+                        UPDATE presupuestos
+                        SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
+                        WHERE id_presupuesto = ?
+                    "
+                );
                 mysqli_stmt_bind_param($stmt, "iisi", $id_previsita, $id_visita, $estado, $id_presupuesto);
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al actualizar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
@@ -569,11 +599,44 @@ if (!function_exists('bind_params_dynamic')) {
 // === Helper: check si existe tabla (para fotos opcionales) ===
 if (!function_exists('tabla_existe')) {
     function tabla_existe(mysqli $db, string $table): bool {
-        $sql = "SHOW TABLES LIKE ?";
+        $sql = "
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+            LIMIT 1
+        ";
         $st  = mysqli_prepare($db, $sql);
         if (!$st) return false;
         mysqli_stmt_bind_param($st, "s", $table);
-        mysqli_stmt_execute($st);
+        if (!mysqli_stmt_execute($st)) {
+            mysqli_stmt_close($st);
+            return false;
+        }
+        $rs = mysqli_stmt_get_result($st);
+        $ok = ($rs && mysqli_fetch_row($rs));
+        mysqli_stmt_close($st);
+        return (bool)$ok;
+    }
+}
+
+if (!function_exists('columna_existe')) {
+    function columna_existe(mysqli $db, string $table, string $column): bool {
+        $sql = "
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+              AND column_name = ?
+            LIMIT 1
+        ";
+        $st = mysqli_prepare($db, $sql);
+        if (!$st) return false;
+        mysqli_stmt_bind_param($st, "ss", $table, $column);
+        if (!mysqli_stmt_execute($st)) {
+            mysqli_stmt_close($st);
+            return false;
+        }
         $rs = mysqli_stmt_get_result($st);
         $ok = ($rs && mysqli_fetch_row($rs));
         mysqli_stmt_close($st);

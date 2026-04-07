@@ -696,12 +696,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <i class="fas fa-save"></i> Guardar
             </button>
 
-            <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto">
-              <i class="fas fa-print"></i> Imprimir
-            </button>
-
-            <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail">
-              <i class="fas fa-envelope"></i> Enviar por mail
+            <button type="button" class="btn btn-primary mr-2 btn-emitir-presupuesto">
+              <i class="fas fa-file-pdf"></i> Generar documento
             </button>
           </div>
 
@@ -752,6 +748,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <link rel="stylesheet" href="../dist/css/custom.css">
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
+  <script src="../05-plugins/html2canvas/html2canvas.min.js"></script>
+  <script src="../05-plugins/jspdf/jspdf.umd.min.js"></script>
 </head>
 <body class="hold-transition sidebar-collapse layout-navbar-fixed">
 <div class="wrapper">
