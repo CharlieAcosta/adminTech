@@ -1,93 +1,157 @@
-# ADMINTECH
+# AdminTech
+Aplicacion web interna en PHP para gestion operativa y comercial. Por la estructura actual del sistema y los modulos visibles en el panel, cubre al menos administracion de usuarios/agentes, clientes, materiales, presupuestos, obras, novedades y seguimiento de obra.
 
+Este README deja contexto tecnico util para mantenimiento y onboarding. La version anterior era la plantilla default de GitLab y no reflejaba el estado real del proyecto.
 
+## Stack
 
-## Getting started
+- PHP 8.1 sobre Apache
+- MySQL 5.7
+- Frontend server-rendered con PHP, jQuery, Bootstrap/AdminLTE y plugins JS locales
+- Docker Compose para entorno local
+- Composer presente para dependencias PHP
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Modulos funcionales detectados
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- Login y panel principal
+- Agentes / personal
+- Novedades
+- Clientes
+- Seguimiento de obra / previsitas
+- Materiales
+- Obras
+- Presupuestos
+- AEO
+- Jornales
+- Configuracion de mails de presupuestos
 
-## Add your files
+## Estructura del repositorio
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+- `00-config/`: configuracion de entorno y conexion a base de datos.
+- `01-views/`: pantallas PHP renderizadas del sistema.
+- `03-controller/`: controladores y endpoints que reciben formularios y acciones.
+- `04-modelo/`: consultas y operaciones de datos por modulo.
+- `05-plugins/`: librerias frontend locales vendorizadas.
+- `06-funciones_php/`: helpers y funciones compartidas de PHP.
+- `07-funciones_js/`: helpers y acciones de frontend por modulo.
+- `09-adjuntos/`: adjuntos y archivos auxiliares del sistema.
+- `10-clases/`: clases PHP compartidas, por ejemplo auditoria.
+- `11-migraciones_sql/`: migraciones versionadas de base de datos.
+- `12-scripts_operativos_sql/`: scripts SQL manuales u operativos; revisar antes de ejecutar.
+- `dist/`: assets estaticos del panel.
+- `docker-local/`: entorno Docker local.
+- `uploads/`: archivos subidos por usuarios o procesos.
+- `log/`: respaldos, logs y archivos operativos locales.
 
+## Levantar el entorno local
+
+### Requisitos
+
+- Docker Desktop o Docker Engine con Compose
+- Puerto `8080` libre para Apache
+- Puerto `3306` libre para MySQL
+
+### 1. Crear `docker-local/.env`
+
+Crear el archivo `docker-local/.env` con un contenido similar a este:
+
+```env
+MYSQL_ROOT_PASSWORD=root
+MYSQL_DATABASE=techos
+MYSQL_USER=root
+TZ=America/Argentina/Buenos_Aires
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/webcharlie/admintech.git
-git branch -M main
-git push -uf origin main
+
+### 2. Iniciar contenedores
+
+Desde `docker-local/`:
+
+```bash
+docker compose up --build -d
 ```
 
-## Integrate with your tools
+Servicios definidos:
 
-- [ ] [Set up project integrations](https://gitlab.com/webcharlie/admintech/-/settings/integrations)
+- `web`: Apache + PHP 8.1
+- `db`: MySQL 5.7
 
-## Collaborate with your team
+### 3. Abrir la aplicacion
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+La app no esta montada como docroot directo del contenedor, sino bajo `/admintech`.
 
-## Test and Deploy
+Ruta local de acceso:
 
-Use the built-in continuous integration in GitLab.
+```text
+http://localhost:8080/admintech/01-views/login.php
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+Conexion local a MySQL:
 
-***
+- Host: `127.0.0.1`
+- Puerto: `3306`
+- Base: `techos`
+- Usuario: `root`
+- Password: el definido en `docker-local/.env`
 
-# Editing this README
+### 4. Detener el entorno
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```bash
+docker compose down
+```
 
-## Suggestions for a good README
+## Base de datos
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Lo que hace Docker al iniciar
 
-## Name
-Choose a self-explaining name for your project.
+El archivo `docker-local/mysql/init/01-create-db.sql` solo crea la base `techos` con `utf8mb4`. No crea automaticamente todo el esquema funcional del sistema.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Flujo recomendado para dejar una base utilizable
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+1. Levantar Docker para crear la base vacia.
+2. Importar un dump base aprobado por el equipo o una copia local de referencia.
+3. Aplicar las migraciones de `11-migraciones_sql/` en orden cronologico.
+4. Ejecutar scripts de `12-scripts_operativos_sql/` solo cuando correspondan a una necesidad puntual.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### Convenciones actuales
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+- Las migraciones usan prefijos de fecha tipo `YYYY-MM-DD`.
+- Hay scripts consolidados y scripts de continuacion; revisar dependencias antes de correrlos.
+- El codigo local usa `APP_ENV=development` desde `docker-local/docker-compose.override.yml`.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Configuracion y entorno
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+- `00-config/configIni.php` define comportamiento distinto para `development` y `production`.
+- En Docker local, el host de base esperado es `db`.
+- El login local publica la sesion con una base URL que asume la carpeta `/adminTech/`; si se cambia el nombre o la ruta publicada, conviene revisar ese comportamiento.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+## Flujo de trabajo recomendado
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+- Cambios de interfaz: revisar `01-views/`, `07-funciones_js/`, `dist/` y `05-plugins/`.
+- Cambios de logica de negocio: revisar `03-controller/`, `04-modelo/` y `06-funciones_php/`.
+- Cambios de base de datos: agregar migracion nueva en `11-migraciones_sql/`.
+- Cambios operativos puntuales: documentarlos y separarlos en `12-scripts_operativos_sql/`.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Comandos utiles
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Desde `docker-local/`:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+docker compose ps
+docker compose logs -f web
+docker compose logs -f db
+docker compose exec web bash
+docker compose exec db mysql -uroot -p
+```
 
-## License
-For open source projects, say how it is licensed.
+## Estado actual del proyecto
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+- No se detectaron tests automatizados ni un pipeline de CI documentado dentro del repo.
+- La verificacion hoy parece ser principalmente manual.
+- Existen cambios SQL recientes en `11-migraciones_sql/`, por lo que conviene revisar el estado del working tree antes de hacer merges o deploys.
+
+## Recomendaciones para seguir mejorando la documentacion
+
+- Agregar un dump base anonimizando datos sensibles o documentar de donde obtenerlo.
+- Documentar credenciales de acceso local no sensibles o el proceso para crear un usuario inicial.
+- Separar documentacion tecnica de archivos operativos y respaldos locales.
+- Incorporar una guia corta de deploy y una checklist de validacion manual por modulo.
