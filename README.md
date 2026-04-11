@@ -43,6 +43,36 @@ Este README deja contexto tecnico util para mantenimiento y onboarding. La versi
 - `uploads/`: archivos subidos por usuarios o procesos.
 - `log/`: respaldos, logs y archivos operativos locales.
 
+## Rutas de archivos operativos
+
+- PDFs emitidos de presupuesto: `uploads/presupuestos/{id_presupuesto}/emisiones/`.
+- Fotos cargadas en la visita: `uploads/visitas/{YYYYMMDD}/`.
+- Fotos cargadas dentro del presupuesto: `uploads/presupuestos/{id_presupuesto}/t{nro_tarea}/`.
+- Adjuntos generales de pre-visita o documento fuente: `09-adjuntos/previsita/`.
+
+Referencias de implementacion:
+
+- `04-modelo/presupuestoDocumentosEmitidosModel.php` arma la ruta de emision como base de presupuesto + `/emisiones`.
+- `04-modelo/presupuestoGeneradoModel.php` guarda fotos del presupuesto por tarea dentro de `t1`, `t2`, etc.
+- `06-funciones_php/guardar_visita.php` guarda fotos de visita en carpetas fechadas `YYYYMMDD`.
+- `07-funciones_js/accordionVisita.js` genera el PDF emitido desde el frontend y para calle/localidad/partido/provincia debe leer primero el `<select>` real y solo usar Select2 como fallback visual.
+- `09-adjuntos/previsita/` contiene adjuntos operativos de la pre-visita y no debe versionarse; el repo solo conserva un `.gitkeep`.
+
+## Reglas del PDF emitido de presupuesto
+
+- El titulo de cada tarea se toma desde la descripcion visible de la tarea en el presupuesto.
+- El titulo corta en el primer delimitador que aparezca entre punto, coma, guion medio, asterisco o dos puntos.
+- El delimitador encontrado no se conserva: se reemplaza por un punto final.
+- Si no aparece ninguno de esos delimitadores, el titulo usa las primeras 12 palabras y agrega `...`.
+- El detalle no muestra la etiqueta `Detalle:` y excluye el tramo de texto usado para construir el titulo.
+- Si al comienzo del detalle quedan espacios o delimitadores usados por la regla del titulo, se eliminan hasta llegar a la primera palabra o a otro simbolo valido.
+- La fila `Otros` no se muestra en el PDF emitido, pero sus valores no se eliminan del calculo ni de los subtotales mostrados.
+- Las primeras dos imagenes de cada tarea se muestran dentro de la misma pagina de la tarea, de a dos por fila, respetando proporcion.
+- Cada una de esas dos imagenes no debe exceder el 50% del ancho util de la hoja ni la altura disponible que queda en la pagina despues del contenido de la tarea.
+- Desde la tercera imagen en adelante se generan paginas extra para la misma tarea, sin texto, en una grilla de hasta cuatro bloques por pagina y manteniendo proporcion.
+- La descripcion del encabezado del PDF normaliza espacios alrededor de signos de puntuacion para respetar mejor la ortografia visual.
+- El titulo se renderiza en mayusculas, en negrita y sin subrayado.
+
 ## Levantar el entorno local
 
 ### Requisitos
