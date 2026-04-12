@@ -95,39 +95,56 @@ $estadosPresupuestoRapidos = array(
     <!-- Main content -->
     <section class="content">
       <div class="container-fluid">
-            <div class="row p-2">
+            <div class="row px-2 pt-2 pb-1">
               <div class="col-12">
                 <div class="seguimiento-toolbar">
                   <div class="seguimiento-toolbar-filtros">
-                    <button type="button" class="seguimiento-filtro-btn seguimiento-filtro-reset is-active" data-filter-reset="all">Todos</button>
-
-                    <div class="seguimiento-filtro-grupo seguimiento-filtro-grupo-visita">
-                      <span class="seguimiento-filtro-label">Visita</span>
-                      <div class="seguimiento-filtro-botones">
+                    <div class="seguimiento-filtro-columna">
+                      <div class="seguimiento-filtro-label">Filtros de visitas</div>
+                      <div class="seguimiento-filtro-linea">
                         <?php foreach ($estadosVisitaRapidos as $valorFiltro => $labelFiltro): ?>
                           <button
                             type="button"
-                            class="seguimiento-filtro-btn"
-                            data-filter-group="visita"
-                            data-filter-value="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>">
+                            class="btn btn-sm btn-outline-info seguimiento-filtro-btn btn-filtro-rapido"
+                            data-filter-target="visita"
+                            data-filter-value="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
+                            data-variant="info">
                             <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
                           </button>
                         <?php endforeach; ?>
                       </div>
                     </div>
 
-                    <div class="seguimiento-filtro-grupo seguimiento-filtro-grupo-presupuesto">
-                      <span class="seguimiento-filtro-label">Presupuesto</span>
-                      <div class="seguimiento-filtro-botones">
+                    <span class="seguimiento-filtro-separador">|</span>
+
+                    <div class="seguimiento-filtro-columna">
+                      <div class="seguimiento-filtro-label">Filtros de presupuesto</div>
+                      <div class="seguimiento-filtro-linea">
                         <?php foreach ($estadosPresupuestoRapidos as $valorFiltro => $labelFiltro): ?>
                           <button
                             type="button"
-                            class="seguimiento-filtro-btn"
-                            data-filter-group="presupuesto"
-                            data-filter-value="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>">
+                            class="btn btn-sm btn-outline-primary seguimiento-filtro-btn btn-filtro-rapido"
+                            data-filter-target="presupuesto"
+                            data-filter-value="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
+                            data-variant="primary">
                             <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
                           </button>
                         <?php endforeach; ?>
+                      </div>
+                    </div>
+
+                    <span class="seguimiento-filtro-separador">|</span>
+
+                    <div class="seguimiento-filtro-columna seguimiento-filtro-columna-todos">
+                      <div class="seguimiento-filtro-label seguimiento-filtro-label-placeholder">&nbsp;</div>
+                      <div class="seguimiento-filtro-linea">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn btn-filtro-rapido is-active"
+                          data-filter-reset="all"
+                          data-variant="secondary">
+                          Todos
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -270,9 +287,9 @@ $estadosPresupuestoRapidos = array(
     return parseInt(yyyy + mm + dd, 10);
   };
 
-  const filtrosRapidosSeguimiento = {
-    visita: '',
-    presupuesto: ''
+  const filtroRapidoSeguimiento = {
+    target: '',
+    value: ''
   };
 
   function normalizarEstadoFiltroSeguimiento(estado) {
@@ -290,36 +307,48 @@ $estadosPresupuestoRapidos = array(
       return true;
     }
 
-    const estadoVisita = normalizarEstadoFiltroSeguimiento(row.getAttribute('data-estado-visita'));
-    const estadoPresupuesto = normalizarEstadoFiltroSeguimiento(row.getAttribute('data-estado-presupuesto'));
-
-    if (filtrosRapidosSeguimiento.visita && estadoVisita !== filtrosRapidosSeguimiento.visita) {
-      return false;
+    if (!filtroRapidoSeguimiento.target || !filtroRapidoSeguimiento.value) {
+      return true;
     }
 
-    if (filtrosRapidosSeguimiento.presupuesto && estadoPresupuesto !== filtrosRapidosSeguimiento.presupuesto) {
-      return false;
-    }
+    const atributoEstado = filtroRapidoSeguimiento.target === 'presupuesto'
+      ? 'data-estado-presupuesto'
+      : 'data-estado-visita';
+    const estadoFila = normalizarEstadoFiltroSeguimiento(row.getAttribute(atributoEstado));
 
-    return true;
+    return estadoFila === filtroRapidoSeguimiento.value;
   });
 
+  function aplicarEstadoVisualBotonFiltro($boton, activo) {
+    $boton.toggleClass('is-active', activo);
+    $boton.attr('aria-pressed', activo ? 'true' : 'false');
+  }
+
   function actualizarBotonesFiltrosRapidosSeguimiento() {
-    $('.seguimiento-filtro-btn[data-filter-group]').each(function () {
+    const hayBusquedaTexto = String($('#current_table_filter input[type="search"]').val() || '').trim() !== '';
+
+    $('.seguimiento-filtro-btn[data-filter-target]').each(function () {
       const $boton = $(this);
-      const grupo = String($boton.data('filter-group') || '').trim();
+      const target = String($boton.data('filter-target') || '').trim();
       const valor = normalizarEstadoFiltroSeguimiento($boton.data('filter-value'));
-      const activo = grupo && filtrosRapidosSeguimiento[grupo] === valor;
-      $boton.toggleClass('is-active', activo);
+      const activo = target === filtroRapidoSeguimiento.target && valor === filtroRapidoSeguimiento.value;
+      aplicarEstadoVisualBotonFiltro($boton, activo);
     });
 
-    const sinFiltrosActivos = !filtrosRapidosSeguimiento.visita && !filtrosRapidosSeguimiento.presupuesto;
-    $('[data-filter-reset="all"]').toggleClass('is-active', sinFiltrosActivos);
+    const sinFiltroActivo = !filtroRapidoSeguimiento.target || !filtroRapidoSeguimiento.value;
+    $('[data-filter-reset="all"]').each(function () {
+      aplicarEstadoVisualBotonFiltro($(this), sinFiltroActivo && !hayBusquedaTexto);
+    });
   }
 
   function aplicarFiltrosRapidosSeguimiento(tabla) {
     actualizarBotonesFiltrosRapidosSeguimiento();
     tabla.draw(false);
+  }
+
+  function limpiarBusquedaSeguimiento(tabla) {
+    tabla.search('');
+    $('#current_table_filter input[type="search"]').val('');
   }
 
   function inicializarDataTableSeguimiento() {
@@ -370,22 +399,36 @@ $estadosPresupuestoRapidos = array(
     window.tablaSeguimientoObra = tablaSeguimiento;
     actualizarBotonesFiltrosRapidosSeguimiento();
 
-    $(document).on('click', '.seguimiento-filtro-btn[data-filter-group]', function () {
+    tablaSeguimiento.on('search.dt', function () {
+      actualizarBotonesFiltrosRapidosSeguimiento();
+    });
+
+    $(document).on('click', '.seguimiento-filtro-btn[data-filter-target]', function () {
       const $boton = $(this);
-      const grupo = String($boton.data('filter-group') || '').trim();
+      const target = String($boton.data('filter-target') || '').trim();
       const valor = normalizarEstadoFiltroSeguimiento($boton.data('filter-value'));
 
-      if (!grupo || !Object.prototype.hasOwnProperty.call(filtrosRapidosSeguimiento, grupo)) {
+      if (!target || !valor) {
         return;
       }
 
-      filtrosRapidosSeguimiento[grupo] = filtrosRapidosSeguimiento[grupo] === valor ? '' : valor;
+      const mismoFiltroActivo = filtroRapidoSeguimiento.target === target && filtroRapidoSeguimiento.value === valor;
+
+      if (mismoFiltroActivo) {
+        filtroRapidoSeguimiento.target = '';
+        filtroRapidoSeguimiento.value = '';
+      } else {
+        filtroRapidoSeguimiento.target = target;
+        filtroRapidoSeguimiento.value = valor;
+      }
+
       aplicarFiltrosRapidosSeguimiento(tablaSeguimiento);
     });
 
     $(document).on('click', '[data-filter-reset="all"]', function () {
-      filtrosRapidosSeguimiento.visita = '';
-      filtrosRapidosSeguimiento.presupuesto = '';
+      filtroRapidoSeguimiento.target = '';
+      filtroRapidoSeguimiento.value = '';
+      limpiarBusquedaSeguimiento(tablaSeguimiento);
       aplicarFiltrosRapidosSeguimiento(tablaSeguimiento);
     });
   });
