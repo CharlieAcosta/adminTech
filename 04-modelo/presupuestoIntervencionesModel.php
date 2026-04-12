@@ -475,7 +475,16 @@ if (!function_exists('obtenerEstadoComercialActivoDesdePresupuesto')) {
     {
         $modo = $modo ?: obtenerModoActivoCircuitoComercialPresupuestos();
         $columna = columnaEstadoComercialPresupuestoPorModo($modo);
-        return normalizarEstadoComercialPresupuesto($presupuesto[$columna] ?? '');
+        $estadoComercial = normalizarEstadoComercialPresupuesto($presupuesto[$columna] ?? '');
+        if ($estadoComercial !== '') {
+            return $estadoComercial;
+        }
+
+        $columnaHistorial = normalizarModoEnvioMailPresupuestos($modo) === 'smtp'
+            ? 'ultimo_estado_historial_comercial_smtp'
+            : 'ultimo_estado_historial_comercial_simulacion';
+
+        return normalizarEstadoComercialPresupuesto($presupuesto[$columnaHistorial] ?? '');
     }
 }
 

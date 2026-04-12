@@ -424,7 +424,11 @@ function construirHtmlHistorialPresupuesto(response) {
 }
 
 function resolverEstadoPresupuestoVisual(estado) {
-    const normalizado = String(estado || '').trim().toUpperCase();
+    let normalizado = String(estado || '').trim().toUpperCase();
+    if (normalizado === 'IMPRESO') {
+        normalizado = 'EMITIDO';
+    }
+
     let clase = 'text-secondary';
     let badgeClass = 'badge-secondary';
     let label = estado || '';
@@ -468,6 +472,19 @@ function resolverEstadoPresupuestoVisual(estado) {
     }
 
     return { clase, badgeClass, label, normalizado };
+}
+
+function renderizarBadgeEstadoListado(label, badgeClass) {
+    if (!label) {
+        return '';
+    }
+
+    const clases = ['badge', 'badge-pill', 'estado-chip'];
+    if (badgeClass) {
+        clases.push(badgeClass);
+    }
+
+    return `<span class="${clases.join(' ')}">${escapeHtmlDocumentoEmitido(label)}</span>`;
 }
 
 function estadoBloqueaEdicionComercialPresupuestoListado(estado) {
@@ -555,8 +572,15 @@ function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
     const $celda = $fila.find('td').eq(7);
     const visual = resolverEstadoPresupuestoVisual(estado);
 
-    $celda.html(`<span class="${visual.clase}"><strong>${escapeHtmlDocumentoEmitido(visual.label)}</strong></span>`);
+    $fila.attr('data-estado-presupuesto', visual.normalizado || '');
+    $celda.html(renderizarBadgeEstadoListado(visual.label, visual.badgeClass));
     actualizarAccionEditarListado($fila, visual.normalizado);
+
+    if ($.fn.dataTable && $.fn.dataTable.isDataTable('#current_table')) {
+        const tabla = $('#current_table').DataTable();
+        tabla.row($fila).invalidate('dom');
+        tabla.draw(false);
+    }
 }
 
 function obtenerFilaListadoPresupuesto(idPrevisita) {
