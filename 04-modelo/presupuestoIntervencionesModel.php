@@ -171,6 +171,7 @@ if (!function_exists('normalizarAccionHistorialComercialPresupuesto')) {
         $mapLegacy = [
             'enviar_mail' => 'enviado',
             'simular_envio_mail' => 'enviado',
+            'reabrir' => 'reabierto',
         ];
         $accion = $mapLegacy[$accion] ?? $accion;
 
@@ -186,6 +187,7 @@ if (!function_exists('normalizarAccionHistorialComercialPresupuesto')) {
             'mensaje_contacto',
             'pendiente_respuesta',
             'respondio',
+            'reabierto',
         ];
         return in_array($accion, $permitidas, true) ? $accion : null;
     }
@@ -206,6 +208,7 @@ if (!function_exists('etiquetaAccionHistorialComercialPresupuesto')) {
             'mensaje_contacto' => 'Mensaje enviado',
             'pendiente_respuesta' => 'Pendiente de respuesta',
             'respondio' => 'Respondio',
+            'reabierto' => 'Reabierto',
         ];
 
         $accion = normalizarAccionHistorialComercialPresupuesto($accion) ?? strtolower(trim($accion));
@@ -227,6 +230,97 @@ if (!function_exists('tablaHistorialComercialPresupuestoExiste')) {
     function tablaHistorialComercialPresupuestoExiste(mysqli $db): bool
     {
         return tabla_existe($db, 'presupuesto_historial_comercial');
+    }
+}
+
+if (!function_exists('perfilesPermitidosReaperturaHistorialComercialPresupuesto')) {
+    function perfilesPermitidosReaperturaHistorialComercialPresupuesto(): array
+    {
+        return ['Super Administrador', 'Administrador'];
+    }
+}
+
+if (!function_exists('idsUsuariosPermitidosReaperturaHistorialComercialPresupuesto')) {
+    function idsUsuariosPermitidosReaperturaHistorialComercialPresupuesto(): array
+    {
+        return [];
+    }
+}
+
+if (!function_exists('obtenerPerfilUsuarioHistorialComercialPresupuestoEnConexion')) {
+    function obtenerPerfilUsuarioHistorialComercialPresupuestoEnConexion(mysqli $db, int $idUsuario): string
+    {
+        if ($idUsuario <= 0) {
+            return '';
+        }
+
+        $sql = "
+            SELECT perfil
+            FROM usuarios
+            WHERE id_usuario = ?
+            LIMIT 1
+        ";
+        $stmt = mysqli_prepare($db, $sql);
+        if (!$stmt) {
+            return '';
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idUsuario);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return trim((string)($row['perfil'] ?? ''));
+    }
+}
+
+if (!function_exists('usuarioPuedeReabrirHistorialComercialPresupuesto')) {
+    function usuarioPuedeReabrirHistorialComercialPresupuesto(int $idUsuario, ?string $perfil = null, ?mysqli $db = null): bool
+    {
+        if ($idUsuario <= 0) {
+            return false;
+        }
+
+        foreach (idsUsuariosPermitidosReaperturaHistorialComercialPresupuesto() as $idPermitido) {
+            if ((int)$idPermitido === $idUsuario) {
+                return true;
+            }
+        }
+
+        $perfil = trim((string)$perfil);
+        $debeCerrarConexion = false;
+
+        if ($perfil === '') {
+            if (!$db) {
+                $db = conectDB();
+                if ($db) {
+                    mysqli_set_charset($db, 'utf8mb4');
+                    $debeCerrarConexion = true;
+                }
+            }
+
+            if ($db) {
+                $perfil = obtenerPerfilUsuarioHistorialComercialPresupuestoEnConexion($db, $idUsuario);
+            }
+        }
+
+        if ($debeCerrarConexion && $db) {
+            mysqli_close($db);
+        }
+
+        return in_array($perfil, perfilesPermitidosReaperturaHistorialComercialPresupuesto(), true);
+    }
+}
+
+if (!function_exists('estadoPermiteReaperturaHistorialComercialPresupuesto')) {
+    function estadoPermiteReaperturaHistorialComercialPresupuesto(?string $estado): bool
+    {
+        return in_array(
+            normalizarEstadoComercialPresupuesto($estado),
+            ['RECHAZADO', 'CANCELADO'],
+            true
+        );
     }
 }
 
@@ -488,6 +582,21 @@ if (!function_exists('metaAccionesContactoComercialPresupuesto')) {
     }
 }
 
+if (!function_exists('metaAccionReaperturaHistorialComercialPresupuesto')) {
+    function metaAccionReaperturaHistorialComercialPresupuesto(): array
+    {
+        return [
+            'accion' => 'reabierto',
+            'label' => 'Reabrir',
+            'icon' => 'fas fa-lock-open',
+            'text_class' => 'text-info',
+            'action_handler' => 'reabrir_comercial_presupuesto',
+            'confirm_title' => 'Reabrir presupuesto',
+            'confirm_text' => 'Se va a reabrir el circuito comercial del presupuesto y se restaurara el ultimo estado previo al cierre.',
+        ];
+    }
+}
+
 if (!function_exists('obtenerAccionesDisponiblesHistorialComercialPresupuesto')) {
     function obtenerAccionesDisponiblesHistorialComercialPresupuesto(?string $estadoInterno, ?string $estadoComercialActivo = null): array
     {
@@ -531,6 +640,59 @@ if (!function_exists('obtenerAccionesContactoDisponiblesHistorialComercialPresup
         }
 
         return array_values($meta);
+    }
+}
+
+if (!function_exists('resolverEstadoDestinoReaperturaHistorialComercialPresupuesto')) {
+    function resolverEstadoDestinoReaperturaHistorialComercialPresupuesto(array $items, ?string $estadoInterno = null): string
+    {
+        $estadosReapertura = ['ENVIADO', 'RECIBIDO', 'RESOLICITADO'];
+
+        foreach ($items as $item) {
+            $estado = normalizarEstadoComercialPresupuesto((string)($item['estado_resultante'] ?? ''));
+            if (in_array($estado, $estadosReapertura, true)) {
+                return $estado;
+            }
+        }
+
+        $estadoInterno = normalizarEstadoPresupuestoIntervencion($estadoInterno);
+        return in_array($estadoInterno, $estadosReapertura, true) ? $estadoInterno : '';
+    }
+}
+
+if (!function_exists('agregarAccionReaperturaDisponibleHistorialComercialPresupuesto')) {
+    function agregarAccionReaperturaDisponibleHistorialComercialPresupuesto(array $historial, int $idUsuario, ?string $perfil = null): array
+    {
+        if (empty($historial['ok']) || !usuarioPuedeReabrirHistorialComercialPresupuesto($idUsuario, $perfil)) {
+            return $historial;
+        }
+
+        $estadoActual = normalizarEstadoComercialPresupuesto((string)($historial['estado_comercial_activo'] ?? $historial['estado_actual'] ?? ''));
+        if (!estadoPermiteReaperturaHistorialComercialPresupuesto($estadoActual)) {
+            return $historial;
+        }
+
+        $estadoDestino = resolverEstadoDestinoReaperturaHistorialComercialPresupuesto(
+            (array)($historial['items'] ?? []),
+            (string)($historial['estado_interno'] ?? '')
+        );
+        if ($estadoDestino === '') {
+            return $historial;
+        }
+
+        $acciones = array_values((array)($historial['acciones_disponibles'] ?? []));
+        foreach ($acciones as $accionExistente) {
+            if (normalizarAccionHistorialComercialPresupuesto((string)($accionExistente['accion'] ?? '')) === 'reabierto') {
+                return $historial;
+            }
+        }
+
+        $acciones[] = metaAccionReaperturaHistorialComercialPresupuesto();
+        $historial['acciones_disponibles'] = $acciones;
+        $historial['permite_reabrir'] = true;
+        $historial['estado_reapertura_destino'] = $estadoDestino;
+
+        return $historial;
     }
 }
 
@@ -1266,6 +1428,86 @@ if (!function_exists('registrarEstadoComercialPresupuesto')) {
 
         $historialActualizado = obtenerHistorialComercialPresupuesto($idPrevisita, $idPresupuestoActual);
         $historialActualizado['msg'] = 'Estado comercial actualizado correctamente.';
+
+        return $historialActualizado;
+    }
+}
+
+if (!function_exists('registrarReaperturaComercialPresupuesto')) {
+    function registrarReaperturaComercialPresupuesto(int $idPrevisita, int $idUsuario, ?int $idPresupuesto = null, ?string $comentarios = null): array
+    {
+        if ($idPrevisita <= 0 || $idUsuario <= 0) {
+            return ['ok' => false, 'msg' => 'Faltan datos para reabrir el circuito comercial.'];
+        }
+
+        $modoCircuito = obtenerModoActivoCircuitoComercialPresupuestos();
+        $historial = obtenerHistorialComercialPresupuesto($idPrevisita, $idPresupuesto);
+        $idPresupuestoActual = (int)($historial['id_presupuesto'] ?? 0);
+        $estadoActual = normalizarEstadoComercialPresupuesto((string)($historial['estado_comercial_activo'] ?? $historial['estado_actual'] ?? ''));
+
+        if ($idPresupuestoActual <= 0) {
+            return ['ok' => false, 'msg' => 'No se encontro un presupuesto activo para este seguimiento.'];
+        }
+
+        if (!estadoPermiteReaperturaHistorialComercialPresupuesto($estadoActual)) {
+            return ['ok' => false, 'msg' => 'El estado actual no permite reapertura.'];
+        }
+
+        $db = conectDB();
+        if (!$db) {
+            return ['ok' => false, 'msg' => 'No se pudo abrir conexion a la base de datos.'];
+        }
+
+        mysqli_set_charset($db, 'utf8mb4');
+
+        if (!usuarioPuedeReabrirHistorialComercialPresupuesto($idUsuario, null, $db)) {
+            mysqli_close($db);
+            return ['ok' => false, 'msg' => 'No tenes permisos para reabrir este circuito comercial.'];
+        }
+
+        $estadoDestino = resolverEstadoDestinoReaperturaHistorialComercialPresupuesto(
+            (array)($historial['items'] ?? []),
+            (string)($historial['estado_interno'] ?? '')
+        );
+        if ($estadoDestino === '') {
+            mysqli_close($db);
+            return ['ok' => false, 'msg' => 'No se pudo resolver el estado previo al cierre para reabrir el presupuesto.'];
+        }
+
+        mysqli_begin_transaction($db);
+
+        try {
+            actualizarEstadoComercialPresupuestoEnConexion(
+                $db,
+                $idPresupuestoActual,
+                $modoCircuito,
+                $estadoDestino
+            );
+
+            registrarHistorialComercialPresupuestoEnConexion(
+                $db,
+                $idPresupuestoActual,
+                $idPrevisita,
+                obtenerIdUltimoDocumentoEmitidoPresupuestoEnConexion($db, $idPresupuestoActual),
+                null,
+                $idUsuario,
+                $modoCircuito,
+                'reabierto',
+                $estadoDestino,
+                $comentarios
+            );
+
+            mysqli_commit($db);
+        } catch (Throwable $e) {
+            mysqli_rollback($db);
+            mysqli_close($db);
+            return ['ok' => false, 'msg' => $e->getMessage()];
+        }
+
+        mysqli_close($db);
+
+        $historialActualizado = obtenerHistorialComercialPresupuesto($idPrevisita, $idPresupuestoActual);
+        $historialActualizado['msg'] = 'Circuito comercial reabierto correctamente.';
 
         return $historialActualizado;
     }

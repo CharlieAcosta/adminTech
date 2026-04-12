@@ -1,5 +1,5 @@
 // presupuestosAcciones.js
-$(document).on("click",".v-icon-accion, .v-accion-cancelar, .v-accion-eliminar, .v-accion-ver-todos, .v-accion-estado-comercial, .v-accion-contacto-comercial",function(){
+$(document).on("click",".v-icon-accion, .v-accion-cancelar, .v-accion-eliminar, .v-accion-ver-todos, .v-accion-estado-comercial, .v-accion-contacto-comercial, .v-accion-orden-compra",function(){
     presupuestoAcciones($(this));
 });
 
@@ -279,8 +279,8 @@ function construirHtmlAccionesHistorialPresupuesto(acciones, idPrevisita, idPres
         <span class="d-inline-flex align-items-center ${index > 0 ? 'ml-3' : ''}">
             ${index > 0 ? '<span class="text-muted mr-3">|</span>' : ''}
             <span
-                class="v-accion-estado-comercial font-weight-bold text-dark"
-                data-accion="estado_comercial_presupuesto"
+                class="v-accion-estado-comercial font-weight-bold ${escapeHtmlDocumentoEmitido(accion.text_class || 'text-dark')}"
+                data-accion="${escapeHtmlDocumentoEmitido(accion.action_handler || 'estado_comercial_presupuesto')}"
                 data-id="${escapeHtmlDocumentoEmitido(idPrevisita)}"
                 data-id-presupuesto="${escapeHtmlDocumentoEmitido(idPresupuesto || '')}"
                 data-estado-comercial="${escapeHtmlDocumentoEmitido(accion.accion || '')}"
@@ -328,15 +328,24 @@ function construirHtmlComentariosHistorialPresupuesto(comentarios) {
     return `<div class="text-break small" style="white-space: pre-wrap; min-width: 260px;">${escapeHtmlDocumentoEmitido(texto)}</div>`;
 }
 
+function habilitarAccionOrdenCompraHistorialPresupuesto(response) {
+    const idPresupuesto = Number(response && response.id_presupuesto ? response.id_presupuesto : 0) || 0;
+    const estadoActual = String(
+        (response && (response.estado_comercial_activo || response.estado_actual || '')) || ''
+    ).trim().toUpperCase();
+
+    return idPresupuesto > 0 && estadoActual === 'APROBADO';
+}
+
 function construirHtmlAccionOrdenCompraHistorialPresupuesto(conSeparador = false) {
     return `
         <span class="d-inline-flex align-items-center ${conSeparador ? 'ml-3' : ''}">
             ${conSeparador ? '<span class="text-muted mr-3">|</span>' : ''}
             <span
-                class="font-weight-bold text-muted"
-                title="Orden de compra (proximamente)"
-                aria-disabled="true"
-                style="cursor:default; opacity:.75;"
+                class="v-accion-orden-compra font-weight-bold text-success"
+                data-accion="orden_compra_presupuesto"
+                title="Orden de compra"
+                style="cursor:pointer;"
             >
                 <i class="fas fa-file-invoice mr-1"></i>OC
             </span>
@@ -358,7 +367,7 @@ function construirHtmlHistorialPresupuesto(response) {
         idPrevisita,
         idPresupuesto
     );
-    const accionOrdenCompraHtml = idPresupuesto
+    const accionOrdenCompraHtml = habilitarAccionOrdenCompraHistorialPresupuesto(response)
         ? construirHtmlAccionOrdenCompraHistorialPresupuesto(Boolean(accionesContactoHtml))
         : '';
     const bloqueAccionesHtml = (accionesEstadoHtml || accionesContactoHtml || accionOrdenCompraHtml) ? `
@@ -798,6 +807,15 @@ function abrirModalEnvioDocumentoEmitido(idDocumentoEmitido) {
 }
 
 function presupuestoAcciones(elemento){
+      elemento = $(elemento);
+      const accionable = elemento.is('[data-accion]')
+            ? elemento
+            : elemento.closest('[data-accion]');
+
+      if (accionable.length) {
+            elemento = accionable;
+      }
+
       switch($(elemento).data('accion')) {
 
             case 'visual': // ver el presupuesto por pantalla
@@ -1118,6 +1136,109 @@ function presupuestoAcciones(elemento){
                     confirmTextContacto,
                     ejecutarRegistroContactoComercial
                 );
+            break;
+
+            case 'reabrir_comercial_presupuesto':
+                var idPrevisitaReapertura = Number($(elemento).data('id') || $('#modalHistorialPresupuesto').data('id') || 0);
+                var idPresupuestoReapertura = Number($(elemento).data('id-presupuesto') || $('#modalHistorialPresupuesto').data('id-presupuesto') || 0);
+                var confirmTitleReapertura = String($(elemento).data('confirm-title') || 'Reabrir presupuesto');
+                var confirmTextReapertura = String($(elemento).data('confirm-text') || 'Se va a reabrir el circuito comercial del presupuesto.');
+
+                if (!idPrevisitaReapertura) {
+                    if (window.Swal && typeof Swal.fire === 'function') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Accion no disponible',
+                            text: 'No se pudo identificar el presupuesto que queres reabrir.',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                    break;
+                }
+
+                const ejecutarReaperturaComercial = (comentarios) => {
+                    Swal.fire({
+                        title: 'Reabriendo circuito...',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    $.ajax({
+                        url: '../03-controller/presupuestos_guardar.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            via: 'ajax',
+                            funcion: 'registrarReaperturaComercialPresupuesto',
+                            id_previsita: idPrevisitaReapertura,
+                            id_presupuesto: idPresupuestoReapertura,
+                            comentarios: comentarios || '',
+                            id_usuario: window.ACTIVE_USER_ID || 0
+                        },
+                        success: function (response) {
+                            if (!response || response.ok !== true) {
+                                const mensajeErrorReapertura = response && response.msg
+                                    ? response.msg
+                                    : 'Ocurrio un error al reabrir el circuito comercial.';
+
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'No se pudo reabrir el circuito',
+                                    text: mensajeErrorReapertura,
+                                    confirmButtonText: 'OK'
+                                });
+                                return;
+                            }
+
+                            actualizarEstadoPresupuestoListado(idPrevisitaReapertura, response.estado_actual || '');
+                            cargarHistorialPresupuesto(idPrevisitaReapertura);
+
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Circuito reabierto',
+                                text: response.msg || 'El circuito comercial se reabrio correctamente.',
+                                confirmButtonText: 'OK'
+                            });
+                        },
+                        error: function () {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'No se pudo reabrir el circuito',
+                                text: 'Ocurrio un error al reabrir el circuito comercial.',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                };
+
+                solicitarComentariosAccionHistorialPresupuesto(
+                    confirmTitleReapertura,
+                    confirmTextReapertura,
+                    ejecutarReaperturaComercial
+                );
+            break;
+
+            case 'orden_compra_presupuesto':
+                if (typeof mostrarMensajeConfirmable === 'function') {
+                    mostrarMensajeConfirmable(
+                        'El circuito de orden de compra todavia esta en desarrollo.',
+                        'AD',
+                        'ORDEN DE COMPRA',
+                        'OK'
+                    );
+                } else if (window.Swal && typeof Swal.fire === 'function') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Orden de compra',
+                        text: 'El circuito de orden de compra todavia esta en desarrollo.',
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    window.alert('El circuito de orden de compra todavia esta en desarrollo.');
+                }
             break;
 
             case 'pdf': // generar pdf del usuario
