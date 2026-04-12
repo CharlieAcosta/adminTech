@@ -2,7 +2,7 @@
 // 04-modelo/tareasArchivadasGuardarModel.php
 // Inserta una tarea (y sus hijos) en archivadas_tareas / archivadas_tarea_material / archivadas_tarea_mano_obra
 
-require_once __DIR__ . '/conectDB.php'; // debe exponer conectDB(): mysqli
+require_once __DIR__ . '/presupuestoGeneradoModel.php';
 
 /**
  * Estructura esperada ($payload), proveniente de __tareaArchivadaPreview en JS:
@@ -45,7 +45,18 @@ function guardarTareaArchivada(array $payload)
     }
 
     // Cabecera (campos básicos)
-    $nombreOriginal = trim((string)($tarea['descripcion'] ?? ''));
+    $descripcionHtml = sanitizarHtmlDetalleTareaPresupuesto((string)($tarea['descripcion'] ?? ''));
+    $nombreOriginal = textoPlanoDetalleTareaPresupuesto($descripcionHtml);
+    $nombreOriginal = preg_replace('/\s+/u', ' ', (string)$nombreOriginal);
+    $nombreOriginal = trim((string)$nombreOriginal);
+    if ($nombreOriginal === '') {
+        $nombreOriginal = $nombrePlantilla;
+    }
+    if (function_exists('mb_substr')) {
+        $nombreOriginal = mb_substr($nombreOriginal, 0, 255);
+    } else {
+        $nombreOriginal = substr($nombreOriginal, 0, 255);
+    }
     $incluirEnTotal = (int)($tarea['incluir_en_total'] ?? 1);
 
     // Números (permitimos null en utilidades usando NULLIF en SQL)
@@ -90,6 +101,7 @@ function guardarTareaArchivada(array $payload)
             throw new Exception('Prepare cabecera: ' . $db->error);
         }
         // tipos: s s s i s s d d s s
+        /*
         $stmt->bind_param(
             'sssissddss',
             $nombreOriginal,
@@ -102,6 +114,20 @@ function guardarTareaArchivada(array $payload)
             $otrosMo,
             $sourcePresupuestoId, // string o '' -> NULLIF
             $sourcePresuTareaId   // string o '' -> NULLIF
+        );
+        */
+        $stmt->bind_param(
+            'sssissddss',
+            $nombreOriginal,
+            $nombrePlantilla,
+            $descripcionHtml,
+            $incluirEnTotal,
+            $utilMat,
+            $utilMo,
+            $otrosMat,
+            $otrosMo,
+            $sourcePresupuestoId,
+            $sourcePresuTareaId
         );
         if (!$stmt->execute()) {
             throw new Exception('Exec cabecera: ' . $stmt->error);

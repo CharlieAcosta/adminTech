@@ -298,6 +298,10 @@ function intervinientes_names($b_array){
 
 function resumir_titulo_tarea_presupuesto(string $descripcion, int $maxPalabras = 12): string
 {
+    if (function_exists('textoPlanoDetalleTareaPresupuesto')) {
+        $descripcion = textoPlanoDetalleTareaPresupuesto($descripcion);
+    }
+
     $texto = trim(preg_replace('/\r\n?/', "\n", $descripcion));
     if ($texto === '') {
         return '';
@@ -330,6 +334,35 @@ function resumir_titulo_tarea_presupuesto(string $descripcion, int $maxPalabras 
     }
 
     return implode(' ', array_slice($palabras, 0, $maxPalabras)) . '...';
+}
+
+function renderizar_editor_detalle_tarea_presupuesto(string $descripcion): string
+{
+    $htmlSeguro = function_exists('sanitizarHtmlDetalleTareaPresupuesto')
+        ? sanitizarHtmlDetalleTareaPresupuesto($descripcion)
+        : htmlspecialchars($descripcion, ENT_QUOTES, 'UTF-8');
+
+    $valorTextarea = htmlspecialchars($htmlSeguro, ENT_QUOTES, 'UTF-8');
+
+    return '
+      <div class="tarea-detalle-editor">
+        <div class="btn-toolbar btn-group-sm tarea-detalle-editor-toolbar mb-2" role="toolbar" aria-label="Formato del detalle de la tarea">
+          <div class="btn-group mr-2" role="group" aria-label="Formato basico">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="bold" title="Negrita"><i class="fas fa-bold"></i></button>
+            <button type="button" class="btn btn-light rich-editor-action" data-command="italic" title="Cursiva"><i class="fas fa-italic"></i></button>
+            <button type="button" class="btn btn-light rich-editor-action" data-command="underline" title="Subrayado"><i class="fas fa-underline"></i></button>
+          </div>
+          <div class="btn-group mr-2" role="group" aria-label="Listas">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="insertUnorderedList" title="Lista"><i class="fas fa-list-ul"></i></button>
+          </div>
+          <div class="btn-group" role="group" aria-label="Limpiar formato">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="removeFormat" title="Limpiar formato"><i class="fas fa-eraser"></i></button>
+          </div>
+        </div>
+        <div class="form-control form-control-sm tarea-descripcion-editor" contenteditable="true" data-placeholder="Describa la tarea..." aria-label="Editor de detalle de la tarea">' . $htmlSeguro . '</div>
+        <textarea class="form-control form-control-sm tarea-descripcion d-none" rows="5">' . $valorTextarea . '</textarea>
+      </div>
+    ';
 }
 
 function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true): string
@@ -373,7 +406,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     foreach ($tareas as $t) {
         $nro          = (int)($t['nro'] ?? 0);
         $descripcion  = $t['descripcion'] ?? '';
-        $tituloTarea  = resumir_titulo_tarea_presupuesto((string)$descripcion);
+        $descripcionHtml = function_exists('sanitizarHtmlDetalleTareaPresupuesto')
+            ? sanitizarHtmlDetalleTareaPresupuesto((string)$descripcion)
+            : (string)$descripcion;
+        $tituloTarea  = resumir_titulo_tarea_presupuesto((string)$descripcionHtml);
         $incluido     = (int)($t['incluir_en_total'] ?? 1) === 1 ? 'checked' : '';
         $utilMatPct   = $t['utilidad_materiales_pct'] ?? null;
         $utilMoPct    = $t['utilidad_mano_obra_pct'] ?? null;
@@ -516,7 +552,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height:100%;">
                 <div class="mb-2">
                   <label class="mb-0"><b>Detalle de la tarea</b></label>
-                  <textarea class="form-control form-control-sm" rows="5">'. $e($descripcion) .'</textarea>
+                  '. renderizar_editor_detalle_tarea_presupuesto((string)$descripcionHtml) .'
                 </div>
 
                 <div class="mb-2 flex-grow-1">
@@ -1391,8 +1427,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex align-items-center">
-          <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title" 
+        <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
+          <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle" 
                   type="button" 
                   data-toggle="collapse" 
                   data-target="#collapsePresupuesto" 
@@ -1400,7 +1436,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          <span class="col-3 card-title text-right">
+          <span class="card-title text-right presupuesto-accordion-intervino">
             <strong>Intervino: </strong>
             <span
               class="intervino-presupuesto-ultimo"
@@ -1552,6 +1588,85 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </div>
 
 <style>
+  .tarea-detalle-editor {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tarea-detalle-editor-toolbar {
+    gap: 0.2rem;
+    margin-bottom: 0.35rem !important;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.2rem 0.25rem;
+    background: #eef1f4;
+    border: 1px solid #d7dde4;
+    border-radius: 0.4rem;
+  }
+
+  .tarea-detalle-editor-toolbar .btn {
+    min-width: 1.85rem;
+    padding: 0.12rem 0.35rem;
+    font-size: 0.82rem;
+    line-height: 1.1;
+    border-color: #d7dde4;
+    background: #f8f9fb;
+  }
+
+  .tarea-descripcion-editor {
+    min-height: 8.6rem;
+    height: 8.6rem;
+    max-height: 8.6rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    line-height: 1.4;
+  }
+
+  .tarea-descripcion-editor:empty::before {
+    content: attr(data-placeholder);
+    color: #6c757d;
+  }
+
+  .tarea-descripcion-editor:focus {
+    outline: 0;
+    box-shadow: none;
+  }
+
+  .tarea-descripcion-editor p,
+  .tarea-descripcion-editor div,
+  .tarea-descripcion-editor ul,
+  .tarea-descripcion-editor ol {
+    margin-bottom: 0.45rem;
+  }
+
+  .tarea-descripcion-editor p:last-child,
+  .tarea-descripcion-editor div:last-child,
+  .tarea-descripcion-editor ul:last-child,
+  .tarea-descripcion-editor ol:last-child {
+    margin-bottom: 0;
+  }
+
+  .tarea-descripcion-editor ul,
+  .tarea-descripcion-editor ol {
+    padding-left: 1.25rem;
+  }
+
+  .presupuesto-accordion-header {
+    gap: 1rem;
+  }
+
+  .presupuesto-accordion-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .presupuesto-accordion-intervino {
+    flex: 0 0 auto;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
   .popover-wide {
     max-width: min(400px, calc(100vw - 2rem)) !important;
     width: min(400px, calc(100vw - 2rem)) !important;
@@ -1591,6 +1706,17 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
   .popover-wide .popover-body::-webkit-scrollbar-thumb:hover {
     background: #6c757d;
+  }
+
+  @media (max-width: 991.98px) {
+    .presupuesto-accordion-header {
+      flex-wrap: wrap;
+    }
+
+    .presupuesto-accordion-intervino {
+      width: 100%;
+      text-align: left !important;
+    }
   }
 </style>
 
@@ -2342,8 +2468,8 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
   <div class="accordion" id="accordionPresupuesto">
     <div class="card card-success accordion_3">
       <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex align-items-center">
-          <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title" 
+        <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
+          <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle" 
                   type="button" 
                   data-toggle="collapse" 
                   data-target="#collapsePresupuesto" 
@@ -2351,7 +2477,7 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          <span class="col-3 card-title text-right">
+          <span class="card-title text-right presupuesto-accordion-intervino">
             <strong>Intervino: </strong>
             <span
               class="intervino-presupuesto-ultimo"

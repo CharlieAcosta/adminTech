@@ -1723,6 +1723,9 @@ $(document).ready(function() {
 
        const claseUtilidades = mostrarVistaDetallada ? '' : 'd-none';
        const claseImpuestos  = mostrarVistaDetallada ? '' : 'd-none';
+      const detalleEditorHtml = (typeof window.renderDetalleTareaEditorHtml === 'function')
+        ? window.renderDetalleTareaEditorHtml(descripcion)
+        : `<textarea class="form-control form-control-sm tarea-descripcion" rows="5">${descripcion}</textarea>`;
 
       const htmlTarea = `
         <div class="tarea-card">
@@ -1744,7 +1747,7 @@ $(document).ready(function() {
               <!-- Detalle -->
               <div class="mb-2">
                 <label class="mb-0"><b>Detalle de la tarea</b></label>
-                <textarea class="form-control form-control-sm" rows="5">${descripcion}</textarea>
+                ${detalleEditorHtml}
               </div>
               <!-- Fotos (PRESUPUESTO: dropzone + input oculto, sin “Seleccionar fotos”) -->
               <div class="mb-2 flex-grow-1">
@@ -1951,6 +1954,10 @@ $(document).ready(function() {
         // referencia a la card recién inyectada
         const $cardRecienAgregada = contenedor.find('.tarea-card').last();
 
+        if (typeof window.initDetalleTareaRichEditors === 'function') {
+          window.initDetalleTareaRichEditors($cardRecienAgregada, { triggerInput: false });
+        }
+
         // inputs a controlar
         const $utilMat = $cardRecienAgregada.find('.utilidad-global-materiales');
         const $utilMO  = $cardRecienAgregada.find('.utilidad-global-mano-obra');
@@ -2030,7 +2037,9 @@ $(document).ready(function() {
             const $card = $(this);
             const nro = index + 1;
 
-            const descripcion       = $card.find('textarea').first().val()?.trim() || '';
+            const descripcion       = (typeof window.obtenerDetalleTareaHtmlDesdeCard === 'function'
+              ? window.obtenerDetalleTareaHtmlDesdeCard($card)
+              : ($card.find('textarea').first().val() || '')).trim();
             const incluir_en_total  = $card.find('.incluir-en-total').is(':checked') ? 1 : 0;
             const utilidad_materiales = parseFloat($card.find('.tarea-materiales .utilidad-global-materiales').val()) || null;
             const utilidad_mano_obra  = parseFloat($card.find('.tarea-mano-obra .utilidad-global-mano-obra').val()) || null;
@@ -3011,6 +3020,10 @@ $(document).ready(function() {
             .trim();
           return limpio || '-';
         };
+        const PDF_DETALLE_BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol', 'li']);
+        const normalizarTextoPdfTarea = (texto) => String(texto ?? '')
+          .replace(/\s+/g, ' ')
+          .trim();
         const descomponerContenidoTarea = (texto, fallback) => {
           const limpio = String(texto ?? '').replace(/\s+/g, ' ').trim();
           const fallbackTitulo = String(fallback ?? '').toUpperCase();
@@ -3020,7 +3033,8 @@ $(document).ready(function() {
           if (!limpio) {
             return {
               titulo: fallbackTitulo,
-              detalle: ''
+              detalle: '',
+              detalleDesde: 0
             };
           }
 
@@ -3036,16 +3050,22 @@ $(document).ready(function() {
 
           if (idxCorte > -1) {
             const baseTitulo = limpio.slice(0, idxCorte).trim();
-            const detalle = limpiarInicioDetalle(limpio.slice(idxCorte + 1));
+            let detalleDesde = idxCorte + 1;
+            while (detalleDesde < limpio.length && /[\s\.,:\-*]/.test(limpio.charAt(detalleDesde))) {
+              detalleDesde += 1;
+            }
+            const detalle = limpiarInicioDetalle(limpio.slice(detalleDesde));
             if (baseTitulo) {
               return {
                 titulo: `${baseTitulo}.`.toUpperCase(),
-                detalle
+                detalle,
+                detalleDesde
               };
             }
             return {
               titulo: fallbackTitulo,
-              detalle
+              detalle,
+              detalleDesde
             };
           }
 
@@ -3053,13 +3073,31 @@ $(document).ready(function() {
           if (!palabras.length) {
             return {
               titulo: fallbackTitulo,
-              detalle: ''
+              detalle: '',
+              detalleDesde: 0
             };
+          }
+
+          let detalleDesde = limpio.length;
+          if (palabras.length > 12) {
+            const matcher = /\S+/g;
+            let contador = 0;
+            let matchPalabra = null;
+
+            while ((matchPalabra = matcher.exec(limpio)) && contador < 12) {
+              contador += 1;
+              detalleDesde = matcher.lastIndex;
+            }
+
+            while (detalleDesde < limpio.length && /\s/.test(limpio.charAt(detalleDesde))) {
+              detalleDesde += 1;
+            }
           }
 
           return {
             titulo: `${palabras.slice(0, 12).join(' ').toUpperCase()}...`,
-            detalle: palabras.slice(12).join(' ').trim()
+            detalle: palabras.slice(12).join(' ').trim(),
+            detalleDesde
           };
         };
         const limpiarPrefijoTarea = (texto) => String(texto ?? '')
@@ -3073,6 +3111,221 @@ $(document).ready(function() {
           .replace(/\(\s+/g, '(')
           .replace(/\s+\)/g, ')')
           .trim();
+        const convertirDetalleTextoAHtml = (texto) => {
+          const limpio = String(texto ?? '').trim();
+          if (!limpio) return '';
+
+          if (typeof window.normalizarTextoPlanoDetalleTarea === 'function') {
+            return window.normalizarTextoPlanoDetalleTarea(limpio);
+          }
+
+          return esc(limpio).replace(/\n/g, '<br>');
+        };
+        const limpiarInicioHtmlDetalle = (html) => {
+          const parser = new window.DOMParser();
+          const doc = parser.parseFromString(`<div>${String(html ?? '')}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+
+          const nodoSinContenido = (node) => {
+            if (!node) return true;
+            if (node.nodeType === window.Node.TEXT_NODE) {
+              return !String(node.textContent || '').trim();
+            }
+            if (node.nodeType !== window.Node.ELEMENT_NODE) {
+              return true;
+            }
+            const tag = String(node.tagName || '').toLowerCase();
+            if (tag === 'br') {
+              return true;
+            }
+            return !String(node.textContent || '').trim();
+          };
+
+          const recortarInicio = (container) => {
+            while (container.firstChild) {
+              const firstChild = container.firstChild;
+
+              if (firstChild.nodeType === window.Node.TEXT_NODE) {
+                const textoRecortado = String(firstChild.textContent || '').replace(/^[\s\.,:\-*]+/u, '');
+                if (textoRecortado) {
+                  firstChild.textContent = textoRecortado;
+                  return;
+                }
+                firstChild.remove();
+                continue;
+              }
+
+              if (firstChild.nodeType !== window.Node.ELEMENT_NODE) {
+                firstChild.remove();
+                continue;
+              }
+
+              const tag = String(firstChild.tagName || '').toLowerCase();
+              if (tag === 'br') {
+                firstChild.remove();
+                continue;
+              }
+
+              recortarInicio(firstChild);
+
+              if (nodoSinContenido(firstChild)) {
+                firstChild.remove();
+                continue;
+              }
+
+              return;
+            }
+          };
+
+          recortarInicio(root);
+          return root.innerHTML.trim();
+        };
+        const extraerDetalleHtmlPreservandoFormato = (html, detalleEsperado, detalleDesde = 0) => {
+          const htmlFuente = /<[^>]+>/.test(String(html ?? ''))
+            ? String(html ?? '')
+            : convertirDetalleTextoAHtml(html);
+          const detalleNormalizado = normalizarTextoPdfTarea(detalleEsperado);
+
+          if (!htmlFuente || !detalleNormalizado) {
+            return '';
+          }
+
+          const parser = new window.DOMParser();
+          const doc = parser.parseFromString(`<div>${htmlFuente}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+          const posiciones = [];
+          let textoNormalizado = '';
+          let ultimoFueEspacio = true;
+
+          const emitirCaracter = (caracter, posicion) => {
+            const esEspacio = /\s/.test(caracter);
+
+            if (esEspacio) {
+              if (ultimoFueEspacio || !textoNormalizado.length) {
+                return;
+              }
+              textoNormalizado += ' ';
+              posiciones.push({ ...posicion, esEspacio: true });
+              ultimoFueEspacio = true;
+              return;
+            }
+
+            textoNormalizado += caracter;
+            posiciones.push({ ...posicion, esEspacio: false });
+            ultimoFueEspacio = false;
+          };
+
+          const recorrerNodo = (node) => {
+            if (!node) return;
+
+            if (node.nodeType === window.Node.TEXT_NODE) {
+              const contenido = String(node.textContent || '');
+              for (let idx = 0; idx < contenido.length; idx += 1) {
+                emitirCaracter(contenido.charAt(idx), {
+                  tipo: 'texto',
+                  node,
+                  offset: idx + 1
+                });
+              }
+              return;
+            }
+
+            if (node.nodeType !== window.Node.ELEMENT_NODE) {
+              return;
+            }
+
+            const tag = String(node.tagName || '').toLowerCase();
+
+            if (tag === 'br') {
+              emitirCaracter(' ', { tipo: 'despuesNodo', node });
+              return;
+            }
+
+            if (tag === 'li') {
+              emitirCaracter('-', { tipo: 'inicioElemento', node });
+              emitirCaracter(' ', { tipo: 'inicioElemento', node });
+            }
+
+            Array.from(node.childNodes || []).forEach(recorrerNodo);
+
+            if (PDF_DETALLE_BLOCK_TAGS.has(tag)) {
+              emitirCaracter(' ', { tipo: 'despuesNodo', node });
+            }
+          };
+
+          Array.from(root.childNodes || []).forEach(recorrerNodo);
+
+          while (posiciones.length && posiciones[posiciones.length - 1].esEspacio) {
+            posiciones.pop();
+            textoNormalizado = textoNormalizado.slice(0, -1);
+          }
+
+          const coincidenciaPrefijo = textoNormalizado.match(/^tarea\s*\d+\s*[:.-]?\s*/i);
+          const prefijoConsumido = coincidenciaPrefijo ? coincidenciaPrefijo[0].length : 0;
+          const detalleTextoEnHtml = textoNormalizado.slice(prefijoConsumido);
+          const detalleDesdeBase = Math.max(0, (Number(detalleDesde) || 0) - prefijoConsumido);
+          const indiceDetalleReal = detalleTextoEnHtml.indexOf(detalleNormalizado, detalleDesdeBase);
+          const totalConsumido = indiceDetalleReal > -1
+            ? prefijoConsumido + indiceDetalleReal
+            : Math.max(0, Number(detalleDesde) || 0);
+
+          if (totalConsumido <= 0) {
+            return limpiarInicioHtmlDetalle(root.innerHTML);
+          }
+
+          if (totalConsumido >= posiciones.length) {
+            return '';
+          }
+
+          const posicionInicio = posiciones[totalConsumido - 1];
+          const range = doc.createRange();
+
+          if (!posicionInicio) {
+            range.setStart(root, 0);
+          } else if (posicionInicio.tipo === 'texto') {
+            range.setStart(posicionInicio.node, posicionInicio.offset);
+          } else if (posicionInicio.tipo === 'inicioElemento') {
+            range.setStart(posicionInicio.node, 0);
+          } else {
+            range.setStartAfter(posicionInicio.node);
+          }
+
+          range.setEnd(root, root.childNodes.length);
+
+          const fragment = range.cloneContents();
+          const container = doc.createElement('div');
+          container.appendChild(fragment);
+
+          return limpiarInicioHtmlDetalle(container.innerHTML);
+        };
+        const descomponerContenidoTareaHtml = (html, fallback) => {
+          const htmlSeguro = String(html ?? '').trim();
+          const textoPlano = (typeof window.detalleTareaHtmlToPlainText === 'function')
+            ? window.detalleTareaHtmlToPlainText(htmlSeguro)
+            : String(htmlSeguro).replace(/<[^>]+>/g, ' ');
+          const textoLimpio = limpiarPrefijoTarea(textoPlano || fallback);
+          const resultadoPlano = descomponerContenidoTarea(textoLimpio, fallback);
+
+          if (!htmlSeguro) {
+            return {
+              titulo: resultadoPlano.titulo,
+              detalleHtml: resultadoPlano.detalle
+                ? convertirDetalleTextoAHtml(resultadoPlano.detalle)
+                : ''
+            };
+          }
+
+          return {
+            titulo: resultadoPlano.titulo,
+            detalleHtml: extraerDetalleHtmlPreservandoFormato(
+              htmlSeguro,
+              resultadoPlano.detalle,
+              resultadoPlano.detalleDesde
+            ) || (resultadoPlano.detalle
+              ? convertirDetalleTextoAHtml(resultadoPlano.detalle)
+              : '')
+          };
+        };
         const agruparItems = (items, tamanoGrupo) => {
           const resultado = [];
           for (let idx = 0; idx < items.length; idx += tamanoGrupo) {
@@ -3141,16 +3394,20 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
   let $detalle = $card.find('textarea.tarea-descripcion').first();
   if (!$detalle.length) $detalle = $card.find('textarea').first();
-  const detalleOriginal = ($detalle.val() || '').trim();
+  const detalleOriginalHtml = (typeof window.obtenerDetalleTareaHtmlDesdeCard === 'function')
+    ? window.obtenerDetalleTareaHtmlDesdeCard($card)
+    : (($detalle.val() || '').trim());
+  const detalleOriginal = (typeof window.detalleTareaHtmlToPlainText === 'function')
+    ? window.detalleTareaHtmlToPlainText(detalleOriginalHtml)
+    : detalleOriginalHtml;
   const tituloOriginal = detalleOriginal
     || ($card.find('.tarea-encabezado b').text() || '').trim()
     || `Tarea ${nro}`;
   const detalleTarea = limpiarPrefijoTarea(detalleOriginal || tituloOriginal);
-  const contenidoTareaResuelto = descomponerContenidoTarea(detalleTarea, `Tarea ${nro}`);
+  const contenidoTareaResuelto = descomponerContenidoTareaHtml(detalleOriginalHtml || detalleTarea, `Tarea ${nro}`);
   const tituloTarea = contenidoTareaResuelto.titulo;
-  const detalleCuerpoTarea = contenidoTareaResuelto.detalle;
-  const detalleTareaHtml = detalleCuerpoTarea
-    ? `<div class="linea detalle-tarea">${esc(detalleCuerpoTarea)}</div>`
+  const detalleTareaHtml = contenidoTareaResuelto.detalleHtml
+    ? `<div class="detalle-tarea">${contenidoTareaResuelto.detalleHtml}</div>`
     : '';
 
   // Materiales
@@ -3448,7 +3705,22 @@ const htmlPaginaTotal = `
   .box { border:1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
   .linea { margin: 3px 0; font-size: 12px; line-height: 1.25; }
-  .detalle-tarea { white-space: pre-line; overflow-wrap: anywhere; }
+  .detalle-tarea { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+  .detalle-tarea p,
+  .detalle-tarea div,
+  .detalle-tarea ul,
+  .detalle-tarea ol { margin: 0 0 6px; }
+  .detalle-tarea p:last-child,
+  .detalle-tarea div:last-child,
+  .detalle-tarea ul:last-child,
+  .detalle-tarea ol:last-child { margin-bottom: 0; }
+  .detalle-tarea ul,
+  .detalle-tarea ol { padding-left: 18px; }
+  .detalle-tarea strong,
+  .detalle-tarea b { font-weight: 700; }
+  .detalle-tarea em,
+  .detalle-tarea i { font-style: italic; }
+  .detalle-tarea u { text-decoration: underline; }
 
   .falta { color:#b00020; font-weight:700; }
 

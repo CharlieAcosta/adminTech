@@ -54,8 +54,11 @@ Referencias de implementacion:
 
 - `04-modelo/presupuestoDocumentosEmitidosModel.php` arma la ruta de emision como base de presupuesto + `/emisiones`.
 - `04-modelo/presupuestoGeneradoModel.php` guarda fotos del presupuesto por tarea dentro de `t1`, `t2`, etc.
+- `04-modelo/presupuestoGeneradoModel.php` tambien sanea el HTML permitido del detalle de tarea antes de persistirlo; hoy solo admite formato basico como negrita, cursiva, subrayado y listas.
 - `06-funciones_php/guardar_visita.php` guarda fotos de visita en carpetas fechadas `YYYYMMDD`.
-- `07-funciones_js/accordionVisita.js` genera el PDF emitido desde el frontend y para calle/localidad/partido/provincia debe leer primero el `<select>` real y solo usar Select2 como fallback visual.
+- `07-funciones_js/accordionPresupuesto.js` centraliza el editor enriquecido liviano del detalle de tarea, sincroniza el HTML saneado con el `textarea` oculto, conserva la seleccion al usar la toolbar y transforma HTML pegado con estilos inline a etiquetas seguras; visualmente el editor mantiene una altura fija, una toolbar gris suave y hace scroll interno para no empujar el resto de la card.
+- `07-funciones_js/accordionVisita.js` genera el PDF emitido desde el frontend y para calle/localidad/partido/provincia debe leer primero el `<select>` real y solo usar Select2 como fallback visual; el detalle de cada tarea respeta formato basico saneado como negrita, cursiva, subrayado y listas.
+- `01-views/seguimiento_form.php` renderiza el encabezado del accordion de presupuesto y el template que lo recrea; el bloque `Intervino` queda en una sola linea en escritorio y en pantallas angostas baja completo a una nueva fila para no cortar la hora.
 - `09-adjuntos/previsita/` contiene adjuntos operativos de la pre-visita y no debe versionarse; el repo solo conserva un `.gitkeep`.
 
 ## Reglas del PDF emitido de presupuesto
@@ -65,6 +68,7 @@ Referencias de implementacion:
 - El delimitador encontrado no se conserva: se reemplaza por un punto final.
 - Si no aparece ninguno de esos delimitadores, el titulo usa las primeras 12 palabras y agrega `...`.
 - El detalle no muestra la etiqueta `Detalle:` y excluye el tramo de texto usado para construir el titulo.
+- Si el detalle tiene HTML enriquecido, el PDF conserva ese formato solo en el cuerpo del detalle; la construccion del titulo sigue basandose en el texto plano con las reglas anteriores.
 - Si al comienzo del detalle quedan espacios o delimitadores usados por la regla del titulo, se eliminan hasta llegar a la primera palabra o a otro simbolo valido.
 - La fila `Otros` no se muestra en el PDF emitido, pero sus valores no se eliminan del calculo ni de los subtotales mostrados.
 - Las primeras dos imagenes de cada tarea se muestran dentro de la misma pagina de la tarea, de a dos por fila, respetando proporcion.

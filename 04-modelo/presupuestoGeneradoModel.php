@@ -100,6 +100,64 @@ if (!function_exists('repararTextoMojibakePresupuestoProfundo')) {
     }
 }
 
+if (!function_exists('textoPlanoDetalleTareaPresupuesto')) {
+    function textoPlanoDetalleTareaPresupuesto(?string $html): string
+    {
+        $html = (string)($html ?? '');
+        if ($html === '') {
+            return '';
+        }
+
+        $normalizado = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $normalizado = preg_replace('/<li\b[^>]*>/i', '- ', (string)$normalizado);
+        $normalizado = preg_replace('/<\/(li|p|div|ul|ol)>/i', "\n", (string)$normalizado);
+
+        $texto = strip_tags((string)$normalizado);
+        $texto = html_entity_decode($texto, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $texto = str_replace("\xc2\xa0", ' ', $texto);
+        $texto = preg_replace('/\r\n?/', "\n", $texto);
+        $texto = preg_replace('/[ \t]+\n/u', "\n", (string)$texto);
+        $texto = preg_replace('/\n{3,}/u', "\n\n", (string)$texto);
+
+        return trim((string)$texto);
+    }
+}
+
+if (!function_exists('sanitizarHtmlDetalleTareaPresupuesto')) {
+    function sanitizarHtmlDetalleTareaPresupuesto(?string $html): string
+    {
+        $html = repararTextoMojibakePresupuestoProfundo((string)($html ?? ''));
+        if ($html === '') {
+            return '';
+        }
+
+        $permitidos = '<b><strong><i><em><u><br><ul><ol><li><p><div>';
+        $html = strip_tags($html, $permitidos);
+        $html = preg_replace_callback(
+            '/<(\/?)([a-z0-9]+)(?:\s+[^>]*)?>/i',
+            static function (array $m): string {
+                $tag = strtolower((string)($m[2] ?? ''));
+                $permitidos = ['b', 'strong', 'i', 'em', 'u', 'br', 'ul', 'ol', 'li', 'p', 'div'];
+                if (!in_array($tag, $permitidos, true)) {
+                    return '';
+                }
+
+                return '<' . ($m[1] ?? '') . $tag . '>';
+            },
+            $html
+        );
+
+        $html = preg_replace('/(?:<br>\s*){3,}/i', '<br><br>', (string)$html);
+        $html = trim((string)$html);
+
+        if (textoPlanoDetalleTareaPresupuesto($html) === '') {
+            return '';
+        }
+
+        return $html;
+    }
+}
+
 /**
  * Guarda un presupuesto + materiales + MO + fotos.
  *
@@ -226,7 +284,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
         foreach ($tareasPayload as $t) {
             $nro                = isset($t['nro']) ? (int)$t['nro'] : 0;
-            $descripcion        = trim((string)($t['descripcion'] ?? ''));
+            $descripcion        = sanitizarHtmlDetalleTareaPresupuesto((string)($t['descripcion'] ?? ''));
             $incluir_en_total   = !empty($t['incluir_en_total']) ? 1 : 0;
             $util_mat_pct       = isset($t['utilidad_materiales']) ? (float)$t['utilidad_materiales'] : null;
             $util_mo_pct        = isset($t['utilidad_mano_obra']) ? (float)$t['utilidad_mano_obra'] : null;
