@@ -55,11 +55,31 @@ Referencias de implementacion:
 - `04-modelo/presupuestoDocumentosEmitidosModel.php` arma la ruta de emision como base de presupuesto + `/emisiones`.
 - `04-modelo/presupuestoGeneradoModel.php` guarda fotos del presupuesto por tarea dentro de `t1`, `t2`, etc.
 - `04-modelo/presupuestoGeneradoModel.php` tambien sanea el HTML permitido del detalle de tarea antes de persistirlo; hoy solo admite formato basico como negrita, cursiva, subrayado y listas.
+- `04-modelo/presupuestoIntervencionesModel.php` usa el ultimo `estado_resultante` del historial comercial como fallback del estado visible del modal cuando el presupuesto todavia no tiene persistido un estado comercial activo en sus columnas propias.
+- `04-modelo/presupuestoIntervencionesModel.php` persiste y lee `comentarios` del historial comercial cuando la columna existe; para filas historicas de accion `Enviado` que hayan quedado sin comentario persistido, recompone el texto en lectura desde `presupuesto_documentos_emitidos_envios` usando `para_email` y `cco`, y sigue excluyendo las CCO configuradas por defecto.
+- `04-modelo/presupuestoDocumentosEmitidosEnviosModel.php` genera automaticamente el comentario del evento `Enviado` con los destinatarios `Para` y las `CCO` agregadas manualmente o por seleccion del usuario, excluyendo las copias ocultas configuradas por defecto en el sistema.
 - `06-funciones_php/guardar_visita.php` guarda fotos de visita en carpetas fechadas `YYYYMMDD`.
 - `07-funciones_js/accordionPresupuesto.js` centraliza el editor enriquecido liviano del detalle de tarea, sincroniza el HTML saneado con el `textarea` oculto, conserva la seleccion al usar la toolbar y transforma HTML pegado con estilos inline a etiquetas seguras; visualmente el editor mantiene una altura fija, una toolbar gris suave y hace scroll interno para no empujar el resto de la card.
 - `07-funciones_js/accordionVisita.js` genera el PDF emitido desde el frontend y para calle/localidad/partido/provincia debe leer primero el `<select>` real y solo usar Select2 como fallback visual; el detalle de cada tarea respeta formato basico saneado como negrita, cursiva, subrayado y listas.
+- `07-funciones_js/presupuestosAcciones.js` concentra el modal `Historial de presupuesto`: consume el endpoint `obtenerHistorialComercialPresupuesto`, renderiza las acciones disponibles en filas separadas como el diseno original del modal, agrega una accion visual futura `OC` (orden de compra) al final del bloque de contactos sin comportamiento activo todavia, deja la tabla simplificada en `Fecha`, `Usuario`, `Accion` y `Comentarios`, y antes de ejecutar una accion del modal abre un SweetAlert con textarea para capturar el comentario manual de esa accion; como ese alert vive encima de un modal Bootstrap, libera temporalmente `focusin.bs.modal` mientras el textarea esta abierto y restaura el focus trap al cerrarlo. Al cerrar el modal principal tambien se limpian los ids cacheados para evitar contexto residual entre aperturas.
 - `01-views/seguimiento_form.php` renderiza el encabezado del accordion de presupuesto y el template que lo recrea; el bloque `Intervino` queda en una sola linea en escritorio y en pantallas angostas baja completo a una nueva fila para no cortar la hora.
 - `09-adjuntos/previsita/` contiene adjuntos operativos de la pre-visita y no debe versionarse; el repo solo conserva un `.gitkeep`.
+
+## Migracion SQL requerida por ambiente
+
+- Archivo versionado: `11-migraciones_sql/2026-04-11-A_presupuesto_historial_comercial_comentarios.sql`
+- Consulta a ejecutar una sola vez en cada ambiente si `presupuesto_historial_comercial` todavia no tiene la columna `comentarios`:
+
+```sql
+ALTER TABLE presupuesto_historial_comercial
+ADD COLUMN comentarios TEXT NULL AFTER estado_resultante;
+```
+
+- Verificacion sugerida:
+
+```sql
+SHOW COLUMNS FROM presupuesto_historial_comercial LIKE 'comentarios';
+```
 
 ## Reglas del PDF emitido de presupuesto
 

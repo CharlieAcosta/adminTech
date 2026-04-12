@@ -49,6 +49,53 @@ if (!function_exists('serializarListaEmailsDocumentoEmitido')) {
     }
 }
 
+if (!function_exists('obtenerEmailsCopiasPorDefectoMailPresupuestos')) {
+    function obtenerEmailsCopiasPorDefectoMailPresupuestos(?string $tipo = null): array
+    {
+        $tipo = $tipo !== null ? strtolower(trim($tipo)) : null;
+        $emails = [];
+
+        foreach (obtenerCopiasActivasPorDefectoMailPresupuestos() as $item) {
+            $tipoItem = strtolower(trim((string)($item['tipo'] ?? 'cco')));
+            if ($tipo !== null && $tipoItem !== $tipo) {
+                continue;
+            }
+
+            $email = normalizarEmailMailPresupuestos($item['email'] ?? '');
+            if ($email === '') {
+                continue;
+            }
+
+            $emails[$email] = $email;
+        }
+
+        return array_values($emails);
+    }
+}
+
+if (!function_exists('construirComentarioEnvioHistorialComercialPresupuesto')) {
+    function construirComentarioEnvioHistorialComercialPresupuesto(array $paraEmails, array $ccoEmails): string
+    {
+        $paraNormalizados = normalizarListaEmailsDocumentoEmitido($paraEmails);
+        $ccoNormalizados = normalizarListaEmailsDocumentoEmitido($ccoEmails);
+        $ccoPorDefecto = obtenerEmailsCopiasPorDefectoMailPresupuestos('cco');
+        $ccoAgregadas = array_values(array_diff($ccoNormalizados, $ccoPorDefecto));
+        $partes = [];
+
+        if ($paraNormalizados) {
+            $partes[] = count($paraNormalizados) > 1
+                ? 'Destinatarios: ' . implode(', ', $paraNormalizados)
+                : 'Destinatario: ' . $paraNormalizados[0];
+        }
+
+        if ($ccoAgregadas) {
+            $partes[] = 'Copias ocultas agregadas: ' . implode(', ', $ccoAgregadas);
+        }
+
+        return implode(' | ', $partes);
+    }
+}
+
 if (!function_exists('obtenerDocumentoEmitidoDetallePresupuesto')) {
     function obtenerDocumentoEmitidoDetallePresupuesto(int $idDocumentoEmitido): ?array
     {
@@ -750,6 +797,7 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
         $ccoEmails = normalizarListaEmailsDocumentoEmitido($input['cco_email'] ?? []);
         $ccoManual = normalizarListaEmailsDocumentoEmitido($input['cco_manual'] ?? '');
         $ccoEmails = array_values(array_unique(array_merge($ccoEmails, $ccoManual)));
+        $comentariosHistorialEnvio = construirComentarioEnvioHistorialComercialPresupuesto($paraEmails, $ccoEmails);
 
         if (!$paraEmails) {
             return ['ok' => false, 'msg' => 'Ingresa al menos un destinatario valido en el campo Para.'];
@@ -852,7 +900,8 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
                     $idUsuario,
                     $modoEnvio,
                     'enviado',
-                    'ENVIADO'
+                    'ENVIADO',
+                    $comentariosHistorialEnvio
                 );
 
                 $estadoActualizado = true;

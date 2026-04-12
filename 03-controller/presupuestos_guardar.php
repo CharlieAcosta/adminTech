@@ -246,13 +246,15 @@ try {
                 $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
                 $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
                 $accionComercial = isset($_POST['accion_comercial']) ? (string)$_POST['accion_comercial'] : '';
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
 
                 echo json_encode(
                     registrarEstadoComercialPresupuesto(
                         $idPrevisita,
                         $idUsuario,
                         $accionComercial,
-                        $idPresupuesto > 0 ? $idPresupuesto : null
+                        $idPresupuesto > 0 ? $idPresupuesto : null,
+                        $comentarios
                     ),
                     JSON_UNESCAPED_UNICODE
                 );
@@ -268,13 +270,15 @@ try {
                 $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
                 $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
                 $accionContacto = isset($_POST['accion_comercial']) ? (string)$_POST['accion_comercial'] : '';
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
 
                 echo json_encode(
                     registrarContactoComercialPresupuesto(
                         $idPrevisita,
                         $idUsuario,
                         $accionContacto,
-                        $idPresupuesto > 0 ? $idPresupuesto : null
+                        $idPresupuesto > 0 ? $idPresupuesto : null,
+                        $comentarios
                     ),
                     JSON_UNESCAPED_UNICODE
                 );
@@ -465,4 +469,3 @@ $resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea
 } catch (Throwable $e) {
     echo json_encode(['ok' => false, 'msg' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
 }
-

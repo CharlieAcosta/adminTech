@@ -230,6 +230,152 @@ if (!function_exists('tablaHistorialComercialPresupuestoExiste')) {
     }
 }
 
+if (!function_exists('columnaComentariosHistorialComercialPresupuestoExiste')) {
+    function columnaComentariosHistorialComercialPresupuestoExiste(mysqli $db): bool
+    {
+        return columna_existe($db, 'presupuesto_historial_comercial', 'comentarios');
+    }
+}
+
+if (!function_exists('normalizarComentariosHistorialComercialPresupuesto')) {
+    function normalizarComentariosHistorialComercialPresupuesto(?string $comentario): ?string
+    {
+        $comentario = str_replace(["\r\n", "\r"], "\n", (string)$comentario);
+        $comentario = trim($comentario);
+
+        return $comentario !== '' ? $comentario : null;
+    }
+}
+
+if (!function_exists('normalizarListaEmailsHistorialComercialPresupuesto')) {
+    function normalizarListaEmailsHistorialComercialPresupuesto($raw): array
+    {
+        if (is_array($raw)) {
+            $items = $raw;
+        } else {
+            $texto = str_replace(["\r", "\n", ';'], ',', (string)$raw);
+            $items = explode(',', $texto);
+        }
+
+        $limpios = [];
+        foreach ($items as $item) {
+            $email = function_exists('normalizarEmailMailPresupuestos')
+                ? normalizarEmailMailPresupuestos((string)$item)
+                : strtolower(trim((string)$item));
+
+            if ($email === '') {
+                continue;
+            }
+
+            $limpios[$email] = $email;
+        }
+
+        return array_values($limpios);
+    }
+}
+
+if (!function_exists('obtenerEmailsCopiasOcultasPorDefectoHistorialComercialPresupuesto')) {
+    function obtenerEmailsCopiasOcultasPorDefectoHistorialComercialPresupuesto(): array
+    {
+        if (!function_exists('obtenerCopiasActivasPorDefectoMailPresupuestos')) {
+            return [];
+        }
+
+        $emails = [];
+        foreach (obtenerCopiasActivasPorDefectoMailPresupuestos() as $item) {
+            $tipo = strtolower(trim((string)($item['tipo'] ?? 'cco')));
+            if ($tipo !== 'cco') {
+                continue;
+            }
+
+            $email = function_exists('normalizarEmailMailPresupuestos')
+                ? normalizarEmailMailPresupuestos((string)($item['email'] ?? ''))
+                : strtolower(trim((string)($item['email'] ?? '')));
+
+            if ($email === '') {
+                continue;
+            }
+
+            $emails[$email] = $email;
+        }
+
+        return array_values($emails);
+    }
+}
+
+if (!function_exists('construirComentarioEnvioFallbackHistorialComercialPresupuesto')) {
+    function construirComentarioEnvioFallbackHistorialComercialPresupuesto($paraRaw, $ccoRaw): ?string
+    {
+        $paraNormalizados = normalizarListaEmailsHistorialComercialPresupuesto($paraRaw);
+        $ccoNormalizados = normalizarListaEmailsHistorialComercialPresupuesto($ccoRaw);
+        $ccoPorDefecto = obtenerEmailsCopiasOcultasPorDefectoHistorialComercialPresupuesto();
+        $ccoAgregadas = array_values(array_diff($ccoNormalizados, $ccoPorDefecto));
+        $partes = [];
+
+        if ($paraNormalizados) {
+            $partes[] = count($paraNormalizados) > 1
+                ? 'Destinatarios: ' . implode(', ', $paraNormalizados)
+                : 'Destinatario: ' . $paraNormalizados[0];
+        }
+
+        if ($ccoAgregadas) {
+            $partes[] = 'Copias ocultas agregadas: ' . implode(', ', $ccoAgregadas);
+        }
+
+        return normalizarComentariosHistorialComercialPresupuesto(implode(' | ', $partes));
+    }
+}
+
+if (!function_exists('obtenerComentarioEnvioFallbackHistorialComercialPresupuestoEnConexion')) {
+    function obtenerComentarioEnvioFallbackHistorialComercialPresupuestoEnConexion(mysqli $db, ?int $idEnvio): ?string
+    {
+        static $cache = [];
+
+        $idEnvio = (int)$idEnvio;
+        if ($idEnvio <= 0) {
+            return null;
+        }
+
+        if (array_key_exists($idEnvio, $cache)) {
+            return $cache[$idEnvio];
+        }
+
+        if (!tabla_existe($db, 'presupuesto_documentos_emitidos_envios')) {
+            $cache[$idEnvio] = null;
+            return null;
+        }
+
+        $sql = "
+            SELECT
+                para_email,
+                cco
+            FROM presupuesto_documentos_emitidos_envios
+            WHERE id_envio = ?
+            LIMIT 1
+        ";
+        $stmt = mysqli_prepare($db, $sql);
+        if (!$stmt) {
+            $cache[$idEnvio] = null;
+            return null;
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idEnvio);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        $cache[$idEnvio] = $row
+            ? construirComentarioEnvioFallbackHistorialComercialPresupuesto(
+                (string)($row['para_email'] ?? ''),
+                (string)($row['cco'] ?? '')
+            )
+            : null;
+
+        return $cache[$idEnvio];
+    }
+}
+
 if (!function_exists('obtenerEstadoComercialActivoDesdePresupuesto')) {
     function obtenerEstadoComercialActivoDesdePresupuesto(array $presupuesto, ?string $modo = null): string
     {
@@ -553,7 +699,8 @@ if (!function_exists('registrarHistorialComercialPresupuestoEnConexion')) {
         int $idUsuario,
         string $modoCircuito,
         string $accion,
-        string $estadoResultante
+        string $estadoResultante,
+        ?string $comentarios = null
     ): int {
         if (!tablaHistorialComercialPresupuestoExiste($db)) {
             throw new RuntimeException('La tabla de historial comercial no existe en la base de datos.');
@@ -562,44 +709,81 @@ if (!function_exists('registrarHistorialComercialPresupuestoEnConexion')) {
         $modoCircuito = normalizarModoEnvioMailPresupuestos($modoCircuito);
         $accion = normalizarAccionHistorialComercialPresupuesto($accion) ?? '';
         $estadoResultante = normalizarEstadoComercialPresupuesto($estadoResultante);
+        $comentarios = normalizarComentariosHistorialComercialPresupuesto($comentarios);
 
         if ($accion === '' || $estadoResultante === '') {
             throw new RuntimeException('No se pudo resolver el evento comercial a registrar.');
         }
 
-        $sql = "
-            INSERT INTO presupuesto_historial_comercial
-                (
-                    id_presupuesto,
-                    id_previsita,
-                    id_documento_emitido,
-                    id_envio,
-                    id_usuario,
-                    modo_circuito,
-                    accion,
-                    estado_resultante,
-                    created_at
-                )
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        ";
+        $tieneColumnaComentarios = columnaComentariosHistorialComercialPresupuestoExiste($db);
+        $sql = $tieneColumnaComentarios
+            ? "
+                INSERT INTO presupuesto_historial_comercial
+                    (
+                        id_presupuesto,
+                        id_previsita,
+                        id_documento_emitido,
+                        id_envio,
+                        id_usuario,
+                        modo_circuito,
+                        accion,
+                        estado_resultante,
+                        comentarios,
+                        created_at
+                    )
+                VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            "
+            : "
+                INSERT INTO presupuesto_historial_comercial
+                    (
+                        id_presupuesto,
+                        id_previsita,
+                        id_documento_emitido,
+                        id_envio,
+                        id_usuario,
+                        modo_circuito,
+                        accion,
+                        estado_resultante,
+                        created_at
+                    )
+                VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ";
         $stmt = mysqli_prepare($db, $sql);
         if (!$stmt) {
             throw new RuntimeException('No se pudo preparar el registro del historial comercial.');
         }
 
-        mysqli_stmt_bind_param(
-            $stmt,
-            'iiiiisss',
-            $idPresupuesto,
-            $idPrevisita,
-            $idDocumentoEmitido,
-            $idEnvio,
-            $idUsuario,
-            $modoCircuito,
-            $accion,
-            $estadoResultante
-        );
+        if ($tieneColumnaComentarios) {
+            $comentariosSql = $comentarios ?? '';
+            mysqli_stmt_bind_param(
+                $stmt,
+                'iiiiissss',
+                $idPresupuesto,
+                $idPrevisita,
+                $idDocumentoEmitido,
+                $idEnvio,
+                $idUsuario,
+                $modoCircuito,
+                $accion,
+                $estadoResultante,
+                $comentariosSql
+            );
+        } else {
+            mysqli_stmt_bind_param(
+                $stmt,
+                'iiiiisss',
+                $idPresupuesto,
+                $idPrevisita,
+                $idDocumentoEmitido,
+                $idEnvio,
+                $idUsuario,
+                $modoCircuito,
+                $accion,
+                $estadoResultante
+            );
+        }
         mysqli_stmt_execute($stmt);
         $idHistorial = mysqli_insert_id($db);
         mysqli_stmt_close($stmt);
@@ -628,6 +812,9 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
             }
 
             $modoCircuito = normalizarModoEnvioMailPresupuestos($modoCircuito ?: obtenerModoActivoCircuitoComercialPresupuestos());
+            $selectComentarios = columnaComentariosHistorialComercialPresupuestoExiste($db)
+                ? 'h.comentarios,'
+                : "'' AS comentarios,";
             $sql = "
                 SELECT
                     h.id_historial_comercial,
@@ -639,6 +826,7 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
                     h.modo_circuito,
                     h.accion,
                     h.estado_resultante,
+                    {$selectComentarios}
                     h.created_at,
                     u.apellidos,
                     u.nombres
@@ -673,6 +861,14 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
                     continue;
                 }
 
+                $comentarios = normalizarComentariosHistorialComercialPresupuesto((string)($row['comentarios'] ?? '')) ?? '';
+                if ($comentarios === '' && $accion === 'enviado') {
+                    $comentarios = obtenerComentarioEnvioFallbackHistorialComercialPresupuestoEnConexion(
+                        $db,
+                        isset($row['id_envio']) ? (int)$row['id_envio'] : null
+                    ) ?? '';
+                }
+
                 $rows[] = [
                     'id_historial_comercial' => (int)($row['id_historial_comercial'] ?? 0),
                     'id_usuario' => (int)($row['id_usuario'] ?? 0),
@@ -684,6 +880,7 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
                     'accion' => $accion,
                     'accion_label' => etiquetaAccionHistorialComercialPresupuesto($accion),
                     'estado_resultante' => normalizarEstadoComercialPresupuesto((string)($row['estado_resultante'] ?? '')),
+                    'comentarios' => $comentarios,
                     'created_at' => (string)($row['created_at'] ?? ''),
                     'fecha_texto' => formatearFechaIntervencionPresupuesto((string)($row['created_at'] ?? '')),
                     'usuario_nombre' => $usuarioNombre,
@@ -905,6 +1102,15 @@ if (!function_exists('obtenerHistorialComercialPresupuesto')) {
         $items = $idPresupuestoActual > 0
             ? obtenerHistorialComercialPresupuestoItems($idPrevisita, $idPresupuestoActual, $modoCircuito)
             : [];
+
+        if ($estadoComercialActivo === '' && !empty($items)) {
+            $ultimoEstadoHistorial = normalizarEstadoComercialPresupuesto((string)($items[0]['estado_resultante'] ?? ''));
+            if ($ultimoEstadoHistorial !== '') {
+                $estadoComercialActivo = $ultimoEstadoHistorial;
+                $estadoVisible = $ultimoEstadoHistorial;
+            }
+        }
+
         $accionesDisponibles = obtenerAccionesDisponiblesHistorialComercialPresupuesto($estadoInterno, $estadoComercialActivo);
 
         return [
@@ -990,7 +1196,7 @@ if (!function_exists('registrarIntervencionPresupuesto')) {
 }
 
 if (!function_exists('registrarEstadoComercialPresupuesto')) {
-    function registrarEstadoComercialPresupuesto(int $idPrevisita, int $idUsuario, string $accion, ?int $idPresupuesto = null): array
+    function registrarEstadoComercialPresupuesto(int $idPrevisita, int $idUsuario, string $accion, ?int $idPresupuesto = null, ?string $comentarios = null): array
     {
         $accionNormalizada = normalizarAccionHistorialComercialPresupuesto($accion);
         $modoCircuito = obtenerModoActivoCircuitoComercialPresupuestos();
@@ -1045,7 +1251,8 @@ if (!function_exists('registrarEstadoComercialPresupuesto')) {
                 $idUsuario,
                 $modoCircuito,
                 $accionNormalizada,
-                $estadoDestino
+                $estadoDestino,
+                $comentarios
             );
 
             mysqli_commit($db);
@@ -1065,7 +1272,7 @@ if (!function_exists('registrarEstadoComercialPresupuesto')) {
 }
 
 if (!function_exists('registrarContactoComercialPresupuesto')) {
-    function registrarContactoComercialPresupuesto(int $idPrevisita, int $idUsuario, string $accion, ?int $idPresupuesto = null): array
+    function registrarContactoComercialPresupuesto(int $idPrevisita, int $idUsuario, string $accion, ?int $idPresupuesto = null, ?string $comentarios = null): array
     {
         $accionNormalizada = normalizarAccionHistorialComercialPresupuesto($accion);
         $modoCircuito = obtenerModoActivoCircuitoComercialPresupuestos();
@@ -1116,7 +1323,8 @@ if (!function_exists('registrarContactoComercialPresupuesto')) {
                 $idUsuario,
                 $modoCircuito,
                 $accionNormalizada,
-                $estadoResultante
+                $estadoResultante,
+                $comentarios
             );
 
             mysqli_commit($db);
