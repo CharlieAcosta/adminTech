@@ -475,6 +475,38 @@
     syncTituloCardPresupuesto($(cardOrJq));
   };
 
+  function presupuestoEdicionComercialBloqueada() {
+    if (typeof window.obtenerBloqueoEdicionComercialSeguimiento !== 'function') {
+      return false;
+    }
+
+    const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+    return !!(bloqueo && bloqueo.bloqueado);
+  }
+
+  function mostrarBloqueoEdicionComercialPresupuesto() {
+    const mensaje = typeof window.mensajeBloqueoEdicionComercialSeguimiento === 'function'
+      ? window.mensajeBloqueoEdicionComercialSeguimiento()
+      : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.';
+
+    if (window.Swal && typeof Swal.fire === 'function') {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Edicion bloqueada',
+        text: mensaje,
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    if (typeof mostrarAdvertencia === 'function') {
+      mostrarAdvertencia(mensaje, 4);
+      return;
+    }
+
+    window.alert(mensaje);
+  }
+
   // limpieza por namespace
   $(document)
     .off('click.presu',  '.presu-dropzone')
@@ -484,6 +516,12 @@
     .on('click.presu', '#btn-guardar-presupuesto', function (e) {
       e.preventDefault();
       e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
       window.presupuestoGuardar(); // usa el data-id_presupuesto si existe
     });
 
@@ -803,6 +841,12 @@ $(document)
   .off('click.presu-guardar-tarea', '#contenedorPresupuestoGenerado .btn-guardar-tarea')
   .on('click.presu-guardar-tarea', '#contenedorPresupuestoGenerado .btn-guardar-tarea', function (e) {
     e.preventDefault(); e.stopPropagation();
+
+    if (presupuestoEdicionComercialBloqueada()) {
+      mostrarBloqueoEdicionComercialPresupuesto();
+      return;
+    }
+
     const $btn  = $(this);
     const nro   = $btn.data('nro');
     const $card = $btn.closest('.tarea-card');
@@ -925,6 +969,11 @@ $(document)
   // Reemplazo global: ignora la versión vieja de presupuestoGuardar.js
   window.presupuestoGuardar = async function (idPresuOpcional) {
     try {
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
       const $btn = $('#btn-guardar-presupuesto');
       $btn.prop('disabled', true);
   
@@ -1100,7 +1149,9 @@ $(document)
       if (typeof mostrarError === 'function') mostrarError('Error al guardar el presupuesto.');
       else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: 'Error al guardar el presupuesto.' });
     } finally {
-      $('#btn-guardar-presupuesto').prop('disabled', false);
+      if (!presupuestoEdicionComercialBloqueada()) {
+        $('#btn-guardar-presupuesto').prop('disabled', false);
+      }
     }
   };
   

@@ -32,6 +32,37 @@ $(document).ready(function() {
     window.marcarPresupuestoComoModificado = marcarPresupuestoComoModificado;
     window.marcarPresupuestoComoGuardado = marcarPresupuestoComoGuardado;
 
+    function edicionComercialBloqueada() {
+      if (typeof window.obtenerBloqueoEdicionComercialSeguimiento !== 'function') {
+        return false;
+      }
+      const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+      return !!(bloqueo && bloqueo.bloqueado);
+    }
+
+    function mostrarAlertaBloqueoEdicionComercial() {
+      const mensaje = typeof window.mensajeBloqueoEdicionComercialSeguimiento === 'function'
+        ? window.mensajeBloqueoEdicionComercialSeguimiento()
+        : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.';
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Edicion bloqueada',
+          text: mensaje,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (typeof mostrarAdvertencia === 'function') {
+        mostrarAdvertencia(mensaje, 4);
+        return;
+      }
+
+      window.alert(mensaje);
+    }
+
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
@@ -85,7 +116,7 @@ $(document).ready(function() {
         // - No estamos en modo visualización (modoVisualizacion === false)
         // - **No existe presupuesto generado** (!presupuestoGenerado)
       
-        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado;
+        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado && !edicionComercialBloqueada();
       
         const $btn = $('#btn-generar-presupuesto');
         if ($btn.length) {
@@ -913,6 +944,11 @@ $(document).ready(function() {
     
     // Botón: Generar Presupuesto
     $(document).on('click', '.btn-generar-presupuesto', function() {
+      if (edicionComercialBloqueada()) {
+        mostrarAlertaBloqueoEdicionComercial();
+        return;
+      }
+
       presupuestoGenerado = true; 
       // 1. Si no existe el accordion, lo crea usando el template
       if ($('#accordionPresupuesto').length === 0) {
@@ -2020,6 +2056,11 @@ $(document).ready(function() {
       .on('click', '#btn-guardar-presupuesto', async function (e) {
       e.preventDefault();
 
+        if (edicionComercialBloqueada()) {
+          mostrarAlertaBloqueoEdicionComercial();
+          return;
+        }
+
         const $btn = $(this);
         $btn.prop('disabled', true);
 
@@ -2429,6 +2470,21 @@ $(document).ready(function() {
     
       const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
       const $btnEmitir = $('.btn-emitir-presupuesto');
+
+      if (edicionComercialBloqueada()) {
+        $btnGuardar
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-success');
+
+        $btnEmitir
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-primary');
+
+        return;
+      }
+
       if (hayVencidos) {
         $btnGuardar
           .prop('disabled', true)
@@ -2938,6 +2994,11 @@ $(document).ready(function() {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+
+      if (edicionComercialBloqueada()) {
+        mostrarAlertaBloqueoEdicionComercial();
+        return false;
+      }
 
       const $btn = $(this);
 

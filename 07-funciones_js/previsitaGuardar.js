@@ -1,5 +1,22 @@
 // funcion ajax guardar los usuarios
 function previsitaGuardar() {
+    if (typeof window.obtenerBloqueoEdicionComercialSeguimiento === 'function') {
+        var bloqueoEdicion = window.obtenerBloqueoEdicionComercialSeguimiento();
+        if (bloqueoEdicion && bloqueoEdicion.bloqueado) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Edicion bloqueada',
+                text: typeof window.mensajeBloqueoEdicionComercialSeguimiento === 'function'
+                    ? window.mensajeBloqueoEdicionComercialSeguimiento()
+                    : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.',
+                confirmButtonText: 'OK',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+            return;
+        }
+    }
+
     if ($(".v-id").val() != "") {
         var accion = "edicion&log_accion=editar";
         var leyenda = "¿Quieres continuar editando esta previsita";
@@ -30,6 +47,18 @@ function previsitaGuardar() {
         processData: false,
         contentType: false,
         success: function (data) {
+            if (!data || data.resultado !== true) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'No se pudo guardar',
+                    text: (data && data.msg) ? data.msg : 'No se pudo guardar la pre-visita.',
+                    confirmButtonText: 'OK',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                });
+                return;
+            }
+
             //console.log('success: '+(data));
             Swal.fire({
                 icon: 'success',
@@ -72,8 +101,6 @@ function previsitaGuardar() {
         }
     });   
 }
-
-
 
 
 

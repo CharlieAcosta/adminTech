@@ -2,6 +2,7 @@
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestosModel.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
+include_once '../04-modelo/presupuestoComercialLockModel.php';
 
 if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
 
@@ -83,6 +84,9 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  $presupuestoHtml = '';
 		  $mostrarIconoDocumentosEmitidos = false;
 		  $mostrarIconoHistorialPresupuesto = false;
+		  $editarBloqueadoComercial = false;
+		  $editarBloqueadoEstado = '';
+		  $editarBloqueadoTooltip = 'Editar';
 
 		  if (isset($value_all_registros['estado_visita']) && $value_all_registros['estado_visita'] === 'Ejecutada') {
 
@@ -163,6 +167,14 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  				break;
 		  		}
 
+                    $editarBloqueadoEstado = $estadoComercialActivo !== ''
+                        ? $estadoComercialActivo
+                        : $estadoPresupuestoKey;
+                    $editarBloqueadoComercial = estadoBloqueaEdicionComercialPresupuesto($editarBloqueadoEstado);
+                    if ($editarBloqueadoComercial) {
+                        $editarBloqueadoTooltip = mensajeBloqueoEdicionComercialPresupuesto($editarBloqueadoEstado);
+                    }
+
 		  		$presupuestoHtml = '<span class="'.$claseEstado.'"><strong>'.$estadoPresupuestoLabel.'</strong></span>';
 		  	}
 		  }
@@ -173,15 +185,21 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 			// acciones				
 			$filas .= '<td class="text-left pl-3" style="white-space: nowrap;">';
 
-			$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" 
-						data-accion="visual" 
-						data-toggle="tooltip" 
-						title="Visualizar"></i>';
+			$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye"
+						data-accion="visual"
+						data-bloqueo-comercial="'.($editarBloqueadoComercial ? '1' : '0').'"
+						data-estado-bloqueo="'.htmlspecialchars(etiquetaEstadoComercialPresupuestoLock($editarBloqueadoEstado), ENT_QUOTES, 'UTF-8').'"
+						data-toggle="tooltip"
+						title="'.htmlspecialchars($editarBloqueadoComercial ? $editarBloqueadoTooltip : 'Visualizar', ENT_QUOTES, 'UTF-8').'"></i>';
 
-			$filas .= '<i class="v-icon-accion p-1 fas fa-edit" 
-						data-accion="editar" 
-						data-toggle="tooltip" 
-						title="Editar"></i>';
+			if (!$editarBloqueadoComercial) {
+				$filas .= '<i class="v-icon-accion p-1 fas fa-edit"
+							data-accion="editar"
+							data-bloqueo-comercial="0"
+							data-estado-bloqueo=""
+							data-toggle="tooltip"
+							title="Editar"></i>';
+			}
 
 			$filas .= '<i class="v-icon-accion p-1 fas fa-paperclip" 
 						style="pointer-events:none;opacity:.4;" 

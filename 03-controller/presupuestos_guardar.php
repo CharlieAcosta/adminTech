@@ -9,6 +9,7 @@ require_once $BASE . '/../04-modelo/presupuestoGeneradoModel.php';
 require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosEnviosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
+require_once $BASE . '/../04-modelo/presupuestoComercialLockModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -148,6 +149,18 @@ try {
                 $nombreArchivo = isset($_POST['nombre_archivo']) ? trim((string)$_POST['nombre_archivo']) : '';
                 $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
                 $archivoPdf = $_FILES['documento_pdf'] ?? null;
+
+                $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita(
+                    $idPrevisita,
+                    $idPresupuesto > 0 ? $idPresupuesto : null
+                );
+                if (!empty($bloqueoEdicion['bloqueado'])) {
+                    echo json_encode([
+                        'ok' => false,
+                        'msg' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
 
                 if ($idUsuario <= 0) {
                     echo json_encode(['ok' => false, 'msg' => 'No hay sesi�n de usuario activa.'], JSON_UNESCAPED_UNICODE);

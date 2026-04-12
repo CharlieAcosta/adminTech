@@ -2,6 +2,7 @@
 // ../04-modelo/presupuestoGeneradoModel.php
 
 require_once __DIR__ . '/conectDB.php';
+require_once __DIR__ . '/presupuestoComercialLockModel.php';
 
 if (!function_exists('repararTextoMojibakePresupuesto')) {
     function repararTextoMojibakePresupuesto(?string $texto): string
@@ -190,6 +191,13 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
         if (!$id_previsita) {
             throw new RuntimeException('id_previsita es requerido');
+        }
+
+        $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita($id_previsita, $id_presupuesto);
+        if (!empty($bloqueoEdicion['bloqueado'])) {
+            throw new RuntimeException(
+                $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? '')
+            );
         }
 
         // === INSERT o UPDATE cabecera (idempotente por (id_previsita, id_visita)) ===

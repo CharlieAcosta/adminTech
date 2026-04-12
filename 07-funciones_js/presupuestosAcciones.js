@@ -470,6 +470,82 @@ function resolverEstadoPresupuestoVisual(estado) {
     return { clase, badgeClass, label, normalizado };
 }
 
+function estadoBloqueaEdicionComercialPresupuestoListado(estado) {
+    const normalizado = String(estado || '').trim().toUpperCase();
+    return ['APROBADO', 'RECHAZADO', 'CANCELADO'].includes(normalizado);
+}
+
+function actualizarAccionEditarListado($fila, estado) {
+    if (!$fila || !$fila.length) {
+        return;
+    }
+
+    const $iconoVisual = $fila.find('.fa-eye[data-accion="visual"]').first();
+    const $iconoEditar = $fila.find('.fa-edit[data-accion="editar"]').first();
+    if (!$iconoVisual.length) {
+        return;
+    }
+
+    const visual = resolverEstadoPresupuestoVisual(estado);
+    const bloqueado = estadoBloqueaEdicionComercialPresupuestoListado(visual.normalizado);
+    const mensajeBloqueo = bloqueado
+        ? `La edicion de la visita y del presupuesto esta bloqueada porque el circuito comercial esta en ${visual.label || visual.normalizado}.`
+        : 'Visualizar';
+
+    $iconoVisual
+        .attr('data-bloqueo-comercial', bloqueado ? '1' : '0')
+        .attr('data-estado-bloqueo', bloqueado ? (visual.label || '') : '')
+        .attr('title', mensajeBloqueo);
+
+    if ($.fn.tooltip) {
+        $iconoVisual.tooltip('dispose');
+        $iconoVisual.tooltip({
+            container: 'body',
+            trigger: 'hover',
+            boundary: 'window'
+        });
+    }
+
+    if (bloqueado) {
+        if ($iconoEditar.length) {
+            if ($.fn.tooltip) {
+                $iconoEditar.tooltip('dispose');
+            }
+            $iconoEditar.remove();
+        }
+        return;
+    }
+
+    if ($iconoEditar.length) {
+        $iconoEditar
+            .attr('data-bloqueo-comercial', '0')
+            .attr('data-estado-bloqueo', '')
+            .attr('title', 'Editar')
+            .removeClass('text-muted');
+
+        if ($.fn.tooltip) {
+            $iconoEditar.tooltip('dispose');
+            $iconoEditar.tooltip({
+                container: 'body',
+                trigger: 'hover',
+                boundary: 'window'
+            });
+        }
+        return;
+    }
+
+    const $nuevoEditar = $('<i class="v-icon-accion p-1 fas fa-edit" data-accion="editar" data-bloqueo-comercial="0" data-estado-bloqueo="" data-toggle="tooltip" title="Editar"></i>');
+    $iconoVisual.after($nuevoEditar);
+
+    if ($.fn.tooltip) {
+        $nuevoEditar.tooltip({
+            container: 'body',
+            trigger: 'hover',
+            boundary: 'window'
+        });
+    }
+}
+
 function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
     const $fila = $('#current_table').find(`tbody tr[data-id="${idPrevisita}"]`).first();
     if (!$fila.length) {
@@ -480,6 +556,7 @@ function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
     const visual = resolverEstadoPresupuestoVisual(estado);
 
     $celda.html(`<span class="${visual.clase}"><strong>${escapeHtmlDocumentoEmitido(visual.label)}</strong></span>`);
+    actualizarAccionEditarListado($fila, visual.normalizado);
 }
 
 function obtenerFilaListadoPresupuesto(idPrevisita) {
@@ -824,6 +901,27 @@ function presupuestoAcciones(elemento){
             break;
 
             case 'editar': // editar el presupuesto
+                if (String($(elemento).data('bloqueo-comercial') || '0') === '1') {
+                    const estadoBloqueo = String($(elemento).data('estado-bloqueo') || '').trim();
+                    const mensajeBloqueo = estadoBloqueo
+                        ? `La edicion esta bloqueada porque el circuito comercial esta en ${estadoBloqueo}.`
+                        : 'La edicion esta bloqueada por el estado comercial actual.';
+
+                    if (window.Swal && typeof Swal.fire === 'function') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Edicion bloqueada',
+                            text: mensajeBloqueo,
+                            confirmButtonText: 'OK'
+                        });
+                    } else if (typeof mostrarAdvertencia === 'function') {
+                        mostrarAdvertencia(mensajeBloqueo, 4);
+                    } else {
+                        window.alert(mensajeBloqueo);
+                    }
+                    break;
+                }
+
                 var id = $(elemento).closest('tr').data('id');
                 window.location.href='seguimiento_form.php?acci=e&id='+id;
             break;
