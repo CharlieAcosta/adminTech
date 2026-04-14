@@ -12,6 +12,7 @@ include_once '../04-modelo/clientesModel.php'; //conecta a la tabla de clientes
 include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
+include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
@@ -34,6 +35,12 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
 
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
+$bloqueoEdicionComercial = [
+  'bloqueado' => false,
+  'estado' => '',
+  'estado_label' => '',
+  'mensaje' => '',
+];
 $presupuestoIntervinoResumen = construirResumenIntervencionesPresupuesto([]);
 $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
 $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
@@ -258,6 +265,10 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
         // START PHP PRESUPUESTO GENERADO 
               $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true);            
               $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
+              $bloqueoEdicionComercial = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$datos["id_previsita"]);
+              if (!empty($bloqueoEdicionComercial['bloqueado'])) {
+                $visualiza = "on";
+              }
               if ($presupuesto_generado['presupuesto']) {
                 //muestra el accordión de presupuesto generado abierto
                 $presupuestoIntervinoResumen = obtenerResumenIntervencionesPresupuesto(
@@ -298,6 +309,10 @@ function intervinientes_names($b_array){
 
 function resumir_titulo_tarea_presupuesto(string $descripcion, int $maxPalabras = 12): string
 {
+    if (function_exists('textoPlanoDetalleTareaPresupuesto')) {
+        $descripcion = textoPlanoDetalleTareaPresupuesto($descripcion);
+    }
+
     $texto = trim(preg_replace('/\r\n?/', "\n", $descripcion));
     if ($texto === '') {
         return '';
@@ -332,7 +347,39 @@ function resumir_titulo_tarea_presupuesto(string $descripcion, int $maxPalabras 
     return implode(' ', array_slice($palabras, 0, $maxPalabras)) . '...';
 }
 
-function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true): string
+function renderizar_editor_detalle_tarea_presupuesto(string $descripcion, bool $soloLectura = false): string
+{
+    $htmlSeguro = function_exists('sanitizarHtmlDetalleTareaPresupuesto')
+        ? sanitizarHtmlDetalleTareaPresupuesto($descripcion)
+        : htmlspecialchars($descripcion, ENT_QUOTES, 'UTF-8');
+
+    $valorTextarea = htmlspecialchars($htmlSeguro, ENT_QUOTES, 'UTF-8');
+    $disabledAttr = $soloLectura ? 'disabled' : '';
+    $contenteditableAttr = $soloLectura ? 'false' : 'true';
+    $toolbarClass = $soloLectura ? ' d-none' : '';
+
+    return '
+      <div class="tarea-detalle-editor">
+        <div class="btn-toolbar btn-group-sm tarea-detalle-editor-toolbar mb-2'. $toolbarClass .'" role="toolbar" aria-label="Formato del detalle de la tarea">
+          <div class="btn-group mr-2" role="group" aria-label="Formato basico">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="bold" title="Negrita" '. $disabledAttr .'><i class="fas fa-bold"></i></button>
+            <button type="button" class="btn btn-light rich-editor-action" data-command="italic" title="Cursiva" '. $disabledAttr .'><i class="fas fa-italic"></i></button>
+            <button type="button" class="btn btn-light rich-editor-action" data-command="underline" title="Subrayado" '. $disabledAttr .'><i class="fas fa-underline"></i></button>
+          </div>
+          <div class="btn-group mr-2" role="group" aria-label="Listas">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="insertUnorderedList" title="Lista" '. $disabledAttr .'><i class="fas fa-list-ul"></i></button>
+          </div>
+          <div class="btn-group" role="group" aria-label="Limpiar formato">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="removeFormat" title="Limpiar formato" '. $disabledAttr .'><i class="fas fa-eraser"></i></button>
+          </div>
+        </div>
+        <div class="form-control form-control-sm tarea-descripcion-editor'. ($soloLectura ? ' input-sololectura' : '') .'" contenteditable="'. $contenteditableAttr .'" data-placeholder="Describa la tarea..." aria-label="Editor de detalle de la tarea">' . $htmlSeguro . '</div>
+        <textarea class="form-control form-control-sm tarea-descripcion d-none" rows="5">' . $valorTextarea . '</textarea>
+      </div>
+    ';
+}
+
+function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true, bool $soloLectura = false): string
 {
     $hoy = new DateTimeImmutable('now');
 
@@ -362,6 +409,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
     $html = [];
     $idPresupuesto = $presupuesto_generado['presupuesto']['id_presupuesto'] ?? null;
+    $disabledAttr = $soloLectura ? 'disabled' : '';
+    $readonlyUtilClass = $soloLectura ? 'readonly input-sololectura' : '';
 
     // Contenedor raíz (data-id_presupuesto para que tu JS lo tome)
     $html[] = '<div id="contenedorPresupuestoGenerado" data-id_presupuesto="'. $e($idPresupuesto) .'">';
@@ -373,7 +422,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     foreach ($tareas as $t) {
         $nro          = (int)($t['nro'] ?? 0);
         $descripcion  = $t['descripcion'] ?? '';
-        $tituloTarea  = resumir_titulo_tarea_presupuesto((string)$descripcion);
+        $descripcionHtml = function_exists('sanitizarHtmlDetalleTareaPresupuesto')
+            ? sanitizarHtmlDetalleTareaPresupuesto((string)$descripcion)
+            : (string)$descripcion;
+        $tituloTarea  = resumir_titulo_tarea_presupuesto((string)$descripcionHtml);
         $incluido     = (int)($t['incluir_en_total'] ?? 1) === 1 ? 'checked' : '';
         $utilMatPct   = $t['utilidad_materiales_pct'] ?? null;
         $utilMoPct    = $t['utilidad_mano_obra_pct'] ?? null;
@@ -399,7 +451,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <td>'. $e($nombre) .'</td>
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-material"
-                       value="'. $e($cant) .'" min="0" step="any">
+                       value="'. $e($cant) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
               <td>
                 <input type="number" class="form-control form-control-sm precio-unitario '. $e($clase) .'"
@@ -407,7 +459,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </td>
               <td>
                 <input type="number" class="form-control form-control-sm porcentaje-extra"
-                       value="'. $e($pctExtra) .'" min="0" step="any">
+                       value="'. $e($pctExtra) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
               <td class="text-right subtotal-material">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
             </tr>';
@@ -467,13 +519,13 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <!-- Operarios -->
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-mano-obra"
-                      value="'. $e($opNum) .'" min="0" step="any">
+                      value="'. $e($opNum) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
 
               <!-- Días -->
               <td>
                 <input type="number" class="form-control form-control-sm dias-mano-obra"
-                      value="'. $e($diasNum) .'" min="0" step="any">
+                      value="'. $e($diasNum) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
 
               <!-- Jornales (Operarios × Días) -->
@@ -489,7 +541,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
               <td>
                 <input type="number" class="form-control form-control-sm porcentaje-extra"
-                      value="'. $e($pctNum) .'" min="0" step="any">
+                      value="'. $e($pctNum) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
 
               <td class="text-right subtotal-mano">$'. $e(number_format((float)$subNum, 2, '.', '')) .'</td>
@@ -498,14 +550,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
         $claseUtil = $mostrarVistaDetallada ? '' : 'd-none';
         $claseImp  = $mostrarVistaDetallada ? '' : 'd-none';
-        $roUtil    = $mostrarVistaDetallada ? '' : 'readonly input-sololectura';
+        $roUtil    = $mostrarVistaDetallada ? $readonlyUtilClass : 'readonly input-sololectura';
 
         $html[] = '
         <div class="tarea-card">
           <div class="tarea-encabezado">
             <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b></span>
             <label class="incluir-presupuesto-label">
-              <input type="checkbox" class="incluir-en-total" '. $incluido .'>
+              <input type="checkbox" class="incluir-en-total" '. $incluido .' '. $disabledAttr .'>
               <span>Incluído en el presupuesto</span>
             </label>
           </div>
@@ -516,14 +568,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height:100%;">
                 <div class="mb-2">
                   <label class="mb-0"><b>Detalle de la tarea</b></label>
-                  <textarea class="form-control form-control-sm" rows="5">'. $e($descripcion) .'</textarea>
+                  '. renderizar_editor_detalle_tarea_presupuesto((string)$descripcionHtml, $soloLectura) .'
                 </div>
 
                 <div class="mb-2 flex-grow-1">
                   <label class="mb-0"><b>Imágenes</b></label>
 
                   <input type="file" class="presu-fotos d-none" id="presu_fotos_tarea_'. $e($nro) .'"
-                         multiple accept="image/*" data-index="'. $e($nro) .'"/>
+                         multiple accept="image/*" data-index="'. $e($nro) .'" '. $disabledAttr .'/>
 
                   <div class="presu-dropzone border rounded bg-light p-3 text-muted mb-2"
                        data-index="'. $e($nro) .'" style="min-height:100px;">
@@ -539,8 +591,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $html[] = '
               <div class="preview-img-container position-relative d-inline-block m-1" data-nombre-archivo="'. $e($nom) .'">
                 <img src="../'. $e($src) .'" class="img-thumbnail" style="width:100px;height:100px;object-fit:cover;cursor:pointer;">
-                <i class="fa fa-times-circle text-white rounded-circle position-absolute presu-eliminar-imagen"
-                   style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>
+                '. ($soloLectura ? '' : '<i class="fa fa-times-circle text-white rounded-circle position-absolute presu-eliminar-imagen"
+                   style="top:0;right:0;cursor:pointer;font-size:1rem;"></i>') .'
               </div>';
         }
 
@@ -576,7 +628,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                       <td class="text-right">
                         <input type="number" min="0" step="0.01"
                                class="form-control form-control-sm input-otros-materiales"
-                               id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'">
+                               id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'" '. $disabledAttr .'>
                       </td>
                     </tr>
                     <tr class="fila-subtotal">
@@ -619,7 +671,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                       <td class="text-right">
                         <input type="number" min="0" step="0.01"
                               class="form-control form-control-sm input-otros-mano"
-                              id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'">
+                              id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'" '. $disabledAttr .'>
                       </td>
                     </tr>
                     <tr class="fila-subtotal">
@@ -661,7 +713,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   id="btnGuardarTarea_'. $e($nro) .'"
                   class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
                   data-nro="'. $e($nro) .'"
-                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'">
+                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
                   <i class="fas fa-save"></i> Guardar tarea
                 </button>
                 <button
@@ -669,7 +721,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   id="btnTraerTarea_'. $e($nro) .'"
                   class="btn btn-warning btn-traer-tarea btn-tarea"
                   data-nro="'. $e($nro) .'"
-                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'">
+                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
                   <i class="fas fa-download"></i> Traer tarea
                 </button>
             </div>
@@ -692,16 +744,12 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
-            <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2">
+            <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2" '. $disabledAttr .'>
               <i class="fas fa-save"></i> Guardar
             </button>
 
-            <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto">
-              <i class="fas fa-print"></i> Imprimir
-            </button>
-
-            <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail">
-              <i class="fas fa-envelope"></i> Enviar por mail
+            <button type="button" class="btn btn-primary mr-2 btn-emitir-presupuesto" '. $disabledAttr .'>
+              <i class="fas fa-file-pdf"></i> Generar documento
             </button>
           </div>
 
@@ -752,6 +800,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <link rel="stylesheet" href="../dist/css/custom.css">
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
+  <script src="../05-plugins/html2canvas/html2canvas.min.js"></script>
+  <script src="../05-plugins/jspdf/jspdf.umd.min.js"></script>
 </head>
 <body class="hold-transition sidebar-collapse layout-navbar-fixed">
 <div class="wrapper">
@@ -784,6 +834,12 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 <div class="container-fluid">
 
 <form id="currentForm"  class="form" enctype="multipart/form-data">
+<?php if (!empty($bloqueoEdicionComercial['bloqueado'])): ?>
+  <div class="alert alert-warning">
+    <strong>Edicion bloqueada.</strong>
+    <?php echo htmlspecialchars($bloqueoEdicionComercial['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicionComercial['estado'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
+  </div>
+<?php endif; ?>
 <!-- start accordion -->
 <div class="accordion" id="accordionExample">
   <div class="card <?php echo $previsita_card; ?> accordion 1">
@@ -806,7 +862,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           
           <!-- start card body accordion 1-->
           <div class="card-body">
-                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
+                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
                 <!-- /.row start-->
                 <div class="row pb-1">
 
@@ -1393,8 +1449,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex align-items-center">
-          <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title" 
+        <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
+          <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle" 
                   type="button" 
                   data-toggle="collapse" 
                   data-target="#collapsePresupuesto" 
@@ -1402,7 +1458,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          <span class="col-3 card-title text-right">
+          <span class="card-title text-right presupuesto-accordion-intervino">
             <strong>Intervino: </strong>
             <span
               class="intervino-presupuesto-ultimo"
@@ -1422,7 +1478,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           <!-- Aquí se insertará el contenido dinámico generado -->
             <?php 
               if($presupuestoGenerado): 
-                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada);
+                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada, !empty($bloqueoEdicionComercial['bloqueado']));
               endif;                
             ?>
         </div>
@@ -1554,6 +1610,85 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </div>
 
 <style>
+  .tarea-detalle-editor {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tarea-detalle-editor-toolbar {
+    gap: 0.2rem;
+    margin-bottom: 0.35rem !important;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.2rem 0.25rem;
+    background: #eef1f4;
+    border: 1px solid #d7dde4;
+    border-radius: 0.4rem;
+  }
+
+  .tarea-detalle-editor-toolbar .btn {
+    min-width: 1.85rem;
+    padding: 0.12rem 0.35rem;
+    font-size: 0.82rem;
+    line-height: 1.1;
+    border-color: #d7dde4;
+    background: #f8f9fb;
+  }
+
+  .tarea-descripcion-editor {
+    min-height: 8.6rem;
+    height: 8.6rem;
+    max-height: 8.6rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    line-height: 1.4;
+  }
+
+  .tarea-descripcion-editor:empty::before {
+    content: attr(data-placeholder);
+    color: #6c757d;
+  }
+
+  .tarea-descripcion-editor:focus {
+    outline: 0;
+    box-shadow: none;
+  }
+
+  .tarea-descripcion-editor p,
+  .tarea-descripcion-editor div,
+  .tarea-descripcion-editor ul,
+  .tarea-descripcion-editor ol {
+    margin-bottom: 0.45rem;
+  }
+
+  .tarea-descripcion-editor p:last-child,
+  .tarea-descripcion-editor div:last-child,
+  .tarea-descripcion-editor ul:last-child,
+  .tarea-descripcion-editor ol:last-child {
+    margin-bottom: 0;
+  }
+
+  .tarea-descripcion-editor ul,
+  .tarea-descripcion-editor ol {
+    padding-left: 1.25rem;
+  }
+
+  .presupuesto-accordion-header {
+    gap: 1rem;
+  }
+
+  .presupuesto-accordion-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .presupuesto-accordion-intervino {
+    flex: 0 0 auto;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
   .popover-wide {
     max-width: min(400px, calc(100vw - 2rem)) !important;
     width: min(400px, calc(100vw - 2rem)) !important;
@@ -1593,6 +1728,17 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
   .popover-wide .popover-body::-webkit-scrollbar-thumb:hover {
     background: #6c757d;
+  }
+
+  @media (max-width: 991.98px) {
+    .presupuesto-accordion-header {
+      flex-wrap: wrap;
+    }
+
+    .presupuesto-accordion-intervino {
+      width: 100%;
+      text-align: left !important;
+    }
   }
 </style>
 
@@ -2310,6 +2456,22 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
   ); ?>;
 
   // Copia segura para usar en tu código
+  window.SEGUIMIENTO_BLOQUEO_COMERCIAL = <?= json_encode([
+    'bloqueado' => !empty($bloqueoEdicionComercial['bloqueado']),
+    'estado' => (string)($bloqueoEdicionComercial['estado'] ?? ''),
+    'estado_label' => (string)($bloqueoEdicionComercial['estado_label'] ?? ''),
+    'mensaje' => (string)($bloqueoEdicionComercial['mensaje'] ?? ''),
+  ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
+  window.obtenerBloqueoEdicionComercialSeguimiento = function () {
+    return window.SEGUIMIENTO_BLOQUEO_COMERCIAL || {};
+  };
+
+  window.mensajeBloqueoEdicionComercialSeguimiento = function () {
+    const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+    return String(bloqueo && bloqueo.mensaje ? bloqueo.mensaje : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.');
+  };
+
   const tareas = Array.isArray(window.tareasVisitadas) ? window.tareasVisitadas : [];
 </script>
 
@@ -2344,8 +2506,8 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
   <div class="accordion" id="accordionPresupuesto">
     <div class="card card-success accordion_3">
       <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex align-items-center">
-          <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title" 
+        <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
+          <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle" 
                   type="button" 
                   data-toggle="collapse" 
                   data-target="#collapsePresupuesto" 
@@ -2353,7 +2515,7 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
                   aria-controls="collapsePresupuesto">
             Presupuesto
           </button>
-          <span class="col-3 card-title text-right">
+          <span class="card-title text-right presupuesto-accordion-intervino">
             <strong>Intervino: </strong>
             <span
               class="intervino-presupuesto-ultimo"

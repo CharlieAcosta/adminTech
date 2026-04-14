@@ -2,6 +2,7 @@
 // ../04-modelo/presupuestoGeneradoModel.php
 
 require_once __DIR__ . '/conectDB.php';
+require_once __DIR__ . '/presupuestoComercialLockModel.php';
 
 if (!function_exists('repararTextoMojibakePresupuesto')) {
     function repararTextoMojibakePresupuesto(?string $texto): string
@@ -100,6 +101,64 @@ if (!function_exists('repararTextoMojibakePresupuestoProfundo')) {
     }
 }
 
+if (!function_exists('textoPlanoDetalleTareaPresupuesto')) {
+    function textoPlanoDetalleTareaPresupuesto(?string $html): string
+    {
+        $html = (string)($html ?? '');
+        if ($html === '') {
+            return '';
+        }
+
+        $normalizado = preg_replace('/<br\s*\/?>/i', "\n", $html);
+        $normalizado = preg_replace('/<li\b[^>]*>/i', '- ', (string)$normalizado);
+        $normalizado = preg_replace('/<\/(li|p|div|ul|ol)>/i', "\n", (string)$normalizado);
+
+        $texto = strip_tags((string)$normalizado);
+        $texto = html_entity_decode($texto, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $texto = str_replace("\xc2\xa0", ' ', $texto);
+        $texto = preg_replace('/\r\n?/', "\n", $texto);
+        $texto = preg_replace('/[ \t]+\n/u', "\n", (string)$texto);
+        $texto = preg_replace('/\n{3,}/u', "\n\n", (string)$texto);
+
+        return trim((string)$texto);
+    }
+}
+
+if (!function_exists('sanitizarHtmlDetalleTareaPresupuesto')) {
+    function sanitizarHtmlDetalleTareaPresupuesto(?string $html): string
+    {
+        $html = repararTextoMojibakePresupuestoProfundo((string)($html ?? ''));
+        if ($html === '') {
+            return '';
+        }
+
+        $permitidos = '<b><strong><i><em><u><br><ul><ol><li><p><div>';
+        $html = strip_tags($html, $permitidos);
+        $html = preg_replace_callback(
+            '/<(\/?)([a-z0-9]+)(?:\s+[^>]*)?>/i',
+            static function (array $m): string {
+                $tag = strtolower((string)($m[2] ?? ''));
+                $permitidos = ['b', 'strong', 'i', 'em', 'u', 'br', 'ul', 'ol', 'li', 'p', 'div'];
+                if (!in_array($tag, $permitidos, true)) {
+                    return '';
+                }
+
+                return '<' . ($m[1] ?? '') . $tag . '>';
+            },
+            $html
+        );
+
+        $html = preg_replace('/(?:<br>\s*){3,}/i', '<br><br>', (string)$html);
+        $html = trim((string)$html);
+
+        if (textoPlanoDetalleTareaPresupuesto($html) === '') {
+            return '';
+        }
+
+        return $html;
+    }
+}
+
 /**
  * Guarda un presupuesto + materiales + MO + fotos.
  *
@@ -127,9 +186,18 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         $estado         = 'BORRADOR'; // unificamos a mayúsculas
         $moneda         = 'ARS';
         $version        = 1;
+        $tieneEstadosComerciales = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion')
+            && columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
 
         if (!$id_previsita) {
             throw new RuntimeException('id_previsita es requerido');
+        }
+
+        $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita($id_previsita, $id_presupuesto);
+        if (!empty($bloqueoEdicion['bloqueado'])) {
+            throw new RuntimeException(
+                $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? '')
+            );
         }
 
         // === INSERT o UPDATE cabecera (idempotente por (id_previsita, id_visita)) ===
@@ -140,7 +208,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 FROM presupuestos
                 WHERE id_previsita = ?
                 AND ( ? IS NULL OR id_visita = ? )
-                AND UPPER(estado) IN ('BORRADOR','GENERADO','IMPRESO','ENVIADO','APROBADO','RECHAZADO')
+                AND UPPER(estado) IN ('BORRADOR','GENERADO','EMITIDO','IMPRESO','ENVIADO','RECIBIDO','RESOLICITADO','APROBADO','RECHAZADO','CANCELADO')
                 ORDER BY updated_at DESC, id_presupuesto DESC
                 LIMIT 1
             ");
@@ -161,10 +229,26 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
             if ($id_presupuesto === null) {
                 // No había uno previo: insertamos cabecera nueva
-                $stmt = mysqli_prepare($db, "
-                    INSERT INTO presupuestos (id_previsita, id_visita, estado, moneda, version, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, 1, NOW(), NOW())
-                ");
+                $stmt = mysqli_prepare($db, $tieneEstadosComerciales
+                    ? "
+                        INSERT INTO presupuestos (
+                            id_previsita,
+                            id_visita,
+                            estado,
+                            estado_comercial_simulacion,
+                            estado_comercial_smtp,
+                            moneda,
+                            version,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, NULL, NULL, ?, 1, NOW(), NOW())
+                    "
+                    : "
+                        INSERT INTO presupuestos (id_previsita, id_visita, estado, moneda, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 1, NOW(), NOW())
+                    "
+                );
                 mysqli_stmt_bind_param($stmt, "iiss", $id_previsita, $id_visita, $estado, $moneda);
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al insertar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
@@ -174,11 +258,23 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             } else {
                 // Reutilizamos el existente: actualizamos cabecera (NO borrar hijos / NO borrar carpeta)
                 // y reseteamos el estado a BORRADOR en cada guardado.
-                $stmt = mysqli_prepare($db, "
-                    UPDATE presupuestos
-                    SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
-                    WHERE id_presupuesto = ?
-                ");
+                $stmt = mysqli_prepare($db, $tieneEstadosComerciales
+                    ? "
+                        UPDATE presupuestos
+                        SET id_previsita = ?,
+                            id_visita = ?,
+                            estado = ?,
+                            estado_comercial_simulacion = NULL,
+                            estado_comercial_smtp = NULL,
+                            updated_at = NOW()
+                        WHERE id_presupuesto = ?
+                    "
+                    : "
+                        UPDATE presupuestos
+                        SET id_previsita = ?, id_visita = ?, estado = ?, updated_at = NOW()
+                        WHERE id_presupuesto = ?
+                    "
+                );
                 mysqli_stmt_bind_param($stmt, "iisi", $id_previsita, $id_visita, $estado, $id_presupuesto);
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al actualizar cabecera: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
@@ -196,7 +292,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
         foreach ($tareasPayload as $t) {
             $nro                = isset($t['nro']) ? (int)$t['nro'] : 0;
-            $descripcion        = trim((string)($t['descripcion'] ?? ''));
+            $descripcion        = sanitizarHtmlDetalleTareaPresupuesto((string)($t['descripcion'] ?? ''));
             $incluir_en_total   = !empty($t['incluir_en_total']) ? 1 : 0;
             $util_mat_pct       = isset($t['utilidad_materiales']) ? (float)$t['utilidad_materiales'] : null;
             $util_mo_pct        = isset($t['utilidad_mano_obra']) ? (float)$t['utilidad_mano_obra'] : null;
@@ -569,11 +665,44 @@ if (!function_exists('bind_params_dynamic')) {
 // === Helper: check si existe tabla (para fotos opcionales) ===
 if (!function_exists('tabla_existe')) {
     function tabla_existe(mysqli $db, string $table): bool {
-        $sql = "SHOW TABLES LIKE ?";
+        $sql = "
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+            LIMIT 1
+        ";
         $st  = mysqli_prepare($db, $sql);
         if (!$st) return false;
         mysqli_stmt_bind_param($st, "s", $table);
-        mysqli_stmt_execute($st);
+        if (!mysqli_stmt_execute($st)) {
+            mysqli_stmt_close($st);
+            return false;
+        }
+        $rs = mysqli_stmt_get_result($st);
+        $ok = ($rs && mysqli_fetch_row($rs));
+        mysqli_stmt_close($st);
+        return (bool)$ok;
+    }
+}
+
+if (!function_exists('columna_existe')) {
+    function columna_existe(mysqli $db, string $table, string $column): bool {
+        $sql = "
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+              AND column_name = ?
+            LIMIT 1
+        ";
+        $st = mysqli_prepare($db, $sql);
+        if (!$st) return false;
+        mysqli_stmt_bind_param($st, "ss", $table, $column);
+        if (!mysqli_stmt_execute($st)) {
+            mysqli_stmt_close($st);
+            return false;
+        }
         $rs = mysqli_stmt_get_result($st);
         $ok = ($rs && mysqli_fetch_row($rs));
         mysqli_stmt_close($st);

@@ -8,9 +8,418 @@
   // buffers globales
   window.fotosNuevasPorTarea     = window.fotosNuevasPorTarea     || {};
   window.fotosEliminadasPorTarea = window.fotosEliminadasPorTarea || {};
+  const DETALLE_TAREA_ALLOWED_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'br', 'ul', 'ol', 'li', 'p', 'div']);
+  const DETALLE_TAREA_BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol']);
+  const DETALLE_TAREA_INLINE_TAG_MAP = {
+    b: 'strong',
+    strong: 'strong',
+    i: 'em',
+    em: 'em',
+    u: 'u'
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function parseDetalleTareaInlineStyles(styleText) {
+    const styles = {};
+    String(styleText || '')
+      .split(';')
+      .forEach((declaration) => {
+        const [rawKey, rawValue] = declaration.split(':');
+        const key = String(rawKey || '').trim().toLowerCase();
+        const value = String(rawValue || '').trim().toLowerCase();
+        if (key && value) {
+          styles[key] = value;
+        }
+      });
+    return styles;
+  }
+
+  function detectDetalleTareaInlineWrappers(node, normalizedTag) {
+    const wrappers = [];
+    const tag = String(node?.tagName || '').toLowerCase();
+
+    if (DETALLE_TAREA_INLINE_TAG_MAP[tag]) {
+      wrappers.push(DETALLE_TAREA_INLINE_TAG_MAP[tag]);
+    }
+
+    const styles = parseDetalleTareaInlineStyles(node?.getAttribute?.('style') || '');
+    const fontWeight = styles['font-weight'] || '';
+    const fontStyle = styles['font-style'] || '';
+    const textDecoration = `${styles['text-decoration'] || ''} ${styles['text-decoration-line'] || ''}`.trim();
+
+    if (fontWeight === 'bold' || fontWeight === 'bolder') {
+      wrappers.push('strong');
+    } else if (/^\d+$/.test(fontWeight) && Number(fontWeight) >= 600) {
+      wrappers.push('strong');
+    }
+
+    if (fontStyle.includes('italic') || fontStyle.includes('oblique')) {
+      wrappers.push('em');
+    }
+
+    if (textDecoration.includes('underline')) {
+      wrappers.push('u');
+    }
+
+    return Array.from(new Set(wrappers.filter((wrapper) => wrapper && wrapper !== normalizedTag)));
+  }
+
+  function wrapDetalleTareaNode(doc, node, wrappers) {
+    return wrappers.reduceRight((acc, wrapperTag) => {
+      const wrapper = doc.createElement(wrapperTag);
+      wrapper.appendChild(acc);
+      return wrapper;
+    }, node);
+  }
+
+  function normalizarTextoPlanoDetalleTarea(rawText) {
+    const normalized = String(rawText ?? '').replace(/\r\n?/g, '\n');
+    if (!normalized.trim()) return '';
+
+    return normalized
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .filter(Boolean)
+      .map((block) => `<div>${escapeHtml(block).replace(/\n/g, '<br>')}</div>`)
+      .join('');
+  }
+
+  function editorContainsNode(editor, node) {
+    if (!editor || !node) return false;
+
+    const candidate = node.nodeType === window.Node.TEXT_NODE ? node.parentNode : node;
+    return candidate === editor || !!(candidate && editor.contains(candidate));
+  }
+
+  function guardarSeleccionDetalleTarea(target) {
+    const $wrapper = resolveDetalleEditorWrapper(target);
+    if (!$wrapper.length) return;
+
+    const editor = $wrapper.find('.tarea-descripcion-editor').get(0);
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (!editor || !selection || !selection.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    if (!editorContainsNode(editor, range.commonAncestorContainer)) return;
+
+    $wrapper.data('richEditorRange', range.cloneRange());
+  }
+
+  function restaurarSeleccionDetalleTarea(target) {
+    const $wrapper = resolveDetalleEditorWrapper(target);
+    if (!$wrapper.length) return false;
+
+    const editor = $wrapper.find('.tarea-descripcion-editor').get(0);
+    const savedRange = $wrapper.data('richEditorRange');
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (!editor || !selection) return false;
+
+    editor.focus({ preventScroll: true });
+
+    if (!(savedRange instanceof window.Range)) {
+      return false;
+    }
+
+    try {
+      selection.removeAllRanges();
+      selection.addRange(savedRange);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function insertarHtmlEnDetalleTarea(target, html) {
+    const $wrapper = resolveDetalleEditorWrapper(target);
+    if (!$wrapper.length) return;
+
+    const editor = $wrapper.find('.tarea-descripcion-editor').get(0);
+    if (!editor) return;
+
+    restaurarSeleccionDetalleTarea($wrapper);
+
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (!selection) return;
+
+    let range = selection.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range || !editorContainsNode(editor, range.commonAncestorContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    range.deleteContents();
+    const fragment = range.createContextualFragment(String(html || ''));
+    const lastNode = fragment.lastChild;
+    range.insertNode(fragment);
+
+    if (lastNode) {
+      const nextRange = document.createRange();
+      nextRange.setStartAfter(lastNode);
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+    }
+
+    guardarSeleccionDetalleTarea($wrapper);
+  }
+
+  function sanitizeDetalleTareaHtml(rawHtml) {
+    const source = String(rawHtml ?? '').trim();
+    if (!source) return '';
+
+    const parser = new window.DOMParser();
+    const doc = parser.parseFromString(`<div>${source}</div>`, 'text/html');
+    const root = doc.body.firstElementChild || doc.body;
+
+    const sanitizeNode = (node) => {
+      if (node.nodeType === window.Node.TEXT_NODE) {
+        return doc.createTextNode(node.textContent || '');
+      }
+
+      if (node.nodeType !== window.Node.ELEMENT_NODE) {
+        return null;
+      }
+
+      const tag = (node.tagName || '').toLowerCase();
+      const childNodes = Array.from(node.childNodes || []);
+
+      const normalizedTag = DETALLE_TAREA_ALLOWED_TAGS.has(tag)
+        ? (DETALLE_TAREA_INLINE_TAG_MAP[tag] || tag)
+        : null;
+      const inlineWrappers = detectDetalleTareaInlineWrappers(node, normalizedTag);
+
+      if (!normalizedTag) {
+        const fragment = doc.createDocumentFragment();
+        childNodes.forEach((child) => {
+          const sanitizedChild = sanitizeNode(child);
+          if (sanitizedChild) fragment.appendChild(sanitizedChild);
+        });
+        if (!fragment.childNodes.length) {
+          return null;
+        }
+
+        if (!inlineWrappers.length) {
+          return fragment;
+        }
+
+        const wrappedFragment = doc.createDocumentFragment();
+        Array.from(fragment.childNodes).forEach((child) => {
+          wrappedFragment.appendChild(wrapDetalleTareaNode(doc, child, inlineWrappers));
+        });
+        return wrappedFragment;
+      }
+
+      const element = doc.createElement(normalizedTag);
+      childNodes.forEach((child) => {
+        const sanitizedChild = sanitizeNode(child);
+        if (sanitizedChild) element.appendChild(sanitizedChild);
+      });
+
+      if (inlineWrappers.length) {
+        const originalChildren = Array.from(element.childNodes);
+        element.textContent = '';
+        originalChildren.forEach((child) => {
+          element.appendChild(wrapDetalleTareaNode(doc, child, inlineWrappers));
+        });
+      }
+
+      return element;
+    };
+
+    const output = doc.createElement('div');
+    Array.from(root.childNodes || []).forEach((child) => {
+      const sanitizedChild = sanitizeNode(child);
+      if (sanitizedChild) output.appendChild(sanitizedChild);
+    });
+
+    const html = output.innerHTML
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/<div><br><\/div>/gi, '<div></div>')
+      .trim();
+
+    return detalleTareaHtmlToPlainText(html) ? html : '';
+  }
+
+  function detalleTareaHtmlToPlainText(rawHtml) {
+    const safeHtml = String(rawHtml ?? '').trim();
+    if (!safeHtml) return '';
+
+    const container = document.createElement('div');
+    container.innerHTML = safeHtml;
+
+    const walk = (node) => {
+      let text = '';
+
+      Array.from(node.childNodes || []).forEach((child) => {
+        if (child.nodeType === window.Node.TEXT_NODE) {
+          text += child.textContent || '';
+          return;
+        }
+
+        if (child.nodeType !== window.Node.ELEMENT_NODE) {
+          return;
+        }
+
+        const tag = (child.tagName || '').toLowerCase();
+
+        if (tag === 'br') {
+          text += '\n';
+          return;
+        }
+
+        if (tag === 'li') {
+          const liText = walk(child).trim();
+          if (liText) {
+            text += `${text && !text.endsWith('\n') ? '\n' : ''}- ${liText}\n`;
+          }
+          return;
+        }
+
+        const childText = walk(child);
+        if (DETALLE_TAREA_BLOCK_TAGS.has(tag)) {
+          if (childText.trim()) {
+            text += childText.trimEnd();
+            if (!text.endsWith('\n')) text += '\n';
+            text += '\n';
+          }
+          return;
+        }
+
+        text += childText;
+      });
+
+      return text;
+    };
+
+    return walk(container)
+      .replace(/\u00a0/g, ' ')
+      .replace(/\r/g, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  function resolveDetalleEditorWrapper(target) {
+    const $target = $(target);
+    if ($target.hasClass('tarea-detalle-editor')) {
+      return $target;
+    }
+    return $target.find('.tarea-detalle-editor').first();
+  }
+
+  function obtenerDetalleTareaHtml($card) {
+    const $textarea = $card.find('textarea.tarea-descripcion').first();
+    return sanitizeDetalleTareaHtml($textarea.val() || '');
+  }
+
+  function obtenerDetalleTareaTexto($card) {
+    return detalleTareaHtmlToPlainText(obtenerDetalleTareaHtml($card));
+  }
+
+  function setDetalleTareaEditorValue(target, htmlValue, opts = {}) {
+    const options = {
+      triggerInput: false,
+      ...opts
+    };
+
+    const $wrapper = resolveDetalleEditorWrapper(target);
+    if (!$wrapper.length) return;
+
+    const safeHtml = sanitizeDetalleTareaHtml(htmlValue);
+    const $editor = $wrapper.find('.tarea-descripcion-editor').first();
+    const $textarea = $wrapper.find('textarea.tarea-descripcion').first();
+
+    if ($editor.length && $editor.html() !== safeHtml) {
+      $editor.html(safeHtml);
+    }
+
+    if ($textarea.length && $textarea.val() !== safeHtml) {
+      $textarea.val(safeHtml);
+      if (options.triggerInput) {
+        $textarea.trigger('input');
+      }
+    }
+  }
+
+  function renderDetalleTareaEditorHtml(htmlValue = '') {
+    const safeHtml = sanitizeDetalleTareaHtml(htmlValue);
+    const safeTextareaValue = escapeHtml(safeHtml);
+
+    return `
+      <div class="tarea-detalle-editor">
+        <div class="btn-toolbar btn-group-sm tarea-detalle-editor-toolbar mb-2" role="toolbar" aria-label="Formato del detalle de la tarea">
+          <div class="btn-group mr-2" role="group" aria-label="Formato basico">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="bold" title="Negrita"><i class="fas fa-bold"></i></button>
+            <button type="button" class="btn btn-light rich-editor-action" data-command="italic" title="Cursiva"><i class="fas fa-italic"></i></button>
+            <button type="button" class="btn btn-light rich-editor-action" data-command="underline" title="Subrayado"><i class="fas fa-underline"></i></button>
+          </div>
+          <div class="btn-group mr-2" role="group" aria-label="Listas">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="insertUnorderedList" title="Lista"><i class="fas fa-list-ul"></i></button>
+          </div>
+          <div class="btn-group" role="group" aria-label="Limpiar formato">
+            <button type="button" class="btn btn-light rich-editor-action" data-command="removeFormat" title="Limpiar formato"><i class="fas fa-eraser"></i></button>
+          </div>
+        </div>
+        <div class="form-control form-control-sm tarea-descripcion-editor" contenteditable="true" data-placeholder="Describa la tarea..." aria-label="Editor de detalle de la tarea">${safeHtml}</div>
+        <textarea class="form-control form-control-sm tarea-descripcion d-none" rows="5">${safeTextareaValue}</textarea>
+      </div>
+    `;
+  }
+
+  function syncDetalleTareaEditor(target, opts = {}) {
+    const options = {
+      triggerInput: true,
+      ...opts
+    };
+
+    const $wrapper = resolveDetalleEditorWrapper(target);
+    if (!$wrapper.length) return;
+
+    const $editor = $wrapper.find('.tarea-descripcion-editor').first();
+    if (!$editor.length) return;
+
+    setDetalleTareaEditorValue($wrapper, $editor.html() || '', options);
+    guardarSeleccionDetalleTarea($wrapper);
+  }
+
+  function initDetalleTareaRichEditors(root, opts = {}) {
+    const options = {
+      triggerInput: false,
+      ...opts
+    };
+
+    $(root || document).find('.tarea-detalle-editor').each(function () {
+      setDetalleTareaEditorValue(this, $(this).find('.tarea-descripcion').first().val() || '', options);
+    });
+  }
+
+  window.detalleTareaHtmlToPlainText = detalleTareaHtmlToPlainText;
+  window.renderDetalleTareaEditorHtml = renderDetalleTareaEditorHtml;
+  window.initDetalleTareaRichEditors = initDetalleTareaRichEditors;
+  window.setDetalleTareaEditorValue = function (target, htmlValue, opts) {
+    setDetalleTareaEditorValue(target, htmlValue, opts);
+  };
+  window.normalizarTextoPlanoDetalleTarea = normalizarTextoPlanoDetalleTarea;
+  window.obtenerDetalleTareaHtmlDesdeCard = function (cardOrJq) {
+    return obtenerDetalleTareaHtml($(cardOrJq));
+  };
+  window.obtenerDetalleTareaTextoDesdeCard = function (cardOrJq) {
+    return obtenerDetalleTareaTexto($(cardOrJq));
+  };
 
   function resumirTituloTareaPresupuesto(texto) {
-    const limpio = String(texto ?? '')
+    const limpio = detalleTareaHtmlToPlainText(texto)
       .replace(/\r/g, '')
       .trim();
 
@@ -55,8 +464,7 @@
     const matchNumero = tituloActual.match(/^Tarea\s+(\d+)/i);
     const numero = matchNumero ? matchNumero[1] : '';
 
-    let descripcion = $card.find('textarea').first().val();
-    descripcion = String(descripcion ?? '').trim();
+    const descripcion = obtenerDetalleTareaTexto($card);
 
     const resumen = resumirTituloTareaPresupuesto(descripcion) || 'Detalle de la tarea';
     $titulo.text(numero ? `Tarea ${numero}: ${resumen}` : resumen);
@@ -67,6 +475,38 @@
     syncTituloCardPresupuesto($(cardOrJq));
   };
 
+  function presupuestoEdicionComercialBloqueada() {
+    if (typeof window.obtenerBloqueoEdicionComercialSeguimiento !== 'function') {
+      return false;
+    }
+
+    const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+    return !!(bloqueo && bloqueo.bloqueado);
+  }
+
+  function mostrarBloqueoEdicionComercialPresupuesto() {
+    const mensaje = typeof window.mensajeBloqueoEdicionComercialSeguimiento === 'function'
+      ? window.mensajeBloqueoEdicionComercialSeguimiento()
+      : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.';
+
+    if (window.Swal && typeof Swal.fire === 'function') {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Edicion bloqueada',
+        text: mensaje,
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    if (typeof mostrarAdvertencia === 'function') {
+      mostrarAdvertencia(mensaje, 4);
+      return;
+    }
+
+    window.alert(mensaje);
+  }
+
   // limpieza por namespace
   $(document)
     .off('click.presu',  '.presu-dropzone')
@@ -76,8 +516,71 @@
     .on('click.presu', '#btn-guardar-presupuesto', function (e) {
       e.preventDefault();
       e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
       window.presupuestoGuardar(); // usa el data-id_presupuesto si existe
     });
+
+  $(document)
+    .off('mousedown.presu-editor', '.rich-editor-action')
+    .on('mousedown.presu-editor', '.rich-editor-action', function (e) {
+      guardarSeleccionDetalleTarea($(this).closest('.tarea-detalle-editor'));
+      e.preventDefault();
+    })
+    .off('click.presu-editor', '.rich-editor-action')
+    .on('click.presu-editor', '.rich-editor-action', function (e) {
+      e.preventDefault();
+      const $btn = $(this);
+      const $wrapper = $btn.closest('.tarea-detalle-editor');
+      const editor = $wrapper.find('.tarea-descripcion-editor').get(0);
+      if (!editor) return;
+
+      restaurarSeleccionDetalleTarea($wrapper);
+      editor.focus({ preventScroll: true });
+      const command = String($btn.data('command') || '');
+      if (command === 'removeFormat') {
+        document.execCommand('removeFormat', false, null);
+      } else if (command) {
+        document.execCommand(command, false, null);
+      }
+
+      guardarSeleccionDetalleTarea($wrapper);
+      syncDetalleTareaEditor($wrapper, { triggerInput: true });
+    })
+    .off('mouseup.presu-editor keyup.presu-editor focusin.presu-editor input.presu-editor blur.presu-editor paste.presu-editor', '.tarea-descripcion-editor')
+    .on('mouseup.presu-editor keyup.presu-editor focusin.presu-editor', '.tarea-descripcion-editor', function () {
+      guardarSeleccionDetalleTarea($(this).closest('.tarea-detalle-editor'));
+    })
+    .on('input.presu-editor blur.presu-editor', '.tarea-descripcion-editor', function () {
+      guardarSeleccionDetalleTarea($(this).closest('.tarea-detalle-editor'));
+      syncDetalleTareaEditor($(this).closest('.tarea-detalle-editor'), { triggerInput: true });
+    })
+    .on('paste.presu-editor', '.tarea-descripcion-editor', function (e) {
+      e.preventDefault();
+      const $wrapper = $(this).closest('.tarea-detalle-editor');
+      const clipboard = e.originalEvent && e.originalEvent.clipboardData ? e.originalEvent.clipboardData : null;
+      const htmlClipboard = clipboard ? clipboard.getData('text/html') : '';
+      const textClipboard = clipboard ? clipboard.getData('text/plain') : '';
+      const htmlParaInsertar = htmlClipboard
+        ? sanitizeDetalleTareaHtml(htmlClipboard)
+        : normalizarTextoPlanoDetalleTarea(textClipboard);
+
+      if (!htmlParaInsertar && textClipboard) {
+        insertarHtmlEnDetalleTarea($wrapper, escapeHtml(textClipboard));
+      } else if (htmlParaInsertar) {
+        insertarHtmlEnDetalleTarea($wrapper, htmlParaInsertar);
+      }
+
+      syncDetalleTareaEditor($wrapper, { triggerInput: true });
+    });
+
+  $(function () {
+    initDetalleTareaRichEditors(document, { triggerInput: false });
+  });
 
     // === Recalculo en vivo para presupuesto cargado del backend ===
     (function bindRecalcForBackend() {
@@ -257,7 +760,7 @@
 // === Helper: serializa UNA sola tarea-card (mismos selectores que presupuestoGuardar) ===
 window._presuSerializarCard = function ($card, nro) {
   // Descripción (prioriza textarea; si no, el título)
-  const descTextarea = $card.find('textarea').first().val();
+  const descTextarea = obtenerDetalleTareaHtml($card);
   const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
   const descripcion  = (descTextarea != null ? String(descTextarea) : String(descTitulo || '')).trim();
 
@@ -338,13 +841,19 @@ $(document)
   .off('click.presu-guardar-tarea', '#contenedorPresupuestoGenerado .btn-guardar-tarea')
   .on('click.presu-guardar-tarea', '#contenedorPresupuestoGenerado .btn-guardar-tarea', function (e) {
     e.preventDefault(); e.stopPropagation();
+
+    if (presupuestoEdicionComercialBloqueada()) {
+      mostrarBloqueoEdicionComercialPresupuesto();
+      return;
+    }
+
     const $btn  = $(this);
     const nro   = $btn.data('nro');
     const $card = $btn.closest('.tarea-card');
 
     const lanzarPrompt = (onOk) => {
       // nombre por defecto: textarea > título
-      const descTextarea = $card.find('textarea').first().val();
+      const descTextarea = obtenerDetalleTareaTexto($card);
       const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
       const defaultName  = (descTextarea != null ? String(descTextarea) : String(descTitulo || '')).trim();
     
@@ -423,6 +932,7 @@ $(document)
     const accion = String(opts.accion || '').trim();
     const idPresupuesto = Number(opts.id_presupuesto || $('#contenedorPresupuestoGenerado').data('id_presupuesto')) || 0;
     const idPrevisita = Number(opts.id_previsita || $('#id_previsita').val()) || 0;
+    const idUsuario = Number(opts.id_usuario || window.ACTIVE_USER_ID || 0) || 0;
 
     if (!accion || !idPresupuesto || !idPrevisita) {
       return { ok: false, msg: 'Faltan datos para registrar la intervención del presupuesto.' };
@@ -437,7 +947,8 @@ $(document)
         funcion: 'registrarIntervencionPresupuesto',
         id_presupuesto: idPresupuesto,
         id_previsita: idPrevisita,
-        accion_intervencion: accion
+        accion_intervencion: accion,
+        id_usuario: idUsuario
       }
     });
 
@@ -458,6 +969,11 @@ $(document)
   // Reemplazo global: ignora la versión vieja de presupuestoGuardar.js
   window.presupuestoGuardar = async function (idPresuOpcional) {
     try {
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
       const $btn = $('#btn-guardar-presupuesto');
       $btn.prop('disabled', true);
   
@@ -474,7 +990,7 @@ $(document)
         const nro = index + 1;
   
         // descripción igual que tu versión “buena” (textarea o título)
-        const descTextarea = $card.find('textarea').first().val();
+        const descTextarea = obtenerDetalleTareaHtml($card);
         const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
         const descripcion  = (descTextarea != null ? String(descTextarea) : String(descTitulo || '')).trim();
   
@@ -633,7 +1149,9 @@ $(document)
       if (typeof mostrarError === 'function') mostrarError('Error al guardar el presupuesto.');
       else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: 'Error al guardar el presupuesto.' });
     } finally {
-      $('#btn-guardar-presupuesto').prop('disabled', false);
+      if (!presupuestoEdicionComercialBloqueada()) {
+        $('#btn-guardar-presupuesto').prop('disabled', false);
+      }
     }
   };
   
@@ -954,9 +1472,13 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
     nuevaDescripcion = tareaPlantilla.nombre_original.trim();
   }
 
-  let $txt = $card.find('textarea.tarea-descripcion').first();
-  if (!$txt.length) $txt = $card.find('textarea').first();
-  if ($txt.length) $txt.val(nuevaDescripcion).trigger('input');
+  if (typeof window.setDetalleTareaEditorValue === 'function') {
+    window.setDetalleTareaEditorValue($card, nuevaDescripcion, { triggerInput: true });
+  } else {
+    let $txt = $card.find('textarea.tarea-descripcion').first();
+    if (!$txt.length) $txt = $card.find('textarea').first();
+    if ($txt.length) $txt.val(nuevaDescripcion).trigger('input');
+  }
 
   // 1) Incluir en total
   $card.find('.incluir-en-total').prop('checked', !!tareaPlantilla.incluir_en_total);

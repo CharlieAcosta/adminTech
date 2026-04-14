@@ -1,21 +1,62 @@
-﻿<?php
-// Evita rutas relativas frágiles tipo "03-controller../..."
+<?php
+// Evita rutas relativas fr�giles tipo "03-controller../..."
 $BASE = __DIR__;
 
 // ../03-controller/presupuestos_guardar.php
 header('Content-Type: application/json; charset=utf-8');
 
 require_once $BASE . '/../04-modelo/presupuestoGeneradoModel.php';
+require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosModel.php';
+require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosEnviosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
+require_once $BASE . '/../04-modelo/presupuestoComercialLockModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
+if (!function_exists('obtenerIdUsuarioSolicitudPresupuesto')) {
+    function obtenerIdUsuarioSolicitudPresupuesto(): int
+    {
+        $idSesion = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
+        if ($idSesion > 0) {
+            return $idSesion;
+        }
+
+        $idPost = isset($_POST['id_usuario']) ? (int)$_POST['id_usuario'] : 0;
+        if ($idPost > 0) {
+            return $idPost;
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('obtenerPerfilUsuarioSolicitudPresupuesto')) {
+    function obtenerPerfilUsuarioSolicitudPresupuesto(): string
+    {
+        return trim((string)($_SESSION['usuario']['perfil'] ?? ''));
+    }
+}
+
+if (!function_exists('enriquecerRespuestaHistorialComercialPresupuestoParaUsuario')) {
+    function enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(array $respuesta, ?int $idUsuario = null, ?string $perfil = null): array
+    {
+        $idUsuario = $idUsuario ?? obtenerIdUsuarioSolicitudPresupuesto();
+        $perfil = $perfil !== null ? $perfil : obtenerPerfilUsuarioSolicitudPresupuesto();
+
+        return agregarAccionReaperturaDisponibleHistorialComercialPresupuesto(
+            $respuesta,
+            (int)$idUsuario,
+            $perfil
+        );
+    }
+}
+
 try {
-    // ---- Validaciones básicas
+    // ---- Validaciones b�sicas
     if (($_POST['via'] ?? '') !== 'ajax') {
-        throw new RuntimeException('Acceso inválido');
+        throw new RuntimeException('Acceso inv�lido');
     }
 
     $funcion = $_POST['funcion'] ?? '';
@@ -46,7 +87,7 @@ try {
             }
             $data = json_decode($raw, true);
             if (!is_array($data)) {
-                echo json_encode(['ok' => false, 'msg' => 'JSON inválido'], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['ok' => false, 'msg' => 'JSON inv�lido'], JSON_UNESCAPED_UNICODE);
                 exit;
             }
     
@@ -56,7 +97,7 @@ try {
                 echo json_encode($res, JSON_UNESCAPED_UNICODE);
             } catch (Throwable $e) {
                 http_response_code(500);
-                echo json_encode(['ok' => false, 'msg' => 'Excepción', 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                echo json_encode(['ok' => false, 'msg' => 'Excepci�n', 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
             }
             exit;
 
@@ -64,7 +105,7 @@ try {
                 require_once $BASE . '/../04-modelo/tareasArchivadasObtenerModel.php';
                 $id = isset($_POST['id_arch_tarea']) ? (int)$_POST['id_arch_tarea'] : 0;
                 if ($id <= 0) {
-                    echo json_encode(['ok' => false, 'msg' => 'id_arch_tarea inválido'], JSON_UNESCAPED_UNICODE);
+                    echo json_encode(['ok' => false, 'msg' => 'id_arch_tarea inv�lido'], JSON_UNESCAPED_UNICODE);
                     exit;
                 }
                 try {
@@ -77,22 +118,22 @@ try {
                 exit;
                        
             case 'guardarPresupuesto':
-                // >>>> de aquí para abajo sigue tu flujo existente de guardar presupuesto <<<<
+                // >>>> de aqu� para abajo sigue tu flujo existente de guardar presupuesto <<<<
                 break;
         
             case 'registrarIntervencionPresupuesto':
                 $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
                 $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
                 $accionIntervencion = isset($_POST['accion_intervencion']) ? (string)$_POST['accion_intervencion'] : '';
-                $idUsuario = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
 
                 if ($idUsuario <= 0) {
-                    echo json_encode(['ok' => false, 'msg' => 'No hay sesión de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesi�n de usuario activa.'], JSON_UNESCAPED_UNICODE);
                     exit;
                 }
 
                 if ($idUsuario <= 0) {
-                    echo json_encode(['ok' => false, 'msg' => 'No hay sesión de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesi�n de usuario activa.'], JSON_UNESCAPED_UNICODE);
                     exit;
                 }
 
@@ -100,6 +141,238 @@ try {
                     registrarIntervencionPresupuesto($idPresupuesto, $idPrevisita, $idUsuario, $accionIntervencion),
                     JSON_UNESCAPED_UNICODE
                 );
+                exit;
+
+            case 'emitirDocumentoPresupuesto':
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $nombreArchivo = isset($_POST['nombre_archivo']) ? trim((string)$_POST['nombre_archivo']) : '';
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+                $archivoPdf = $_FILES['documento_pdf'] ?? null;
+
+                $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita(
+                    $idPrevisita,
+                    $idPresupuesto > 0 ? $idPresupuesto : null
+                );
+                if (!empty($bloqueoEdicion['bloqueado'])) {
+                    echo json_encode([
+                        'ok' => false,
+                        'msg' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesi�n de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                if ($idPresupuesto <= 0 || $idPrevisita <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'Faltan datos para emitir el documento.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                if (!is_array($archivoPdf)) {
+                    echo json_encode(['ok' => false, 'msg' => 'No se recibi� el archivo PDF emitido.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $resultadoEmision = emitirDocumentoPresupuesto(
+                    $idPresupuesto,
+                    $idPrevisita,
+                    $idUsuario,
+                    $archivoPdf,
+                    $nombreArchivo
+                );
+
+                if (!empty($resultadoEmision['ok'])) {
+                    $registroIntervencion = registrarIntervencionPresupuesto(
+                        $idPresupuesto,
+                        $idPrevisita,
+                        $idUsuario,
+                        'emitir'
+                    );
+
+                    if (!empty($registroIntervencion['ok']) && isset($registroIntervencion['intervino'])) {
+                        $resultadoEmision['intervino'] = $registroIntervencion['intervino'];
+                    }
+
+                    $rutaArchivo = ltrim((string)($resultadoEmision['ruta_archivo'] ?? ''), '/');
+                    $resultadoEmision['url_publica'] = $rutaArchivo !== ''
+                        ? ('../' . $rutaArchivo)
+                        : '';
+                }
+
+                echo json_encode($resultadoEmision, JSON_UNESCAPED_UNICODE);
+                exit;
+
+            case 'listarDocumentosEmitidosPresupuesto':
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+
+                if ($idPrevisita <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'Pre-visita inv�lida.', 'items' => []], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $documentos = listarDocumentosEmitidosPresupuesto(
+                    $idPrevisita,
+                    $idPresupuesto > 0 ? $idPresupuesto : null
+                );
+
+                foreach ($documentos as &$documento) {
+                    $rutaArchivo = ltrim((string)($documento['ruta_archivo'] ?? ''), '/');
+                    $archivoDisponible = !empty($documento['archivo_disponible']);
+                    $documento['url_publica'] = ($archivoDisponible && $rutaArchivo !== '')
+                        ? ('../' . $rutaArchivo)
+                        : '';
+                }
+                unset($documento);
+
+                echo json_encode([
+                    'ok' => true,
+                    'items' => $documentos,
+                    'total' => count($documentos),
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+
+            case 'obtenerContextoEnvioDocumentoEmitidoPresupuesto':
+                $idDocumentoEmitido = isset($_POST['id_documento_emitido']) ? (int)$_POST['id_documento_emitido'] : 0;
+                echo json_encode(
+                    obtenerContextoEnvioDocumentoEmitidoPresupuesto($idDocumentoEmitido),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'enviarDocumentoEmitidoPresupuesto':
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesión de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                echo json_encode(
+                    procesarEnvioDocumentoEmitidoPresupuestoModoActivo($_POST, $idUsuario),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'obtenerHistorialComercialPresupuesto':
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+
+                echo json_encode(
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        obtenerHistorialComercialPresupuesto(
+                            $idPrevisita,
+                            $idPresupuesto > 0 ? $idPresupuesto : null
+                        )
+                    ),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'registrarEstadoComercialPresupuesto':
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+                $accionComercial = isset($_POST['accion_comercial']) ? (string)$_POST['accion_comercial'] : '';
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
+
+                echo json_encode(
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        registrarEstadoComercialPresupuesto(
+                            $idPrevisita,
+                            $idUsuario,
+                            $accionComercial,
+                            $idPresupuesto > 0 ? $idPresupuesto : null,
+                            $comentarios
+                        ),
+                        $idUsuario,
+                        obtenerPerfilUsuarioSolicitudPresupuesto()
+                    ),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'registrarContactoComercialPresupuesto':
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+                $accionContacto = isset($_POST['accion_comercial']) ? (string)$_POST['accion_comercial'] : '';
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
+
+                echo json_encode(
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        registrarContactoComercialPresupuesto(
+                            $idPrevisita,
+                            $idUsuario,
+                            $accionContacto,
+                            $idPresupuesto > 0 ? $idPresupuesto : null,
+                            $comentarios
+                        ),
+                        $idUsuario,
+                        obtenerPerfilUsuarioSolicitudPresupuesto()
+                    ),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'registrarReaperturaComercialPresupuesto':
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
+
+                echo json_encode(
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        registrarReaperturaComercialPresupuesto(
+                            $idPrevisita,
+                            $idUsuario,
+                            $idPresupuesto > 0 ? $idPresupuesto : null,
+                            $comentarios
+                        ),
+                        $idUsuario,
+                        obtenerPerfilUsuarioSolicitudPresupuesto()
+                    ),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'listarIntervencionesPresupuesto':
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+
+                if ($idPrevisita <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'Pre-visita inválida.', 'items' => []], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $items = obtenerIntervencionesPresupuesto(
+                    $idPrevisita,
+                    $idPresupuesto > 0 ? $idPresupuesto : null
+                );
+
+                echo json_encode([
+                    'ok' => true,
+                    'items' => $items,
+                    'total' => count($items),
+                ], JSON_UNESCAPED_UNICODE);
                 exit;
 
             default:
@@ -110,12 +383,12 @@ try {
     // ---- Payload JSON
     $payloadJson = $_POST['payload'] ?? '';
     if ($payloadJson === '') {
-        throw new RuntimeException('Payload vacío');
+        throw new RuntimeException('Payload vac�o');
     }
 
     $payload = json_decode($payloadJson, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
-        throw new RuntimeException('Payload JSON inválido: ' . json_last_error_msg());
+        throw new RuntimeException('Payload JSON inv�lido: ' . json_last_error_msg());
     }
 
     // --------------------------------------------------------------------
@@ -156,7 +429,7 @@ try {
                     ];
                 }
             } else {
-                // Caso single (menos común, pero válido)
+                // Caso single (menos com�n, pero v�lido)
                 if (($fileBag['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
                     $archivosPorTarea[$nro][] = [
                         'name'     => (string)($fileBag['name'] ?? ''),
@@ -246,7 +519,7 @@ $resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea
     if (!empty($resultado['ok'])) {
         $idPresupuestoGuardado = isset($resultado['id_presupuesto']) ? (int)$resultado['id_presupuesto'] : 0;
         $idPrevisitaGuardada = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : 0;
-        $idUsuario = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
+        $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
 
         if ($idPresupuestoGuardado > 0 && $idPrevisitaGuardada > 0 && $idUsuario > 0) {
             $registroIntervencion = registrarIntervencionPresupuesto(

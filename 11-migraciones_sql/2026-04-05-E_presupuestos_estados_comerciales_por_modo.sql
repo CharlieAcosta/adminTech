@@ -1,0 +1,5 @@
+ALTER TABLE presupuestos
+ADD COLUMN estado_comercial_simulacion ENUM('ENVIADO','RECIBIDO','RESOLICITADO','APROBADO','RECHAZADO','CANCELADO') NULL AFTER estado;
+
+ALTER TABLE presupuestos
+ADD COLUMN estado_comercial_smtp ENUM('ENVIADO','RECIBIDO','RESOLICITADO','APROBADO','RECHAZADO','CANCELADO') NULL AFTER estado_comercial_simulacion;

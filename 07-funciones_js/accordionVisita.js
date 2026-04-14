@@ -32,6 +32,37 @@ $(document).ready(function() {
     window.marcarPresupuestoComoModificado = marcarPresupuestoComoModificado;
     window.marcarPresupuestoComoGuardado = marcarPresupuestoComoGuardado;
 
+    function edicionComercialBloqueada() {
+      if (typeof window.obtenerBloqueoEdicionComercialSeguimiento !== 'function') {
+        return false;
+      }
+      const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+      return !!(bloqueo && bloqueo.bloqueado);
+    }
+
+    function mostrarAlertaBloqueoEdicionComercial() {
+      const mensaje = typeof window.mensajeBloqueoEdicionComercialSeguimiento === 'function'
+        ? window.mensajeBloqueoEdicionComercialSeguimiento()
+        : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.';
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Edicion bloqueada',
+          text: mensaje,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (typeof mostrarAdvertencia === 'function') {
+        mostrarAdvertencia(mensaje, 4);
+        return;
+      }
+
+      window.alert(mensaje);
+    }
+
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
@@ -85,7 +116,7 @@ $(document).ready(function() {
         // - No estamos en modo visualización (modoVisualizacion === false)
         // - **No existe presupuesto generado** (!presupuestoGenerado)
       
-        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado;
+        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado && !edicionComercialBloqueada();
       
         const $btn = $('#btn-generar-presupuesto');
         if ($btn.length) {
@@ -913,6 +944,11 @@ $(document).ready(function() {
     
     // Botón: Generar Presupuesto
     $(document).on('click', '.btn-generar-presupuesto', function() {
+      if (edicionComercialBloqueada()) {
+        mostrarAlertaBloqueoEdicionComercial();
+        return;
+      }
+
       presupuestoGenerado = true; 
       // 1. Si no existe el accordion, lo crea usando el template
       if ($('#accordionPresupuesto').length === 0) {
@@ -1109,6 +1145,44 @@ $(document).ready(function() {
     hayCambios = false;
     controlarBotonGenerarPresupuesto(); 
     
+    function obtenerTextoVisibleSelect(selector, placeholders = []) {
+      const $select = $(selector).first();
+      if (!$select.length) return '';
+
+      const invalidos = new Set(
+        ['']
+          .concat(placeholders || [])
+          .map((item) => String(item ?? '').replace(/\s+/g, ' ').trim())
+      );
+
+      const candidatos = [];
+
+      const textoSeleccionado = String($select.find('option:selected').text() || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (textoSeleccionado) {
+        candidatos.push(textoSeleccionado);
+      }
+
+      const selectId = String($select.attr('id') || '').trim();
+      if (selectId !== '') {
+        const textoSelect2 = String($(`#select2-${selectId}-container`).first().text() || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (textoSelect2) {
+          candidatos.push(textoSelect2);
+        }
+      }
+
+      for (const texto of candidatos) {
+        if (texto && !invalidos.has(texto)) {
+          return texto;
+        }
+      }
+
+      return '';
+    }
+
     // ======= Obtiene los datos para el presupuesto =======
     function recolectarDatosParaPresupuesto() {
       // === CLIENTE ===
@@ -1118,11 +1192,11 @@ $(document).ready(function() {
       const email = $('#email_contacto_obra').val() || null;
       const telefono = $('#tel_contacto_obra').val() || null;
 
-      const calle = $('#select2-calle_visita-container').text().trim();
+      const calle = obtenerTextoVisibleSelect('#calle_visita', ['Calle']);
       const altura = $('#altura_visita').val()?.trim() || '';
-      const localidad = $('#select2-localidad_visita-container').text().trim();
-      const partido = $('#select2-partido_visita-container').text().trim();
-      const provincia = $('#select2-provincia_visita-container').text().trim();
+      const localidad = obtenerTextoVisibleSelect('#localidad_visita', ['Localidad']);
+      const partido = obtenerTextoVisibleSelect('#partido_visita', ['Partido']);
+      const provincia = obtenerTextoVisibleSelect('#provincia_visita', ['Provincia']);
       const cp = $('#cp_visita').val()?.trim() || '';
 
       const direccion = [calle, altura, localidad, partido, provincia, cp].filter(Boolean).join(', ');
@@ -1685,6 +1759,9 @@ $(document).ready(function() {
 
        const claseUtilidades = mostrarVistaDetallada ? '' : 'd-none';
        const claseImpuestos  = mostrarVistaDetallada ? '' : 'd-none';
+      const detalleEditorHtml = (typeof window.renderDetalleTareaEditorHtml === 'function')
+        ? window.renderDetalleTareaEditorHtml(descripcion)
+        : `<textarea class="form-control form-control-sm tarea-descripcion" rows="5">${descripcion}</textarea>`;
 
       const htmlTarea = `
         <div class="tarea-card">
@@ -1706,7 +1783,7 @@ $(document).ready(function() {
               <!-- Detalle -->
               <div class="mb-2">
                 <label class="mb-0"><b>Detalle de la tarea</b></label>
-                <textarea class="form-control form-control-sm" rows="5">${descripcion}</textarea>
+                ${detalleEditorHtml}
               </div>
               <!-- Fotos (PRESUPUESTO: dropzone + input oculto, sin “Seleccionar fotos”) -->
               <div class="mb-2 flex-grow-1">
@@ -1913,6 +1990,10 @@ $(document).ready(function() {
         // referencia a la card recién inyectada
         const $cardRecienAgregada = contenedor.find('.tarea-card').last();
 
+        if (typeof window.initDetalleTareaRichEditors === 'function') {
+          window.initDetalleTareaRichEditors($cardRecienAgregada, { triggerInput: false });
+        }
+
         // inputs a controlar
         const $utilMat = $cardRecienAgregada.find('.utilidad-global-materiales');
         const $utilMO  = $cardRecienAgregada.find('.utilidad-global-mano-obra');
@@ -1945,12 +2026,8 @@ $(document).ready(function() {
             <i class="fas fa-save"></i> Guardar 
           </button>
   
-          <button type="button" class="btn btn-primary mr-2 btn-imprimir-presupuesto" disabled>
-            <i class="fas fa-print"></i> Imprimir 
-          </button>
-  
-          <button type="button" class="btn btn-primary btn-enviar-presupuesto-mail" disabled>
-            <i class="fas fa-envelope"></i> Enviar por mail 
+          <button type="button" class="btn btn-primary mr-2 btn-emitir-presupuesto" disabled>
+            <i class="fas fa-file-pdf"></i> Generar documento 
           </button>
         </div>
   
@@ -1970,9 +2047,7 @@ $(document).ready(function() {
           const $el = $(this);
 
           if ($el.attr('id') === 'btn-guardar-presupuesto') return;
-          if ($el.hasClass('btn-imprimir-presupuesto')) return;
-          if ($el.hasClass('btn-enviar-presupuesto-mail')) return;
-
+          if ($el.hasClass('btn-emitir-presupuesto')) return;
           marcarPresupuestoComoModificado();
         });      
 
@@ -1980,6 +2055,11 @@ $(document).ready(function() {
       contenedor.off('click', '#btn-guardar-presupuesto')
       .on('click', '#btn-guardar-presupuesto', async function (e) {
       e.preventDefault();
+
+        if (edicionComercialBloqueada()) {
+          mostrarAlertaBloqueoEdicionComercial();
+          return;
+        }
 
         const $btn = $(this);
         $btn.prop('disabled', true);
@@ -1998,7 +2078,9 @@ $(document).ready(function() {
             const $card = $(this);
             const nro = index + 1;
 
-            const descripcion       = $card.find('textarea').first().val()?.trim() || '';
+            const descripcion       = (typeof window.obtenerDetalleTareaHtmlDesdeCard === 'function'
+              ? window.obtenerDetalleTareaHtmlDesdeCard($card)
+              : ($card.find('textarea').first().val() || '')).trim();
             const incluir_en_total  = $card.find('.incluir-en-total').is(':checked') ? 1 : 0;
             const utilidad_materiales = parseFloat($card.find('.tarea-materiales .utilidad-global-materiales').val()) || null;
             const utilidad_mano_obra  = parseFloat($card.find('.tarea-mano-obra .utilidad-global-mano-obra').val()) || null;
@@ -2387,16 +2469,29 @@ $(document).ready(function() {
       const presupuestoDirty = !!window.presupuestoDirty;
     
       const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
-      const $btnImprimir = $('.btn-imprimir-presupuesto');
-      const $btnMail = $('.btn-enviar-presupuesto-mail');
-    
+      const $btnEmitir = $('.btn-emitir-presupuesto');
+
+      if (edicionComercialBloqueada()) {
+        $btnGuardar
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-success');
+
+        $btnEmitir
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-primary');
+
+        return;
+      }
+
       if (hayVencidos) {
         $btnGuardar
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-success');
     
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-primary');
@@ -2432,7 +2527,7 @@ $(document).ready(function() {
           .addClass('btn-success')
           .removeClass('btn-secondary');
     
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-primary');
@@ -2446,12 +2541,12 @@ $(document).ready(function() {
         .removeClass('btn-success');
     
       if (idPresupuesto) {
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', false)
           .addClass('btn-primary')
           .removeClass('btn-secondary');
       } else {
-        $btnImprimir.add($btnMail)
+        $btnEmitir
           .prop('disabled', true)
           .addClass('btn-secondary')
           .removeClass('btn-primary');
@@ -2496,17 +2591,414 @@ $(document).ready(function() {
     // Ejecutar una vez si ya hay presupuesto renderizado
     window.initRecalculoPresupuestoCargado();
 
-// código de impresión ////////////////////////////////////////////
+// código de emisión de documento ////////////////////////////////////////////
 (function () {
-  // lock global anti doble impresión
+  // lock global anti doble emisión
   window.__PRESU_PRINT_LOCK__ = window.__PRESU_PRINT_LOCK__ || false;
+  const PRINT_ROOT_ID = 'presu-print-root';
+  const PRINT_STYLE_ID = 'presu-print-style';
+  const A4_WIDTH_PX = 794;
+  const A4_HEIGHT_PX = 1123;
+  const A4_MARGIN_PX = 38;
+  const A4_WIDTH_MM = 210;
+  const A4_HEIGHT_MM = 297;
+
+  const limpiarHostRender = () => {
+    const $root = $('#' + PRINT_ROOT_ID);
+    if ($root.length) {
+      $root.empty();
+    }
+  };
+
+  const asegurarHostRenderStyles = () => {
+    if (document.getElementById(PRINT_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = PRINT_STYLE_ID;
+    style.type = 'text/css';
+    style.textContent = `
+      #${PRINT_ROOT_ID} {
+        position: absolute !important;
+        left: -20000px !important;
+        top: 0 !important;
+        width: ${A4_WIDTH_PX}px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #fff !important;
+        pointer-events: none !important;
+      }
+
+      #${PRINT_ROOT_ID} .page {
+        width: ${A4_WIDTH_PX}px !important;
+        max-width: ${A4_WIDTH_PX}px !important;
+      }
+
+      #${PRINT_ROOT_ID} .print-page-task,
+      #${PRINT_ROOT_ID} .print-page-total {
+        width: ${A4_WIDTH_PX}px !important;
+        min-height: ${A4_HEIGHT_PX}px !important;
+        padding: ${A4_MARGIN_PX}px !important;
+        background: #fff !important;
+        overflow: hidden !important;
+      }
+
+      #${PRINT_ROOT_ID} .page-break-before {
+        break-before: auto !important;
+        page-break-before: auto !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+  };
+
+  const obtenerHostRender = () => {
+    let $root = $('#' + PRINT_ROOT_ID);
+    if (!$root.length) {
+      $root = $('<div/>', { id: PRINT_ROOT_ID }).appendTo('body');
+    }
+    return $root;
+  };
+
+  const esperarSiguienteFrame = () => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+
+  const esperarImagenesRender = async ($scope) => {
+    const imagenes = Array.from($scope.find('img'));
+    if (!imagenes.length) return;
+
+    await Promise.all(imagenes.map((img) => new Promise((resolve) => {
+      if (img.complete && img.naturalWidth > 0) {
+        resolve();
+        return;
+      }
+
+      const finalizar = () => {
+        img.removeEventListener('load', finalizar);
+        img.removeEventListener('error', finalizar);
+        resolve();
+      };
+
+      img.addEventListener('load', finalizar, { once: true });
+      img.addEventListener('error', finalizar, { once: true });
+    })));
+  };
+
+  const ajustarFotosDocumentoEmitido = ($scope) => {
+    const paginas = Array.from($scope.find('.print-page-task'));
+    if (!paginas.length) return;
+
+    paginas.forEach((pagina) => {
+      const contenedorFotos = pagina.querySelector('.fotos');
+      if (!contenedorFotos) return;
+
+      const slots = Array.from(contenedorFotos.querySelectorAll('.foto-slot'));
+      if (!slots.length) return;
+
+      const pageRect = pagina.getBoundingClientRect();
+      const fotosRect = contenedorFotos.getBoundingClientRect();
+      const topRelativo = fotosRect.top - pageRect.top;
+      const altoDisponible = Math.floor(A4_HEIGHT_PX - A4_MARGIN_PX - topRelativo);
+
+      if (altoDisponible <= 0) return;
+
+      contenedorFotos.style.maxHeight = `${altoDisponible}px`;
+      slots.forEach((slot) => {
+        slot.style.maxHeight = `${altoDisponible}px`;
+      });
+    });
+  };
+
+  const mostrarSwalGenerandoDocumento = () => {
+    if (!window.Swal || typeof Swal.fire !== 'function') return;
+
+    Swal.fire({
+      icon: 'info',
+      title: '<H2><STRONG style="color: #000000;">GENERANDO DOCUMENTO</STRONG></H2>',
+      html: '<H5 style="color: #000000;">Estamos armando el PDF oficial y guardándolo en el sistema.</H5>',
+      background: '#ffc107',
+      iconColor: '#000000',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+        const loader = Swal.getLoader();
+        if (loader) {
+          loader.style.borderColor = '#000000';
+          loader.style.borderRightColor = 'transparent';
+        }
+      }
+    });
+  };
+
+  const mostrarSwalDocumentoExito = (mensajeHtml) => {
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      if (typeof mostrarExito === 'function') {
+        mostrarExito('Documento generado, guardado y descargado correctamente.', 4);
+      }
+      return;
+    }
+
+    const config = {
+      icon: 'success',
+      title: '<H2><STRONG style="color: #ffffff;">DOCUMENTO DESCARGADO</STRONG></H2>',
+      html: `<H5 style="color: #ffffff;">${mensajeHtml}</H5>`,
+      background: '#28a745',
+      iconColor: '#ffffff',
+      showConfirmButton: true,
+      confirmButtonText: 'OK',
+      confirmButtonColor: '#1e7e34',
+      allowOutsideClick: true,
+      allowEscapeKey: true
+    };
+
+    if (Swal.isVisible()) {
+      Swal.hideLoading();
+      Swal.update(config);
+      return;
+    }
+
+    Swal.fire(config);
+  };
+
+  const mostrarSwalDocumentoError = (mensajeHtml) => {
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      if (typeof mostrarError === 'function') {
+        mostrarError(mensajeHtml.replace(/<[^>]*>/g, ' ').trim() || 'Error al generar el documento del presupuesto.');
+      }
+      return;
+    }
+
+    const config = {
+      icon: 'error',
+      title: '<H2><STRONG style="color: #ffffff;">NO SE PUDO GENERAR EL DOCUMENTO</STRONG></H2>',
+      html: `<H5 style="color: #ffffff;">${mensajeHtml}</H5>`,
+      background: '#dc3545',
+      iconColor: '#ffffff',
+      confirmButtonText: 'Cerrar',
+      confirmButtonColor: '#b02a37',
+      allowOutsideClick: true,
+      allowEscapeKey: true
+    };
+
+    if (Swal.isVisible()) {
+      Swal.hideLoading();
+      Swal.update(config);
+      return;
+    }
+
+    Swal.fire(config);
+  };
+
+  const descargarBlobDocumento = (blob, nombreArchivo) => {
+    const nombreBase = String(nombreArchivo || 'documento.pdf').trim() || 'documento.pdf';
+    const nombreFinal = /\.pdf$/i.test(nombreBase) ? nombreBase : `${nombreBase}.pdf`;
+    const urlBlob = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = urlBlob;
+    link.download = nombreFinal;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(urlBlob), 1000);
+  };
+
+  const renderizarDocumentoComoPdf = async ($printRoot) => {
+    if (typeof window.html2canvas !== 'function' || !window.jspdf?.jsPDF) {
+      throw new Error('No se pudieron cargar las librerías para generar el PDF.');
+    }
+
+    if (document.fonts?.ready) {
+      try {
+        await document.fonts.ready;
+      } catch (err) {
+        console.log('No se pudo esperar la carga completa de fuentes:', err);
+      }
+    }
+
+    await esperarImagenesRender($printRoot);
+    ajustarFotosDocumentoEmitido($printRoot);
+    await esperarSiguienteFrame();
+
+    const paginas = Array.from(
+      $printRoot[0].querySelectorAll('.print-page-task, .print-page-total')
+    );
+
+    if (!paginas.length) {
+      throw new Error('No se encontraron páginas para renderizar el documento.');
+    }
+
+    const pdf = new window.jspdf.jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true
+    });
+    const altoCanvasPorPagina = Math.ceil((A4_HEIGHT_MM / A4_WIDTH_MM) * (A4_WIDTH_PX * 2));
+    const toleranciaResiduoPx = 8;
+    let paginaPdfAgregada = false;
+
+    for (let index = 0; index < paginas.length; index += 1) {
+      const pagina = paginas[index];
+      const canvas = await window.html2canvas(pagina, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        windowWidth: A4_WIDTH_PX,
+        windowHeight: A4_HEIGHT_PX
+      });
+
+      for (let offsetY = 0; offsetY < canvas.height; offsetY += altoCanvasPorPagina) {
+        const altoRestante = canvas.height - offsetY;
+        if (paginaPdfAgregada && altoRestante <= toleranciaResiduoPx) {
+          break;
+        }
+
+        const altoSlice = Math.min(altoCanvasPorPagina, altoRestante);
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = altoSlice;
+
+        const ctx = sliceCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('No se pudo preparar el recorte del PDF emitido.');
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+        ctx.drawImage(
+          canvas,
+          0,
+          offsetY,
+          canvas.width,
+          altoSlice,
+          0,
+          0,
+          sliceCanvas.width,
+          sliceCanvas.height
+        );
+
+        if (paginaPdfAgregada) {
+          pdf.addPage();
+        }
+
+        const altoSliceMm = (A4_WIDTH_MM * altoSlice) / canvas.width;
+        const imgData = sliceCanvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH_MM, altoSliceMm, undefined, 'FAST');
+        paginaPdfAgregada = true;
+      }
+    }
+
+    return pdf.output('blob');
+  };
+
+  const parsearRespuestaJsonDocumento = (rawResponse) => {
+    if (typeof rawResponse === 'object' && rawResponse !== null) {
+      return rawResponse;
+    }
+
+    const texto = String(rawResponse ?? '').trim();
+    if (texto === '') {
+      throw new Error('El servidor devolvió una respuesta vacía al emitir el documento.');
+    }
+
+    try {
+      return JSON.parse(texto);
+    } catch (errJson) {
+      const ini = texto.indexOf('{');
+      const fin = texto.lastIndexOf('}');
+      if (ini !== -1 && fin !== -1 && fin > ini) {
+        const posibleJson = texto.slice(ini, fin + 1);
+        try {
+          return JSON.parse(posibleJson);
+        } catch (errJsonRecortado) {
+          // sigue al fallback de error legible
+        }
+      }
+
+      const resumen = texto.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      throw new Error(
+        resumen
+          ? `Respuesta inválida del servidor al emitir el documento: ${resumen.slice(0, 220)}`
+          : 'Respuesta inválida del servidor al emitir el documento.'
+      );
+    }
+  };
+
+  const subirDocumentoEmitido = async ({ idPresupuesto, idPrevisita, nombreArchivoPdf, pdfBlob }) => {
+    const formData = new FormData();
+    const idUsuarioActivo = Number(window.ACTIVE_USER_ID || 0) || 0;
+    formData.append('via', 'ajax');
+    formData.append('funcion', 'emitirDocumentoPresupuesto');
+    formData.append('id_presupuesto', String(idPresupuesto));
+    formData.append('id_previsita', String(idPrevisita));
+    formData.append('nombre_archivo', nombreArchivoPdf);
+    if (idUsuarioActivo > 0) {
+      formData.append('id_usuario', String(idUsuarioActivo));
+    }
+    formData.append('documento_pdf', pdfBlob, `${nombreArchivoPdf}.pdf`);
+
+    const rawResponse = await $.ajax({
+      url: ENDPOINT,
+      method: 'POST',
+      dataType: 'text',
+      data: formData,
+      processData: false,
+      contentType: false
+    });
+
+    return parsearRespuestaJsonDocumento(rawResponse);
+  };
+
+  const extraerMensajeErrorDocumento = (err) => {
+    if (typeof err === 'string' && err.trim() !== '') {
+      return err.trim();
+    }
+
+    if (err?.message) {
+      return String(err.message).trim();
+    }
+
+    const respuestaTexto = err?.responseText;
+    if (typeof respuestaTexto === 'string' && respuestaTexto.trim() !== '') {
+      try {
+        const data = JSON.parse(respuestaTexto);
+        if (data?.msg) {
+          return String(data.msg).trim();
+        }
+      } catch (jsonErr) {
+        const textoPlano = respuestaTexto.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (textoPlano !== '') {
+          return textoPlano.slice(0, 220);
+        }
+      }
+    }
+
+    const status = err?.status ? `HTTP ${err.status}` : '';
+    const statusText = err?.statusText ? String(err.statusText).trim() : '';
+    const combinado = [status, statusText].filter(Boolean).join(' ');
+    if (combinado) {
+      return combinado;
+    }
+
+    return 'Ocurrió un error inesperado.';
+  };
 
   $(document)
-    .off('click', '.btn-imprimir-presupuesto')
-    .on('click', '.btn-imprimir-presupuesto', async function (e) {
+    .off('click', '.btn-emitir-presupuesto')
+    .on('click', '.btn-emitir-presupuesto', async function (e) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+
+      if (edicionComercialBloqueada()) {
+        mostrarAlertaBloqueoEdicionComercial();
+        return false;
+      }
 
       const $btn = $(this);
 
@@ -2516,63 +3008,32 @@ $(document).ready(function() {
       // Anti doble disparo (doble click, listeners duplicados, comportamiento raro del navegador)
       if (window.__PRESU_PRINT_LOCK__) return false;
       window.__PRESU_PRINT_LOCK__ = true;
+      $btn.prop('disabled', true);
 
       try {
-        // Solo imprimimos si existe id_presupuesto (guardado)
+        // Solo emitimos si existe id_presupuesto (guardado)
         const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || null;
         const idPrevisitaImpresion = String($('#id_previsita').val() || '').trim();
         if (!idPresupuesto) {
           if (typeof mostrarAdvertencia === 'function') {
-            mostrarAdvertencia('Debe guardar el presupuesto antes de imprimir.', 4);
+            mostrarAdvertencia('Debe guardar el presupuesto antes de generar el documento.', 4);
           } else {
-            alert('Debe guardar el presupuesto antes de imprimir.');
+            alert('Debe guardar el presupuesto antes de generar el documento.');
           }
           window.__PRESU_PRINT_LOCK__ = false;
           return false;
         }
         if (!idPrevisitaImpresion) {
           if (typeof mostrarAdvertencia === 'function') {
-            mostrarAdvertencia('No se pudo obtener el Nro de pre-visita para imprimir.', 4);
+            mostrarAdvertencia('No se pudo obtener el Nro de pre-visita para generar el documento.', 4);
           } else {
-            alert('No se pudo obtener el Nro de pre-visita para imprimir.');
+            alert('No se pudo obtener el Nro de pre-visita para generar el documento.');
           }
           window.__PRESU_PRINT_LOCK__ = false;
           return false;
         }
 
-        try {
-          await simpleUpdateInDB(
-            '../06-funciones_php/funciones.php',
-            'presupuestos',
-            { estado: 'IMPRESO' },
-            [{ columna: 'id_presupuesto', condicion: '=', valorCompara: String(idPresupuesto) }]
-          );
-        } catch (errEstado) {
-          console.log('Error al actualizar estado del presupuesto a IMPRESO:', errEstado);
-          if (typeof mostrarError === 'function') {
-            mostrarError('No se pudo actualizar el estado del presupuesto a IMPRESO.');
-          } else {
-            alert('No se pudo actualizar el estado del presupuesto a IMPRESO.');
-          }
-          window.__PRESU_PRINT_LOCK__ = false;
-          return false;
-        }
-
-        try {
-          if (typeof window.registrarIntervencionPresupuestoAccion === 'function') {
-            const respIntervino = await window.registrarIntervencionPresupuestoAccion({
-              accion: 'imprimir',
-              id_presupuesto: idPresupuesto,
-              id_previsita: idPrevisitaImpresion
-            });
-
-            if (!respIntervino?.ok) {
-              console.log('No se pudo registrar la intervención de impresión:', respIntervino?.msg || respIntervino);
-            }
-          }
-        } catch (errIntervino) {
-          console.log('Error al registrar la intervención de impresión:', errIntervino);
-        }
+        mostrarSwalGenerandoDocumento();
 
         // Tomamos datos desde tu recolector (si existe)
         const datos = (typeof recolectarDatosParaPresupuesto === 'function')
@@ -2602,11 +3063,9 @@ $(document).ready(function() {
           const t = String(v ?? '').trim();
           return t ? esc(t) : '-';
         };
-        const cleanSelectText = (selector) => {
-          const t = $(selector).text().trim();
-          if (!t) return '';
-          const invalidos = ['Calle', 'Partido', 'Localidad', 'Provincia'];
-          return invalidos.includes(t) ? '' : t;
+        const cleanSelectText = (selector, invalidos = []) => {
+          const texto = obtenerTextoVisibleSelect(selector, invalidos);
+          return texto || '';
         };
         const formatFechaCorta = (fecha) => {
           const t = String(fecha ?? '').trim();
@@ -2622,46 +3081,335 @@ $(document).ready(function() {
             .trim();
           return limpio || '-';
         };
-        const resumirTituloTarea = (texto, fallback) => {
+        const PDF_DETALLE_BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol', 'li']);
+        const normalizarTextoPdfTarea = (texto) => String(texto ?? '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const descomponerContenidoTarea = (texto, fallback) => {
           const limpio = String(texto ?? '').replace(/\s+/g, ' ').trim();
-          if (!limpio) return String(fallback ?? '').toUpperCase();
-
-          const idxPunto = limpio.indexOf('.');
-          if (idxPunto > -1) {
-            return limpio.slice(0, idxPunto).trim().toUpperCase();
+          const fallbackTitulo = String(fallback ?? '').toUpperCase();
+          const limpiarInicioDetalle = (valor) => String(valor ?? '')
+            .replace(/^[\s\.,:\-*]+/, '')
+            .trim();
+          if (!limpio) {
+            return {
+              titulo: fallbackTitulo,
+              detalle: '',
+              detalleDesde: 0
+            };
           }
 
-          const idxComa = limpio.indexOf(',');
-          if (idxComa > -1) {
-            return limpio.slice(0, idxComa).trim().toUpperCase();
+          const delimitadoresConPunto = ['.', ',', '-', '*', ':'];
+          let idxCorte = -1;
+
+          delimitadoresConPunto.forEach((delimitador) => {
+            const idx = limpio.indexOf(delimitador);
+            if (idx > -1 && (idxCorte === -1 || idx < idxCorte)) {
+              idxCorte = idx;
+            }
+          });
+
+          if (idxCorte > -1) {
+            const baseTitulo = limpio.slice(0, idxCorte).trim();
+            let detalleDesde = idxCorte + 1;
+            while (detalleDesde < limpio.length && /[\s\.,:\-*]/.test(limpio.charAt(detalleDesde))) {
+              detalleDesde += 1;
+            }
+            const detalle = limpiarInicioDetalle(limpio.slice(detalleDesde));
+            if (baseTitulo) {
+              return {
+                titulo: `${baseTitulo}.`.toUpperCase(),
+                detalle,
+                detalleDesde
+              };
+            }
+            return {
+              titulo: fallbackTitulo,
+              detalle,
+              detalleDesde
+            };
           }
 
           const palabras = limpio.split(' ').filter(Boolean);
-          if (palabras.length <= 10) {
-            return limpio.toUpperCase();
+          if (!palabras.length) {
+            return {
+              titulo: fallbackTitulo,
+              detalle: '',
+              detalleDesde: 0
+            };
           }
 
-          return `${palabras.slice(0, 10).join(' ').toUpperCase()}...`;
+          let detalleDesde = limpio.length;
+          if (palabras.length > 12) {
+            const matcher = /\S+/g;
+            let contador = 0;
+            let matchPalabra = null;
+
+            while ((matchPalabra = matcher.exec(limpio)) && contador < 12) {
+              contador += 1;
+              detalleDesde = matcher.lastIndex;
+            }
+
+            while (detalleDesde < limpio.length && /\s/.test(limpio.charAt(detalleDesde))) {
+              detalleDesde += 1;
+            }
+          }
+
+          return {
+            titulo: `${palabras.slice(0, 12).join(' ').toUpperCase()}...`,
+            detalle: palabras.slice(12).join(' ').trim(),
+            detalleDesde
+          };
         };
         const limpiarPrefijoTarea = (texto) => String(texto ?? '')
           .replace(/^\s*tarea\s*\d+\s*[:.-]?\s*/i, '')
           .replace(/\s+/g, ' ')
           .trim();
+        const normalizarTextoOrtografico = (texto) => String(texto ?? '')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+([,.;:!?])/g, '$1')
+          .replace(/([,.;:!?])(?=\S)/g, '$1 ')
+          .replace(/\(\s+/g, '(')
+          .replace(/\s+\)/g, ')')
+          .trim();
+        const convertirDetalleTextoAHtml = (texto) => {
+          const limpio = String(texto ?? '').trim();
+          if (!limpio) return '';
+
+          if (typeof window.normalizarTextoPlanoDetalleTarea === 'function') {
+            return window.normalizarTextoPlanoDetalleTarea(limpio);
+          }
+
+          return esc(limpio).replace(/\n/g, '<br>');
+        };
+        const limpiarInicioHtmlDetalle = (html) => {
+          const parser = new window.DOMParser();
+          const doc = parser.parseFromString(`<div>${String(html ?? '')}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+
+          const nodoSinContenido = (node) => {
+            if (!node) return true;
+            if (node.nodeType === window.Node.TEXT_NODE) {
+              return !String(node.textContent || '').trim();
+            }
+            if (node.nodeType !== window.Node.ELEMENT_NODE) {
+              return true;
+            }
+            const tag = String(node.tagName || '').toLowerCase();
+            if (tag === 'br') {
+              return true;
+            }
+            return !String(node.textContent || '').trim();
+          };
+
+          const recortarInicio = (container) => {
+            while (container.firstChild) {
+              const firstChild = container.firstChild;
+
+              if (firstChild.nodeType === window.Node.TEXT_NODE) {
+                const textoRecortado = String(firstChild.textContent || '').replace(/^[\s\.,:\-*]+/u, '');
+                if (textoRecortado) {
+                  firstChild.textContent = textoRecortado;
+                  return;
+                }
+                firstChild.remove();
+                continue;
+              }
+
+              if (firstChild.nodeType !== window.Node.ELEMENT_NODE) {
+                firstChild.remove();
+                continue;
+              }
+
+              const tag = String(firstChild.tagName || '').toLowerCase();
+              if (tag === 'br') {
+                firstChild.remove();
+                continue;
+              }
+
+              recortarInicio(firstChild);
+
+              if (nodoSinContenido(firstChild)) {
+                firstChild.remove();
+                continue;
+              }
+
+              return;
+            }
+          };
+
+          recortarInicio(root);
+          return root.innerHTML.trim();
+        };
+        const extraerDetalleHtmlPreservandoFormato = (html, detalleEsperado, detalleDesde = 0) => {
+          const htmlFuente = /<[^>]+>/.test(String(html ?? ''))
+            ? String(html ?? '')
+            : convertirDetalleTextoAHtml(html);
+          const detalleNormalizado = normalizarTextoPdfTarea(detalleEsperado);
+
+          if (!htmlFuente || !detalleNormalizado) {
+            return '';
+          }
+
+          const parser = new window.DOMParser();
+          const doc = parser.parseFromString(`<div>${htmlFuente}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+          const posiciones = [];
+          let textoNormalizado = '';
+          let ultimoFueEspacio = true;
+
+          const emitirCaracter = (caracter, posicion) => {
+            const esEspacio = /\s/.test(caracter);
+
+            if (esEspacio) {
+              if (ultimoFueEspacio || !textoNormalizado.length) {
+                return;
+              }
+              textoNormalizado += ' ';
+              posiciones.push({ ...posicion, esEspacio: true });
+              ultimoFueEspacio = true;
+              return;
+            }
+
+            textoNormalizado += caracter;
+            posiciones.push({ ...posicion, esEspacio: false });
+            ultimoFueEspacio = false;
+          };
+
+          const recorrerNodo = (node) => {
+            if (!node) return;
+
+            if (node.nodeType === window.Node.TEXT_NODE) {
+              const contenido = String(node.textContent || '');
+              for (let idx = 0; idx < contenido.length; idx += 1) {
+                emitirCaracter(contenido.charAt(idx), {
+                  tipo: 'texto',
+                  node,
+                  offset: idx + 1
+                });
+              }
+              return;
+            }
+
+            if (node.nodeType !== window.Node.ELEMENT_NODE) {
+              return;
+            }
+
+            const tag = String(node.tagName || '').toLowerCase();
+
+            if (tag === 'br') {
+              emitirCaracter(' ', { tipo: 'despuesNodo', node });
+              return;
+            }
+
+            if (tag === 'li') {
+              emitirCaracter('-', { tipo: 'inicioElemento', node });
+              emitirCaracter(' ', { tipo: 'inicioElemento', node });
+            }
+
+            Array.from(node.childNodes || []).forEach(recorrerNodo);
+
+            if (PDF_DETALLE_BLOCK_TAGS.has(tag)) {
+              emitirCaracter(' ', { tipo: 'despuesNodo', node });
+            }
+          };
+
+          Array.from(root.childNodes || []).forEach(recorrerNodo);
+
+          while (posiciones.length && posiciones[posiciones.length - 1].esEspacio) {
+            posiciones.pop();
+            textoNormalizado = textoNormalizado.slice(0, -1);
+          }
+
+          const coincidenciaPrefijo = textoNormalizado.match(/^tarea\s*\d+\s*[:.-]?\s*/i);
+          const prefijoConsumido = coincidenciaPrefijo ? coincidenciaPrefijo[0].length : 0;
+          const detalleTextoEnHtml = textoNormalizado.slice(prefijoConsumido);
+          const detalleDesdeBase = Math.max(0, (Number(detalleDesde) || 0) - prefijoConsumido);
+          const indiceDetalleReal = detalleTextoEnHtml.indexOf(detalleNormalizado, detalleDesdeBase);
+          const totalConsumido = indiceDetalleReal > -1
+            ? prefijoConsumido + indiceDetalleReal
+            : Math.max(0, Number(detalleDesde) || 0);
+
+          if (totalConsumido <= 0) {
+            return limpiarInicioHtmlDetalle(root.innerHTML);
+          }
+
+          if (totalConsumido >= posiciones.length) {
+            return '';
+          }
+
+          const posicionInicio = posiciones[totalConsumido - 1];
+          const range = doc.createRange();
+
+          if (!posicionInicio) {
+            range.setStart(root, 0);
+          } else if (posicionInicio.tipo === 'texto') {
+            range.setStart(posicionInicio.node, posicionInicio.offset);
+          } else if (posicionInicio.tipo === 'inicioElemento') {
+            range.setStart(posicionInicio.node, 0);
+          } else {
+            range.setStartAfter(posicionInicio.node);
+          }
+
+          range.setEnd(root, root.childNodes.length);
+
+          const fragment = range.cloneContents();
+          const container = doc.createElement('div');
+          container.appendChild(fragment);
+
+          return limpiarInicioHtmlDetalle(container.innerHTML);
+        };
+        const descomponerContenidoTareaHtml = (html, fallback) => {
+          const htmlSeguro = String(html ?? '').trim();
+          const textoPlano = (typeof window.detalleTareaHtmlToPlainText === 'function')
+            ? window.detalleTareaHtmlToPlainText(htmlSeguro)
+            : String(htmlSeguro).replace(/<[^>]+>/g, ' ');
+          const textoLimpio = limpiarPrefijoTarea(textoPlano || fallback);
+          const resultadoPlano = descomponerContenidoTarea(textoLimpio, fallback);
+
+          if (!htmlSeguro) {
+            return {
+              titulo: resultadoPlano.titulo,
+              detalleHtml: resultadoPlano.detalle
+                ? convertirDetalleTextoAHtml(resultadoPlano.detalle)
+                : ''
+            };
+          }
+
+          return {
+            titulo: resultadoPlano.titulo,
+            detalleHtml: extraerDetalleHtmlPreservandoFormato(
+              htmlSeguro,
+              resultadoPlano.detalle,
+              resultadoPlano.detalleDesde
+            ) || (resultadoPlano.detalle
+              ? convertirDetalleTextoAHtml(resultadoPlano.detalle)
+              : '')
+          };
+        };
+        const agruparItems = (items, tamanoGrupo) => {
+          const resultado = [];
+          for (let idx = 0; idx < items.length; idx += tamanoGrupo) {
+            resultado.push(items.slice(idx, idx + tamanoGrupo));
+          }
+          return resultado;
+        };
 
         const fechaImpresion = new Date();
         const pad2 = (n) => String(n).padStart(2, '0');
-        const numeroPresupuestoImpresion = `${idPrevisitaImpresion}-${fechaImpresion.getFullYear()}${pad2(fechaImpresion.getMonth() + 1)}${pad2(fechaImpresion.getDate())}-${pad2(fechaImpresion.getHours())}${pad2(fechaImpresion.getMinutes())}${pad2(fechaImpresion.getSeconds())}`;
+        const numeroPresupuestoImpresion = `${idPrevisitaImpresion}_${fechaImpresion.getFullYear()}${pad2(fechaImpresion.getMonth() + 1)}${pad2(fechaImpresion.getDate())}_${pad2(fechaImpresion.getHours())}${pad2(fechaImpresion.getMinutes())}${pad2(fechaImpresion.getSeconds())}`;
+        const numeroPresupuestoVisual = numeroPresupuestoImpresion.replaceAll('_', '-');
         const razonSocialArchivo = String(cliente?.razon_social ?? '')
           .trim()
           .replace(/\s+/g, ' ')
           .replace(/[\\/:*?"<>|]/g, '')
           .replace(/\s+/g, '-');
-        const nombreArchivoPdf = `${razonSocialArchivo || 'PRESUPUESTO'}-${numeroPresupuestoImpresion}`;
+        const nombreArchivoPdf = `${razonSocialArchivo || 'PRESUPUESTO'}_${numeroPresupuestoImpresion}`;
         const responsableImpresion = ($('.nombre-completo').first().text() || '').trim() || '-';
-        const calleObra = cleanSelectText('#select2-calle_visita-container');
+        const calleObra = cleanSelectText('#calle_visita', ['Calle']);
         const alturaObra = ($('#altura_visita').val() || '').toString().trim();
-        const partidoObra = cleanSelectText('#select2-partido_visita-container');
-        const localidadObra = cleanSelectText('#select2-localidad_visita-container');
+        const partidoObra = cleanSelectText('#partido_visita', ['Partido']);
+        const localidadObra = cleanSelectText('#localidad_visita', ['Localidad']);
         const calleYAlturaObra = [calleObra, alturaObra].filter((v) => String(v).trim()).join(' ');
         const resumenObra = [
           cliente?.razon_social || '',
@@ -2670,7 +3418,7 @@ $(document).ready(function() {
           partidoObra
         ].filter((v) => String(v).trim()).join(' | ');
         const requerimientoTecnico = ($('#requerimiento_tecnico').val() || '').trim();
-        const descripcionObra = requerimientoTecnico || 'Requerimiento técnico';
+        const descripcionObra = normalizarTextoOrtografico(requerimientoTecnico || 'Requerimiento técnico');
         const encabezadoDatosHtml = `
     <div class="grid">
       <div class="box">
@@ -2707,12 +3455,21 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
   let $detalle = $card.find('textarea.tarea-descripcion').first();
   if (!$detalle.length) $detalle = $card.find('textarea').first();
-  const detalleOriginal = ($detalle.val() || '').trim();
+  const detalleOriginalHtml = (typeof window.obtenerDetalleTareaHtmlDesdeCard === 'function')
+    ? window.obtenerDetalleTareaHtmlDesdeCard($card)
+    : (($detalle.val() || '').trim());
+  const detalleOriginal = (typeof window.detalleTareaHtmlToPlainText === 'function')
+    ? window.detalleTareaHtmlToPlainText(detalleOriginalHtml)
+    : detalleOriginalHtml;
   const tituloOriginal = detalleOriginal
     || ($card.find('.tarea-encabezado b').text() || '').trim()
     || `Tarea ${nro}`;
   const detalleTarea = limpiarPrefijoTarea(detalleOriginal || tituloOriginal);
-  const tituloTarea = resumirTituloTarea(detalleTarea, `Tarea ${nro}`);
+  const contenidoTareaResuelto = descomponerContenidoTareaHtml(detalleOriginalHtml || detalleTarea, `Tarea ${nro}`);
+  const tituloTarea = contenidoTareaResuelto.titulo;
+  const detalleTareaHtml = contenidoTareaResuelto.detalleHtml
+    ? `<div class="detalle-tarea">${contenidoTareaResuelto.detalleHtml}</div>`
+    : '';
 
   // Materiales
   let filasMat = '';
@@ -2765,24 +3522,51 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
         </tr>`;
     });
 
-  const otrosMO = ($card.find('.input-otros-mano').val() ?? '').toString();
   const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
   const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
 
   // Fotos
-  let fotosHtml = '';
+  const fotos = [];
   const $prev = $(`#presu_preview_${nro}`);
   if ($prev.length) {
     $prev.find('img').each(function () {
       const src = $(this).attr('src');
       if (!src) return;
-      fotosHtml += `<img class="foto" src="${esc(src)}" alt="Foto tarea ${nro}">`;
+      fotos.push({
+        src,
+        alt: `Foto tarea ${nro}`
+      });
     });
   }
-  if (!fotosHtml) fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
+  const fotosInline = fotos.slice(0, 2);
+  const fotosExtra = fotos.slice(2);
+  let fotosHtml = '';
+  if (fotosInline.length) {
+    fotosInline.forEach((foto) => {
+      fotosHtml += `
+        <div class="foto-slot">
+          <img class="foto" src="${esc(foto.src)}" alt="${esc(foto.alt)}">
+        </div>`;
+    });
+  } else {
+    fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
+  }
+  const paginasImagenesExtra = agruparItems(fotosExtra, 4).map((grupo, grupoIdx) => `
+      <section class="print-page-task print-page-task-imagenes-extra page-break-before" data-tarea="${esc(String(nro))}" data-grupo-imagenes="${esc(String(grupoIdx + 1))}">
+        <div class="imagenes-extra-grid">
+          ${grupo.map((foto, fotoIdx) => `
+            <div class="imagen-extra-slot">
+              <img
+                class="imagen-extra"
+                src="${esc(foto.src)}"
+                alt="${esc(foto.alt || `Foto tarea ${nro} ${grupoIdx * 4 + fotoIdx + 3}`)}">
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `).join('');
 
-  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
-  const encabezadoInterno = idx === 0 ? '' : `
+  const encabezadoPaginaSecundaria = `
     <div class="top">
       <div class="logo">
         <img src="${esc(logoSrc)}" alt="Logo">
@@ -2816,13 +3600,15 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       </div>
     </div>
   `;
+  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
+  const encabezadoInterno = idx === 0 ? '' : encabezadoPaginaSecundaria;
 
   const contenidoTarea = `
       ${encabezadoInterno}
 
       <section class="bloque">
         <h3>${esc(tituloTarea)}</h3>
-        <div class="linea detalle-tarea"><b>Detalle:</b> ${esc(detalleTarea || 'FALTA COMPLETAR')}</div>
+        ${detalleTareaHtml}
 
         <h4>Materiales</h4>
         <table class="tabla-resumen">
@@ -2839,10 +3625,6 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
               <th class="num">Días</th>
           <tbody>
             <tr>
-              <td class="label"><b>Otros</b></td>
-              <td class="value">${esc(otrosMO || '0')}</td>
-            </tr>
-            <tr>
               <td class="label"><b>Subtotal Mano de Obra</b></td>
               <td class="value"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
             </tr>
@@ -2858,11 +3640,13 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
   if (idx === 0) {
     htmlPrimeraPagina += contenidoTarea;
+    htmlPaginasTareas += paginasImagenesExtra;
   } else {
     htmlPaginasTareas += `
       <section class="print-page-task page-break-before">
         ${contenidoTarea}
       </section>
+      ${paginasImagenesExtra}
     `;
   }
 });
@@ -2967,6 +3751,7 @@ const htmlPaginaTotal = `
 
   .page { width: 100%; max-width: 100%; padding: 0; overflow-x: hidden; }
   .print-page-total { display:flex; flex-direction:column; }
+  .print-page-task-imagenes-extra { display:flex; align-items:stretch; }
 
   .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .logo img { max-width: 220px; height:auto; }
@@ -2981,12 +3766,27 @@ const htmlPaginaTotal = `
   .box { border:1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
   .linea { margin: 3px 0; font-size: 12px; line-height: 1.25; }
-  .detalle-tarea { white-space: pre-line; overflow-wrap: anywhere; }
+  .detalle-tarea { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+  .detalle-tarea p,
+  .detalle-tarea div,
+  .detalle-tarea ul,
+  .detalle-tarea ol { margin: 0 0 6px; }
+  .detalle-tarea p:last-child,
+  .detalle-tarea div:last-child,
+  .detalle-tarea ul:last-child,
+  .detalle-tarea ol:last-child { margin-bottom: 0; }
+  .detalle-tarea ul,
+  .detalle-tarea ol { padding-left: 18px; }
+  .detalle-tarea strong,
+  .detalle-tarea b { font-weight: 700; }
+  .detalle-tarea em,
+  .detalle-tarea i { font-style: italic; }
+  .detalle-tarea u { text-decoration: underline; }
 
   .falta { color:#b00020; font-weight:700; }
 
   .bloque { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
-  h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; border-left: 4px solid #111; padding-left: 8px; text-transform: uppercase; text-decoration: underline; }
+  h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; border-left: 4px solid #111; padding-left: 8px; text-transform: uppercase; }
   h4 { margin: 8px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color:#333; }
 
   .grid2 { display:grid; grid-template-columns: 2fr 1fr; gap:10px; }
@@ -3009,16 +3809,64 @@ const htmlPaginaTotal = `
     gap: 10px;
     align-items: flex-start;
     align-content: flex-start;
+    overflow: hidden;
+  }
+
+  .foto-slot {
+    flex: 0 0 calc(50% - 5px);
+    width: calc(50% - 5px);
+    max-width: calc(50% - 5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    padding: 6px;
   }
 
   .foto {
-    width: calc(50% - 5px);
+    display: block;
+    width: auto;
     height: auto;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
-    border: 1px solid #ddd;
-    border-radius: 8px;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .imagenes-extra-grid {
+    width: 100%;
+    min-height: ${A4_HEIGHT_PX - (A4_MARGIN_PX * 2)}px;
+    height: ${A4_HEIGHT_PX - (A4_MARGIN_PX * 2)}px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .imagen-extra-slot {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    padding: 6px;
+  }
+
+  .imagen-extra {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
   }
 
   .total { display:flex; justify-content:flex-end; margin-top: 10px; break-inside: avoid; }
@@ -3121,23 +3969,8 @@ const htmlPaginaTotal = `
   ${htmlPaginasTareas}
   ${htmlPaginaTotal}
 </div>
-</body>
+        </body>
 </html>`;
-
-        // ====== IMPRIMIR EN LA MISMA PÁGINA (SIN TAB / SIN IFRAME) ======
-        const PRINT_ROOT_ID = 'presu-print-root';
-        const PRINT_STYLE_ID = 'presu-print-style';
-
-        // Cleanup (único punto de salida)
-        const cleanup = () => {
-          const $r = $('#' + PRINT_ROOT_ID);
-          if ($r.length) $r.empty();
-          if (window.__PRESU_PRINT_OLD_TITLE__ !== undefined) {
-            document.title = window.__PRESU_PRINT_OLD_TITLE__;
-            delete window.__PRESU_PRINT_OLD_TITLE__;
-          }
-          window.__PRESU_PRINT_LOCK__ = false;
-        };
 
         // 0) Asegurar URL absoluta del logo
         const logoAbs = (() => {
@@ -3145,43 +3978,10 @@ const htmlPaginaTotal = `
           catch (e) { return logoSrc; }
         })();
 
-        // 1) CSS host de impresión una sola vez
-        if (!document.getElementById(PRINT_STYLE_ID)) {
-          const st = document.createElement('style');
-          st.id = PRINT_STYLE_ID;
-          st.type = 'text/css';
-          st.textContent = `
-          @media print {
-            /* Ocultar todo lo que NO sea el print root (y sacarlo del flujo) */
-            body > *:not(#${PRINT_ROOT_ID}) {
-              display: none !important;
-            }
-        
-            /* Asegurar que el print root quede en flujo normal (NO fixed) */
-            #${PRINT_ROOT_ID} {
-              display: block !important;
-              position: static !important;
-              left: auto !important;
-              top: auto !important;
-              width: 100% !important;
-              background: #fff !important;
-              z-index: auto !important;
-              padding: 0 !important;
-              margin: 0 !important;
-            }
-          }
-        `;
-        
-          document.head.appendChild(st);
-        }
+        asegurarHostRenderStyles();
+        const $printRoot = obtenerHostRender();
 
-        // 2) Crear/obtener contenedor
-        let $printRoot = $('#' + PRINT_ROOT_ID);
-        if (!$printRoot.length) {
-          $printRoot = $('<div/>', { id: PRINT_ROOT_ID }).appendTo('body');
-        }
-
-        // 3) Extraer CSS y body
+        // Extraer CSS y body
         const cssMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
         let cssInterno = cssMatch ? cssMatch[1] : '';
 
@@ -3203,7 +4003,7 @@ const htmlPaginaTotal = `
           /<div class="muted">[\s\S]*?<\/div>/g,
           () => {
             numeroPaginaActual += 1;
-            return `<div class="doc-code">${esc(numeroPresupuestoImpresion)}</div><div class="doc-page">Página Nro: ${esc(numeroPaginaActual)}</div>`;
+            return `<div class="doc-code">${esc(numeroPresupuestoVisual)}</div><div class="doc-page">Página Nro: ${esc(numeroPaginaActual)}</div>`;
           }
         );
 
@@ -3213,41 +4013,50 @@ const htmlPaginaTotal = `
           `<img src="${logoAbs}" alt="Logo">`
         );
 
-        // 5) Inyectar en el root
+        // Inyectar en el host offscreen para renderizar el PDF
         $printRoot.html(`<style>${cssInterno}</style>${soloBody}`);
-        if (window.__PRESU_PRINT_OLD_TITLE__ === undefined) {
-          window.__PRESU_PRINT_OLD_TITLE__ = document.title;
+
+        const pdfBlob = await renderizarDocumentoComoPdf($printRoot);
+        const respuestaEmision = await subirDocumentoEmitido({
+          idPresupuesto,
+          idPrevisita: idPrevisitaImpresion,
+          nombreArchivoPdf,
+          pdfBlob
+        });
+
+        if (!respuestaEmision?.ok) {
+          throw new Error(respuestaEmision?.msg || 'No se pudo guardar el documento emitido.');
         }
-        document.title = nombreArchivoPdf;
 
-        // 6) afterprint: usar listener (evita pisadas)
-        const afterPrintHandler = () => {
-          window.removeEventListener('afterprint', afterPrintHandler);
-          cleanup();
-        };
-        window.addEventListener('afterprint', afterPrintHandler);
+        if (respuestaEmision?.intervino && typeof window.actualizarIntervinoPresupuestoUI === 'function') {
+          window.actualizarIntervinoPresupuestoUI(respuestaEmision.intervino);
+        }
 
-        // 7) Imprimir UNA sola vez + fallback si afterprint no dispara
-        setTimeout(() => {
-          window.print();
-          setTimeout(cleanup, 1200); // fallback conservador
-        }, 150);
+        descargarBlobDocumento(
+          pdfBlob,
+          String(respuestaEmision?.nombre_archivo || `${nombreArchivoPdf}.pdf`)
+        );
+        mostrarSwalDocumentoExito('El documento fue generado, guardado en el sistema y descargado correctamente.');
 
         return false;
 
       } catch (err) {
-        console.log('Error al imprimir presupuesto:', err);
-        window.__PRESU_PRINT_LOCK__ = false;
-        if (typeof mostrarError === 'function') {
-          mostrarError('Error al imprimir el presupuesto.');
-        } else {
-          alert('Error al imprimir el presupuesto.');
-        }
+        console.log('Error al generar documento del presupuesto:', err);
+        const mensajeErrorDocumento = extraerMensajeErrorDocumento(err);
+        const mensajeErrorDocumentoHtml = mensajeErrorDocumento
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;');
+        mostrarSwalDocumentoError(mensajeErrorDocumentoHtml);
         return false;
+      } finally {
+        limpiarHostRender();
+        window.__PRESU_PRINT_LOCK__ = false;
+        $btn.prop('disabled', false);
       }
     });
 })();
-// código de impresión ////////////////////////////////////////////
+// código de emisión de documento ////////////////////////////////////////////
 
 });
 

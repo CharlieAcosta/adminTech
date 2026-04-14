@@ -24,6 +24,8 @@ uploads/
 !uploads/.gitkeep
 uploads/**/*
 !uploads/**/.gitkeep
+09-adjuntos/previsita/*
+!09-adjuntos/previsita/.gitkeep
 
 # ─── Logs de tu sistema ────────────────────
 log/

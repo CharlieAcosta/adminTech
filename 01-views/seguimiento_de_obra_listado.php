@@ -21,6 +21,26 @@ $filas = poblarDatableAll(
     $perfil,
     $deleteIcon
 );
+
+$estadosVisitaRapidos = array(
+    'PROGRAMADA' => 'Programada',
+    'REPROGRAMADA' => 'Reprogramada',
+    'EJECUTADA' => 'Ejecutada',
+    'CANCELADA' => 'Cancelada',
+    'VENCIDA' => 'Vencida'
+);
+
+$estadosPresupuestoRapidos = array(
+    'PENDIENTE' => 'Pendiente',
+    'BORRADOR' => 'Borrador',
+    'EMITIDO' => 'Emitido',
+    'ENVIADO' => 'Enviado',
+    'RECIBIDO' => 'Recibido',
+    'RESOLICITADO' => 'Resolicitado',
+    'APROBADO' => 'Aprobado',
+    'RECHAZADO' => 'Rechazado',
+    'CANCELADO' => 'Cancelado'
+);
 ?> 
 
 <!DOCTYPE html>
@@ -75,12 +95,67 @@ $filas = poblarDatableAll(
     <!-- Main content -->
     <section class="content">
       <div class="container-fluid">
-            <div class="row d-flex text-center justify-content-end p-2">
-            <!--  <button type="button" class="col-1 btn btn-success btn-block mb-0 mt-0 mr-1 v-accion-ver-todos" data-accion="vertodos" data-filtro="todos"><i class="fa fa-eye"></i> Todos</button>
-              <button type="button" class="col-1 btn btn-warning btn-block mb-0 mt-0 mr-1 v-accion-ver-todos" data-accion="vertodos" data-filtro="activos"><i class="fa fa-eye-slash"></i> Activos</button>
-              <button type="button" class="col-1 btn btn-warning btn-block mb-0 mt-0 mr-1 v-accion-ver-todos" data-accion="vertodos" data-filtro="potenciales"><i class="fa fa-eye-slash"></i> Potenciales</button>
-              <button type="button" class="col-1 btn btn-warning btn-block mb-0 mt-0 mr-1 v-accion-ver-todos" data-accion="vertodos" data-filtro="desactivados"><i class="fa fa-eye-slash"></i> Desactivados</button> -->
-              <button onclick="window.location.href='seguimiento_form.php'" type="button" class="col-1 btn btn-success btn-block mb-0 mt-0 mr-0"><i class="fa fa-plus-circle"></i> Agregar</button>
+            <div class="row px-2 pt-2 pb-1">
+              <div class="col-12">
+                <div class="seguimiento-toolbar">
+                  <div class="seguimiento-toolbar-filtros">
+                    <div class="seguimiento-filtro-columna">
+                      <div class="seguimiento-filtro-label">Filtros de visitas</div>
+                      <div class="seguimiento-filtro-linea">
+                        <?php foreach ($estadosVisitaRapidos as $valorFiltro => $labelFiltro): ?>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-info seguimiento-filtro-btn btn-filtro-rapido"
+                            data-filter-target="visita"
+                            data-filter-value="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
+                            data-variant="info">
+                            <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
+                          </button>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+
+                    <span class="seguimiento-filtro-separador">|</span>
+
+                    <div class="seguimiento-filtro-columna">
+                      <div class="seguimiento-filtro-label">Filtros de presupuesto</div>
+                      <div class="seguimiento-filtro-linea">
+                        <?php foreach ($estadosPresupuestoRapidos as $valorFiltro => $labelFiltro): ?>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-primary seguimiento-filtro-btn btn-filtro-rapido"
+                            data-filter-target="presupuesto"
+                            data-filter-value="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
+                            data-variant="primary">
+                            <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
+                          </button>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+
+                    <span class="seguimiento-filtro-separador">|</span>
+
+                    <div class="seguimiento-filtro-columna seguimiento-filtro-columna-todos">
+                      <div class="seguimiento-filtro-label seguimiento-filtro-label-placeholder">&nbsp;</div>
+                      <div class="seguimiento-filtro-linea">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn btn-filtro-rapido is-active"
+                          data-filter-reset="all"
+                          data-variant="secondary">
+                          Todos
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="seguimiento-toolbar-accion">
+                    <button onclick="window.location.href='seguimiento_form.php'" type="button" class="btn btn-success">
+                      <i class="fa fa-plus-circle"></i> Agregar
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
         <div class="row">
           <div class="col-12">
@@ -122,6 +197,8 @@ $filas = poblarDatableAll(
   <!-- /.content-wrapper -->
   <?php include '../01-views/layout/footer_layout.php';?>
   <?php include '../01-views/modals/modal_historial_presupuesto.php'; ?>
+  <?php include '../01-views/modals/modal_documentos_emitidos_presupuesto.php'; ?>
+  <?php include '../01-views/modals/modal_enviar_documento_emitido_presupuesto.php'; ?>
 
   <!-- Control Sidebar -->
   <aside class="control-sidebar control-sidebar-dark">
@@ -158,6 +235,36 @@ $filas = poblarDatableAll(
 <script src="../07-funciones_js/funciones.js"></script>
 
 <script>
+  const dataTableSeguimientoLanguage = {
+    processing: "Procesando...",
+    lengthMenu: "Mostrar _MENU_ registros",
+    zeroRecords: "No se encontraron resultados",
+    emptyTable: "No hay datos disponibles en esta tabla",
+    info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+    infoEmpty: "Mostrando 0 a 0 de 0 registros",
+    infoFiltered: "(filtrado de _MAX_ registros totales)",
+    loadingRecords: "Cargando...",
+    search: "Buscar:",
+    paginate: {
+      first: "Primero",
+      last: "Ultimo",
+      next: "Siguiente",
+      previous: "Anterior"
+    },
+    aria: {
+      sortAscending: ": Activar para ordenar la columna de manera ascendente",
+      sortDescending: ": Activar para ordenar la columna de manera descendente"
+    },
+    buttons: {
+      copy: "Copiar",
+      csv: "CSV",
+      excel: "Excel",
+      pdf: "PDF",
+      print: "Imprimir",
+      colvis: "Columnas"
+    }
+  };
+
   // --- Orden correcto para fechas en formato DD-MM-YYYY (DataTables) ---
   // Convierte "DD-MM-YYYY" -> número YYYYMMDD para ordenar real, no por texto.
   jQuery.fn.dataTable.ext.type.order['date-eu-pre'] = function (d) {
@@ -180,15 +287,86 @@ $filas = poblarDatableAll(
     return parseInt(yyyy + mm + dd, 10);
   };
 
-  $(function () {
-    $("#current_table").DataTable({
+  const filtroRapidoSeguimiento = {
+    target: '',
+    value: ''
+  };
+
+  function normalizarEstadoFiltroSeguimiento(estado) {
+    return String(estado || '').trim().toUpperCase();
+  }
+
+  $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+    if (!settings || !settings.nTable || settings.nTable.id !== 'current_table') {
+      return true;
+    }
+
+    const rowData = settings.aoData[dataIndex];
+    const row = rowData ? rowData.nTr : null;
+    if (!row) {
+      return true;
+    }
+
+    if (!filtroRapidoSeguimiento.target || !filtroRapidoSeguimiento.value) {
+      return true;
+    }
+
+    const atributoEstado = filtroRapidoSeguimiento.target === 'presupuesto'
+      ? 'data-estado-presupuesto'
+      : 'data-estado-visita';
+    const estadoFila = normalizarEstadoFiltroSeguimiento(row.getAttribute(atributoEstado));
+
+    return estadoFila === filtroRapidoSeguimiento.value;
+  });
+
+  function aplicarEstadoVisualBotonFiltro($boton, activo) {
+    $boton.toggleClass('is-active', activo);
+    $boton.attr('aria-pressed', activo ? 'true' : 'false');
+  }
+
+  function actualizarBotonesFiltrosRapidosSeguimiento() {
+    const hayBusquedaTexto = String($('#current_table_filter input[type="search"]').val() || '').trim() !== '';
+
+    $('.seguimiento-filtro-btn[data-filter-target]').each(function () {
+      const $boton = $(this);
+      const target = String($boton.data('filter-target') || '').trim();
+      const valor = normalizarEstadoFiltroSeguimiento($boton.data('filter-value'));
+      const activo = target === filtroRapidoSeguimiento.target && valor === filtroRapidoSeguimiento.value;
+      aplicarEstadoVisualBotonFiltro($boton, activo);
+    });
+
+    const sinFiltroActivo = !filtroRapidoSeguimiento.target || !filtroRapidoSeguimiento.value;
+    $('[data-filter-reset="all"]').each(function () {
+      aplicarEstadoVisualBotonFiltro($(this), sinFiltroActivo && !hayBusquedaTexto);
+    });
+  }
+
+  function aplicarFiltrosRapidosSeguimiento(tabla) {
+    actualizarBotonesFiltrosRapidosSeguimiento();
+    tabla.draw(false);
+  }
+
+  function limpiarBusquedaSeguimiento(tabla) {
+    tabla.search('');
+    $('#current_table_filter input[type="search"]').val('');
+  }
+
+  function inicializarDataTableSeguimiento() {
+    const tabla = $("#current_table").DataTable({
       "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
       "responsive": true,
       "lengthChange": true,
       "autoWidth": false,
       "pageLength": 100,
-      "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
+      "buttons": [
+        { "extend": "copy", "text": "Copiar" },
+        { "extend": "csv", "text": "CSV" },
+        { "extend": "excel", "text": "Excel" },
+        { "extend": "pdf", "text": "PDF" },
+        { "extend": "print", "text": "Imprimir" },
+        { "extend": "colvis", "text": "Columnas" }
+      ],
+      "language": dataTableSeguimientoLanguage,
       "columns": [
         { "width": "1%" },
         { "width": "6%" },  // Ingreso
@@ -210,12 +388,52 @@ $filas = poblarDatableAll(
 
       // Tu orden actual (por Visita/Fecha/Hora) queda igual:
       "order": [[4, "desc"], [5, "asc"], [6, "asc"]]
-    }).buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+    });
+
+    tabla.buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+    return tabla;
+  }
+
+  $(function () {
+    const tablaSeguimiento = inicializarDataTableSeguimiento();
+    window.tablaSeguimientoObra = tablaSeguimiento;
+    actualizarBotonesFiltrosRapidosSeguimiento();
+
+    tablaSeguimiento.on('search.dt', function () {
+      actualizarBotonesFiltrosRapidosSeguimiento();
+    });
+
+    $(document).on('click', '.seguimiento-filtro-btn[data-filter-target]', function () {
+      const $boton = $(this);
+      const target = String($boton.data('filter-target') || '').trim();
+      const valor = normalizarEstadoFiltroSeguimiento($boton.data('filter-value'));
+
+      if (!target || !valor) {
+        return;
+      }
+
+      const mismoFiltroActivo = filtroRapidoSeguimiento.target === target && filtroRapidoSeguimiento.value === valor;
+
+      if (mismoFiltroActivo) {
+        filtroRapidoSeguimiento.target = '';
+        filtroRapidoSeguimiento.value = '';
+      } else {
+        filtroRapidoSeguimiento.target = target;
+        filtroRapidoSeguimiento.value = valor;
+      }
+
+      aplicarFiltrosRapidosSeguimiento(tablaSeguimiento);
+    });
+
+    $(document).on('click', '[data-filter-reset="all"]', function () {
+      filtroRapidoSeguimiento.target = '';
+      filtroRapidoSeguimiento.value = '';
+      limpiarBusquedaSeguimiento(tablaSeguimiento);
+      aplicarFiltrosRapidosSeguimiento(tablaSeguimiento);
+    });
   });
 </script>
 
 </body>
 </html>
 <script src="../07-funciones_js/presupuestosAcciones.js"></script>
-
-
