@@ -9,6 +9,7 @@ require_once $BASE . '/../04-modelo/presupuestoGeneradoModel.php';
 require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosEnviosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
+require_once $BASE . '/../04-modelo/presupuestoComercialLockModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -28,6 +29,27 @@ if (!function_exists('obtenerIdUsuarioSolicitudPresupuesto')) {
         }
 
         return 0;
+    }
+}
+
+if (!function_exists('obtenerPerfilUsuarioSolicitudPresupuesto')) {
+    function obtenerPerfilUsuarioSolicitudPresupuesto(): string
+    {
+        return trim((string)($_SESSION['usuario']['perfil'] ?? ''));
+    }
+}
+
+if (!function_exists('enriquecerRespuestaHistorialComercialPresupuestoParaUsuario')) {
+    function enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(array $respuesta, ?int $idUsuario = null, ?string $perfil = null): array
+    {
+        $idUsuario = $idUsuario ?? obtenerIdUsuarioSolicitudPresupuesto();
+        $perfil = $perfil !== null ? $perfil : obtenerPerfilUsuarioSolicitudPresupuesto();
+
+        return agregarAccionReaperturaDisponibleHistorialComercialPresupuesto(
+            $respuesta,
+            (int)$idUsuario,
+            $perfil
+        );
     }
 }
 
@@ -127,6 +149,18 @@ try {
                 $nombreArchivo = isset($_POST['nombre_archivo']) ? trim((string)$_POST['nombre_archivo']) : '';
                 $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
                 $archivoPdf = $_FILES['documento_pdf'] ?? null;
+
+                $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita(
+                    $idPrevisita,
+                    $idPresupuesto > 0 ? $idPresupuesto : null
+                );
+                if (!empty($bloqueoEdicion['bloqueado'])) {
+                    echo json_encode([
+                        'ok' => false,
+                        'msg' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
 
                 if ($idUsuario <= 0) {
                     echo json_encode(['ok' => false, 'msg' => 'No hay sesi�n de usuario activa.'], JSON_UNESCAPED_UNICODE);
@@ -228,9 +262,11 @@ try {
                 $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
 
                 echo json_encode(
-                    obtenerHistorialComercialPresupuesto(
-                        $idPrevisita,
-                        $idPresupuesto > 0 ? $idPresupuesto : null
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        obtenerHistorialComercialPresupuesto(
+                            $idPrevisita,
+                            $idPresupuesto > 0 ? $idPresupuesto : null
+                        )
                     ),
                     JSON_UNESCAPED_UNICODE
                 );
@@ -246,13 +282,19 @@ try {
                 $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
                 $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
                 $accionComercial = isset($_POST['accion_comercial']) ? (string)$_POST['accion_comercial'] : '';
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
 
                 echo json_encode(
-                    registrarEstadoComercialPresupuesto(
-                        $idPrevisita,
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        registrarEstadoComercialPresupuesto(
+                            $idPrevisita,
+                            $idUsuario,
+                            $accionComercial,
+                            $idPresupuesto > 0 ? $idPresupuesto : null,
+                            $comentarios
+                        ),
                         $idUsuario,
-                        $accionComercial,
-                        $idPresupuesto > 0 ? $idPresupuesto : null
+                        obtenerPerfilUsuarioSolicitudPresupuesto()
                     ),
                     JSON_UNESCAPED_UNICODE
                 );
@@ -268,13 +310,45 @@ try {
                 $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
                 $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
                 $accionContacto = isset($_POST['accion_comercial']) ? (string)$_POST['accion_comercial'] : '';
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
 
                 echo json_encode(
-                    registrarContactoComercialPresupuesto(
-                        $idPrevisita,
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        registrarContactoComercialPresupuesto(
+                            $idPrevisita,
+                            $idUsuario,
+                            $accionContacto,
+                            $idPresupuesto > 0 ? $idPresupuesto : null,
+                            $comentarios
+                        ),
                         $idUsuario,
-                        $accionContacto,
-                        $idPresupuesto > 0 ? $idPresupuesto : null
+                        obtenerPerfilUsuarioSolicitudPresupuesto()
+                    ),
+                    JSON_UNESCAPED_UNICODE
+                );
+                exit;
+
+            case 'registrarReaperturaComercialPresupuesto':
+                $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+                if ($idUsuario <= 0) {
+                    echo json_encode(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+
+                $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+                $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+                $comentarios = isset($_POST['comentarios']) ? (string)$_POST['comentarios'] : '';
+
+                echo json_encode(
+                    enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(
+                        registrarReaperturaComercialPresupuesto(
+                            $idPrevisita,
+                            $idUsuario,
+                            $idPresupuesto > 0 ? $idPresupuesto : null,
+                            $comentarios
+                        ),
+                        $idUsuario,
+                        obtenerPerfilUsuarioSolicitudPresupuesto()
                     ),
                     JSON_UNESCAPED_UNICODE
                 );
@@ -465,4 +539,3 @@ $resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea
 } catch (Throwable $e) {
     echo json_encode(['ok' => false, 'msg' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
 }
-

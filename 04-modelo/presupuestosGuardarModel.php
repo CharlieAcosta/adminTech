@@ -3,6 +3,7 @@ session_start();
 //var_dump($_POST); die;
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 include_once '../06-funciones_php/cleanInput.php'; // limpia las variables input
+include_once '../04-modelo/presupuestoComercialLockModel.php';
 
 if(isset($_POST['ajax']) && $_POST['ajax']=='on'){
     include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
@@ -91,6 +92,23 @@ function savePrevisita($metodo){
     $error_file = '';
     $_POST = cleanInput($_POST); // sanitiza las variables
 
+    $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+    $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita($idPrevisita);
+    if (!empty($bloqueoEdicion['bloqueado'])) {
+        $respuesta = [
+            'resultado' => false,
+            'error_file' => '',
+            'msg' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
+        ];
+
+        if($metodo != "ajax"){
+            return false;
+        }
+
+        echo json_encode($respuesta, JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
     $camposValues = "";
 
     if(isset($_POST['provincia_visita'])){
@@ -145,7 +163,7 @@ function savePrevisita($metodo){
     if($metodo != "ajax"){
         return true;
     } else {
-        echo json_encode(array('resultado' => $resultado, 'error_file' => $error_file));
+        echo json_encode(array('resultado' => $resultado, 'error_file' => $error_file, 'msg' => $resultado ? '' : 'No se pudo guardar la pre-visita.'), JSON_UNESCAPED_UNICODE);
     }
 }
 

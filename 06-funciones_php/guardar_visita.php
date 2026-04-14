@@ -12,6 +12,7 @@ file_put_contents('../log/log_fotos.txt', "🔵 _FILES:\n" . print_r($_FILES, tr
 
 include_once '../06-funciones_php/funciones.php';
 include_once '../04-modelo/conectDB.php';
+include_once '../04-modelo/presupuestoComercialLockModel.php';
 $db = conectDB();
 if (!$db) {
     ob_end_clean();
@@ -61,6 +62,15 @@ if (isset($_POST['id_visita'])) {
     $id_visita = intval($_POST['id_previsita']);
 } else {
     echo json_encode(['status' => false, 'mensaje' => 'ID de visita no recibido.']);
+    exit;
+}
+
+$bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$id_visita);
+if (!empty($bloqueoEdicion['bloqueado'])) {
+    echo json_encode([
+        'status' => false,
+        'mensaje' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

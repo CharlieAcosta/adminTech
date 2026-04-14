@@ -1,3 +1,6 @@
+-- Ejecutar una sola vez en ambientes donde presupuesto_historial_comercial
+-- todavia no tenga contemplada la accion reabierto en el ENUM accion.
+
 ALTER TABLE presupuesto_historial_comercial
 MODIFY accion ENUM(
     'enviado',
@@ -10,5 +13,8 @@ MODIFY accion ENUM(
     'mail_contacto',
     'mensaje_contacto',
     'pendiente_respuesta',
-    'respondio'
+    'respondio',
+    'reabierto'
 ) NOT NULL;
+
+SHOW COLUMNS FROM presupuesto_historial_comercial LIKE 'accion';

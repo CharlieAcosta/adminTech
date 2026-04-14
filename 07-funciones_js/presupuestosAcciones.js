@@ -1,5 +1,5 @@
 // presupuestosAcciones.js
-$(document).on("click",".v-icon-accion, .v-accion-cancelar, .v-accion-eliminar, .v-accion-ver-todos, .v-accion-estado-comercial, .v-accion-contacto-comercial",function(){
+$(document).on("click",".v-icon-accion, .v-accion-cancelar, .v-accion-eliminar, .v-accion-ver-todos, .v-accion-estado-comercial, .v-accion-contacto-comercial, .v-accion-orden-compra",function(){
     presupuestoAcciones($(this));
 });
 
@@ -179,40 +179,6 @@ function cargarDocumentosEmitidosPresupuesto(idPrevisita) {
     });
 }
 
-function construirHtmlHistorialPresupuesto(items) {
-    if (!Array.isArray(items) || !items.length) {
-        return `
-            <div class="alert alert-light border mb-0">
-                <div class="font-weight-bold mb-1">Sin intervenciones</div>
-                <div class="text-muted">Todavía no se registraron acciones sobre este presupuesto.</div>
-            </div>
-        `;
-    }
-
-    const filas = items.map((item) => `
-        <tr>
-            <td>${escapeHtmlDocumentoEmitido(item.usuario_nombre || '-')}</td>
-            <td>${escapeHtmlDocumentoEmitido(item.accion_label || item.accion || '-')}</td>
-            <td>${escapeHtmlDocumentoEmitido(item.fecha_texto || '-')}</td>
-        </tr>
-    `).join('');
-
-    return `
-        <div class="table-responsive">
-            <table class="table table-sm table-bordered table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>Usuario</th>
-                        <th>Acción</th>
-                        <th>Fecha</th>
-                    </tr>
-                </thead>
-                <tbody>${filas}</tbody>
-            </table>
-        </div>
-    `;
-}
-
 function renderAlertasModalEnviarDocumento(html, tipo = 'info') {
     const clase = {
         info: 'alert-info',
@@ -304,75 +270,17 @@ function resetearModalEnviarDocumentoEmitido() {
     $('#btnEnviarDocumentoEmitido').prop('disabled', false);
 }
 
-function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
-    const $fila = $('#current_table').find(`tbody tr[data-id="${idPrevisita}"]`).first();
-    if (!$fila.length) {
-        return;
-    }
-
-    const $celda = $fila.find('td').eq(7);
-    const normalizado = String(estado || '').trim().toUpperCase();
-    let clase = 'text-secondary';
-    let label = estado || '';
-
-    if (normalizado === 'EMITIDO') {
-        clase = 'text-info';
-        label = 'Emitido';
-    } else if (normalizado === 'ENVIADO') {
-        clase = 'text-primary';
-        label = 'Enviado';
-    } else if (normalizado === 'BORRADOR') {
-        clase = 'text-secondary';
-        label = 'Borrador';
-    }
-
-    $celda.html(`<span class="${clase}"><strong>${escapeHtmlDocumentoEmitido(label)}</strong></span>`);
-}
-
-function cargarHistorialPresupuesto(idPrevisita) {
-    $.ajax({
-        url: '../03-controller/presupuestos_guardar.php',
-        type: 'POST',
-        dataType: 'json',
-        data: {
-            via: 'ajax',
-            funcion: 'listarIntervencionesPresupuesto',
-            id_previsita: idPrevisita
-        },
-        success: function (response) {
-            if (!response || response.ok !== true) {
-                const mensaje = response && response.msg
-                    ? response.msg
-                    : 'No se pudo cargar el historial.';
-                $('#modalHistorialPresupuestoBody').html(
-                    `<div class="alert alert-danger mb-0">${escapeHtmlDocumentoEmitido(mensaje)}</div>`
-                );
-                return;
-            }
-
-            $('#modalHistorialPresupuestoBody').html(
-                construirHtmlHistorialPresupuesto(response.items || [])
-            );
-        },
-        error: function () {
-            $('#modalHistorialPresupuestoBody').html(
-                '<div class="alert alert-danger mb-0">Ocurrió un error al consultar el historial.</div>'
-            );
-        }
-    });
-}
-
 function construirHtmlAccionesHistorialPresupuesto(acciones, idPrevisita, idPresupuesto) {
     if (!Array.isArray(acciones) || !acciones.length) {
-        return '<div class="text-muted text-center w-100">Sin acciones disponibles para el estado actual.</div>';
+        return '';
     }
 
     return acciones.map((accion, index) => `
         <span class="d-inline-flex align-items-center ${index > 0 ? 'ml-3' : ''}">
             ${index > 0 ? '<span class="text-muted mr-3">|</span>' : ''}
             <span
-                class="v-accion-estado-comercial font-weight-bold text-dark"
-                data-accion="estado_comercial_presupuesto"
+                class="v-accion-estado-comercial font-weight-bold ${escapeHtmlDocumentoEmitido(accion.text_class || 'text-dark')}"
+                data-accion="${escapeHtmlDocumentoEmitido(accion.action_handler || 'estado_comercial_presupuesto')}"
                 data-id="${escapeHtmlDocumentoEmitido(idPrevisita)}"
                 data-id-presupuesto="${escapeHtmlDocumentoEmitido(idPresupuesto || '')}"
                 data-estado-comercial="${escapeHtmlDocumentoEmitido(accion.accion || '')}"
@@ -391,28 +299,57 @@ function construirHtmlAccionesContactoHistorialPresupuesto(acciones, idPrevisita
         return '';
     }
 
+    return acciones.map((accion, index) => `
+        <span class="d-inline-flex align-items-center ${index > 0 ? 'ml-3' : ''}">
+            ${index > 0 ? '<span class="text-muted mr-3">|</span>' : ''}
+            <span
+                class="v-accion-contacto-comercial font-weight-bold text-dark"
+                data-accion="contacto_comercial_presupuesto"
+                data-id="${escapeHtmlDocumentoEmitido(idPrevisita)}"
+                data-id-presupuesto="${escapeHtmlDocumentoEmitido(idPresupuesto || '')}"
+                data-estado-comercial="${escapeHtmlDocumentoEmitido(accion.accion || '')}"
+                data-confirm-title="${escapeHtmlDocumentoEmitido(accion.confirm_title || 'Registrar contacto comercial')}"
+                data-confirm-text="${escapeHtmlDocumentoEmitido(accion.confirm_text || 'Se va a registrar un nuevo contacto comercial sobre este presupuesto.')}"
+                style="cursor:pointer;"
+            >
+                <i class="v-icon-accion ${escapeHtmlDocumentoEmitido(accion.icon || 'fas fa-comment-alt')} mr-1"></i>${escapeHtmlDocumentoEmitido(accion.label || accion.accion || 'Accion')}
+            </span>
+        </span>
+    `).join('');
+}
+
+function construirHtmlComentariosHistorialPresupuesto(comentarios) {
+    const texto = String(comentarios || '').trim();
+
+    if (!texto) {
+        return '<span class="text-muted">-</span>';
+    }
+
+    return `<div class="text-break small" style="white-space: pre-wrap; min-width: 260px;">${escapeHtmlDocumentoEmitido(texto)}</div>`;
+}
+
+function habilitarAccionOrdenCompraHistorialPresupuesto(response) {
+    const idPresupuesto = Number(response && response.id_presupuesto ? response.id_presupuesto : 0) || 0;
+    const estadoActual = String(
+        (response && (response.estado_comercial_activo || response.estado_actual || '')) || ''
+    ).trim().toUpperCase();
+
+    return idPresupuesto > 0 && estadoActual === 'APROBADO';
+}
+
+function construirHtmlAccionOrdenCompraHistorialPresupuesto(conSeparador = false) {
     return `
-        <div class="mt-2">
-            <div class="d-flex flex-wrap justify-content-center align-items-center text-center">
-                ${acciones.map((accion, index) => `
-                    <span class="d-inline-flex align-items-center ${index > 0 ? 'ml-3' : ''}">
-                        ${index > 0 ? '<span class="text-muted mr-3">|</span>' : ''}
-                        <span
-                            class="v-accion-contacto-comercial font-weight-bold text-dark"
-                            data-accion="contacto_comercial_presupuesto"
-                            data-id="${escapeHtmlDocumentoEmitido(idPrevisita)}"
-                            data-id-presupuesto="${escapeHtmlDocumentoEmitido(idPresupuesto || '')}"
-                            data-estado-comercial="${escapeHtmlDocumentoEmitido(accion.accion || '')}"
-                            data-confirm-title="${escapeHtmlDocumentoEmitido(accion.confirm_title || 'Registrar contacto comercial')}"
-                            data-confirm-text="${escapeHtmlDocumentoEmitido(accion.confirm_text || 'Se va a registrar un nuevo contacto comercial sobre este presupuesto.')}"
-                            style="cursor:pointer;"
-                        >
-                            <i class="v-icon-accion ${escapeHtmlDocumentoEmitido(accion.icon || 'fas fa-comment-alt')} mr-1"></i>${escapeHtmlDocumentoEmitido(accion.label || accion.accion || 'Accion')}
-                        </span>
-                    </span>
-                `).join('')}
-            </div>
-        </div>
+        <span class="d-inline-flex align-items-center ${conSeparador ? 'ml-3' : ''}">
+            ${conSeparador ? '<span class="text-muted mr-3">|</span>' : ''}
+            <span
+                class="v-accion-orden-compra font-weight-bold text-success"
+                data-accion="orden_compra_presupuesto"
+                title="Orden de compra"
+                style="cursor:pointer;"
+            >
+                <i class="fas fa-file-invoice mr-1"></i>OC
+            </span>
+        </span>
     `;
 }
 
@@ -420,7 +357,7 @@ function construirHtmlHistorialPresupuesto(response) {
     const items = Array.isArray(response && response.items) ? response.items : [];
     const idPrevisita = Number(response && response.id_previsita ? response.id_previsita : 0) || '';
     const idPresupuesto = Number(response && response.id_presupuesto ? response.id_presupuesto : 0) || '';
-    const accionesHtml = construirHtmlAccionesHistorialPresupuesto(
+    const accionesEstadoHtml = construirHtmlAccionesHistorialPresupuesto(
         response && response.acciones_disponibles ? response.acciones_disponibles : [],
         idPrevisita,
         idPresupuesto
@@ -430,23 +367,44 @@ function construirHtmlHistorialPresupuesto(response) {
         idPrevisita,
         idPresupuesto
     );
+    const accionOrdenCompraHtml = habilitarAccionOrdenCompraHistorialPresupuesto(response)
+        ? construirHtmlAccionOrdenCompraHistorialPresupuesto(Boolean(accionesContactoHtml))
+        : '';
+    const bloqueAccionesHtml = (accionesEstadoHtml || accionesContactoHtml || accionOrdenCompraHtml) ? `
+        <div class="mb-3 pb-2 border-bottom">
+            ${accionesEstadoHtml ? `
+                <div class="d-flex flex-wrap justify-content-center align-items-center text-center">
+                    ${accionesEstadoHtml}
+                </div>
+            ` : ''}
+            ${(accionesContactoHtml || accionOrdenCompraHtml) ? `
+                <div class="${accionesEstadoHtml ? 'mt-2' : ''}">
+                    <div class="d-flex flex-wrap justify-content-center align-items-center text-center">
+                        ${accionesContactoHtml}${accionOrdenCompraHtml}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    ` : '';
 
     const historialHtml = items.length ? `
         <div class="table-responsive">
             <table class="table table-sm table-bordered table-hover mb-0">
-                <thead>
+                <thead class="thead-light">
                     <tr>
+                        <th>Fecha</th>
                         <th>Usuario</th>
                         <th>Accion</th>
-                        <th>Fecha</th>
+                        <th>Comentarios</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${items.map((item) => `
                         <tr>
+                            <td>${escapeHtmlDocumentoEmitido(item.fecha_texto || '-')}</td>
                             <td>${escapeHtmlDocumentoEmitido(item.usuario_nombre || '-')}</td>
                             <td>${escapeHtmlDocumentoEmitido(item.accion_label || item.accion || '-')}</td>
-                            <td>${escapeHtmlDocumentoEmitido(item.fecha_texto || '-')}</td>
+                            <td>${construirHtmlComentariosHistorialPresupuesto(item.comentarios || '')}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -460,49 +418,149 @@ function construirHtmlHistorialPresupuesto(response) {
     `;
 
     return `
-        <div class="mb-3 pb-2 border-bottom">
-            <div class="d-flex flex-wrap justify-content-center align-items-center text-center">${accionesHtml}</div>
-            ${accionesContactoHtml}
-        </div>
+        ${bloqueAccionesHtml}
         ${historialHtml}
     `;
 }
 
 function resolverEstadoPresupuestoVisual(estado) {
-    const normalizado = String(estado || '').trim().toUpperCase();
+    let normalizado = String(estado || '').trim().toUpperCase();
+    if (normalizado === 'IMPRESO') {
+        normalizado = 'EMITIDO';
+    }
+
     let clase = 'text-secondary';
+    let badgeClass = 'badge-secondary';
     let label = estado || '';
 
     if (normalizado === 'EMITIDO') {
         clase = 'text-info';
+        badgeClass = 'badge-info';
         label = 'Emitido';
     } else if (normalizado === 'ENVIADO') {
         clase = 'text-primary';
+        badgeClass = 'badge-primary';
         label = 'Enviado';
     } else if (normalizado === 'RECIBIDO') {
         clase = 'text-success';
+        badgeClass = 'badge-success';
         label = 'Recibido';
     } else if (normalizado === 'RESOLICITADO') {
         clase = 'text-warning';
+        badgeClass = 'badge-warning';
         label = 'Resolicitado';
     } else if (normalizado === 'APROBADO') {
         clase = 'text-success';
+        badgeClass = 'badge-success';
         label = 'Aprobado';
     } else if (normalizado === 'RECHAZADO') {
         clase = 'text-danger';
+        badgeClass = 'badge-danger';
         label = 'Rechazado';
     } else if (normalizado === 'CANCELADO') {
         clase = 'text-dark';
+        badgeClass = 'badge-dark';
         label = 'Cancelado';
     } else if (normalizado === 'PENDIENTE') {
         clase = 'text-danger';
+        badgeClass = 'badge-danger';
         label = 'Pendiente';
     } else if (normalizado === 'BORRADOR') {
         clase = 'text-secondary';
+        badgeClass = 'badge-secondary';
         label = 'Borrador';
     }
 
-    return { clase, label, normalizado };
+    return { clase, badgeClass, label, normalizado };
+}
+
+function renderizarBadgeEstadoListado(label, badgeClass) {
+    if (!label) {
+        return '';
+    }
+
+    const clases = ['badge', 'badge-pill', 'estado-chip'];
+    if (badgeClass) {
+        clases.push(badgeClass);
+    }
+
+    return `<span class="${clases.join(' ')}">${escapeHtmlDocumentoEmitido(label)}</span>`;
+}
+
+function estadoBloqueaEdicionComercialPresupuestoListado(estado) {
+    const normalizado = String(estado || '').trim().toUpperCase();
+    return ['APROBADO', 'RECHAZADO', 'CANCELADO'].includes(normalizado);
+}
+
+function actualizarAccionEditarListado($fila, estado) {
+    if (!$fila || !$fila.length) {
+        return;
+    }
+
+    const $iconoVisual = $fila.find('.fa-eye[data-accion="visual"]').first();
+    const $iconoEditar = $fila.find('.fa-edit[data-accion="editar"]').first();
+    if (!$iconoVisual.length) {
+        return;
+    }
+
+    const visual = resolverEstadoPresupuestoVisual(estado);
+    const bloqueado = estadoBloqueaEdicionComercialPresupuestoListado(visual.normalizado);
+    const mensajeBloqueo = bloqueado
+        ? `La edicion de la visita y del presupuesto esta bloqueada porque el circuito comercial esta en ${visual.label || visual.normalizado}.`
+        : 'Visualizar';
+
+    $iconoVisual
+        .attr('data-bloqueo-comercial', bloqueado ? '1' : '0')
+        .attr('data-estado-bloqueo', bloqueado ? (visual.label || '') : '')
+        .attr('title', mensajeBloqueo);
+
+    if ($.fn.tooltip) {
+        $iconoVisual.tooltip('dispose');
+        $iconoVisual.tooltip({
+            container: 'body',
+            trigger: 'hover',
+            boundary: 'window'
+        });
+    }
+
+    if (bloqueado) {
+        if ($iconoEditar.length) {
+            if ($.fn.tooltip) {
+                $iconoEditar.tooltip('dispose');
+            }
+            $iconoEditar.remove();
+        }
+        return;
+    }
+
+    if ($iconoEditar.length) {
+        $iconoEditar
+            .attr('data-bloqueo-comercial', '0')
+            .attr('data-estado-bloqueo', '')
+            .attr('title', 'Editar')
+            .removeClass('text-muted');
+
+        if ($.fn.tooltip) {
+            $iconoEditar.tooltip('dispose');
+            $iconoEditar.tooltip({
+                container: 'body',
+                trigger: 'hover',
+                boundary: 'window'
+            });
+        }
+        return;
+    }
+
+    const $nuevoEditar = $('<i class="v-icon-accion p-1 fas fa-edit" data-accion="editar" data-bloqueo-comercial="0" data-estado-bloqueo="" data-toggle="tooltip" title="Editar"></i>');
+    $iconoVisual.after($nuevoEditar);
+
+    if ($.fn.tooltip) {
+        $nuevoEditar.tooltip({
+            container: 'body',
+            trigger: 'hover',
+            boundary: 'window'
+        });
+    }
 }
 
 function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
@@ -514,7 +572,15 @@ function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
     const $celda = $fila.find('td').eq(7);
     const visual = resolverEstadoPresupuestoVisual(estado);
 
-    $celda.html(`<span class="${visual.clase}"><strong>${escapeHtmlDocumentoEmitido(visual.label)}</strong></span>`);
+    $fila.attr('data-estado-presupuesto', visual.normalizado || '');
+    $celda.html(renderizarBadgeEstadoListado(visual.label, visual.badgeClass));
+    actualizarAccionEditarListado($fila, visual.normalizado);
+
+    if ($.fn.dataTable && $.fn.dataTable.isDataTable('#current_table')) {
+        const tabla = $('#current_table').DataTable();
+        tabla.row($fila).invalidate('dom');
+        tabla.draw(false);
+    }
 }
 
 function obtenerFilaListadoPresupuesto(idPrevisita) {
@@ -677,6 +743,106 @@ function cargarHistorialPresupuesto(idPrevisita) {
     });
 }
 
+function liberarFocusTrapModalBootstrapTemporalmente($modal) {
+    const $modalActivo = $modal && $modal.length ? $modal : $('#modalHistorialPresupuesto');
+
+    if (!$modalActivo.length || !$modalActivo.hasClass('show')) {
+        return null;
+    }
+
+    const instanciaModal = $modalActivo.data('bs.modal');
+
+    $(document).off('focusin.bs.modal');
+
+    return () => {
+        if (!$modalActivo.hasClass('show')) {
+            return;
+        }
+
+        const instanciaActual = $modalActivo.data('bs.modal') || instanciaModal;
+
+        if (instanciaActual && typeof instanciaActual._enforceFocus === 'function') {
+            instanciaActual._enforceFocus();
+            return;
+        }
+
+        if (instanciaActual && typeof instanciaActual.enforceFocus === 'function') {
+            instanciaActual.enforceFocus();
+            return;
+        }
+
+        $modalActivo.trigger('focus');
+    };
+}
+
+function solicitarComentariosAccionHistorialPresupuesto(titulo, texto, onConfirm) {
+    const ejecutar = (comentarios) => {
+        if (typeof onConfirm === 'function') {
+            onConfirm(String(comentarios || '').trim());
+        }
+    };
+
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+        const respuesta = window.prompt(`${texto}\n\nComentario (opcional):`, '');
+        if (respuesta === null) {
+            return;
+        }
+
+        ejecutar(respuesta);
+        return;
+    }
+
+    const restaurarFocusModal = liberarFocusTrapModalBootstrapTemporalmente($('#modalHistorialPresupuesto'));
+
+    Swal.fire({
+        icon: 'question',
+        title: titulo,
+        text: texto,
+        input: 'textarea',
+        inputLabel: 'Comentarios',
+        inputPlaceholder: 'Agregar comentario sobre esta acción (opcional)',
+        inputAttributes: {
+            maxlength: '2000',
+            autocapitalize: 'off'
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Guardar',
+        cancelButtonText: 'Cancelar',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            const input = Swal.getInput();
+
+            if (!input) {
+                return;
+            }
+
+            input.readOnly = false;
+            input.disabled = false;
+
+            window.setTimeout(() => {
+                input.focus();
+
+                if (typeof input.setSelectionRange === 'function') {
+                    const largo = input.value ? input.value.length : 0;
+                    input.setSelectionRange(largo, largo);
+                }
+            }, 50);
+        },
+        willClose: () => {
+            if (typeof restaurarFocusModal === 'function') {
+                restaurarFocusModal();
+            }
+        }
+    }).then((result) => {
+        if (!result.isConfirmed) {
+            return;
+        }
+
+        ejecutar(result.value || '');
+    });
+}
+
 function abrirModalEnvioDocumentoEmitido(idDocumentoEmitido) {
     resetearModalEnviarDocumentoEmitido();
     $('#modalEnviarDocumentoEmitidoPresupuesto').modal('show');
@@ -742,6 +908,15 @@ function abrirModalEnvioDocumentoEmitido(idDocumentoEmitido) {
 }
 
 function presupuestoAcciones(elemento){
+      elemento = $(elemento);
+      const accionable = elemento.is('[data-accion]')
+            ? elemento
+            : elemento.closest('[data-accion]');
+
+      if (accionable.length) {
+            elemento = accionable;
+      }
+
       switch($(elemento).data('accion')) {
 
             case 'visual': // ver el presupuesto por pantalla
@@ -750,6 +925,27 @@ function presupuestoAcciones(elemento){
             break;
 
             case 'editar': // editar el presupuesto
+                if (String($(elemento).data('bloqueo-comercial') || '0') === '1') {
+                    const estadoBloqueo = String($(elemento).data('estado-bloqueo') || '').trim();
+                    const mensajeBloqueo = estadoBloqueo
+                        ? `La edicion esta bloqueada porque el circuito comercial esta en ${estadoBloqueo}.`
+                        : 'La edicion esta bloqueada por el estado comercial actual.';
+
+                    if (window.Swal && typeof Swal.fire === 'function') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Edicion bloqueada',
+                            text: mensajeBloqueo,
+                            confirmButtonText: 'OK'
+                        });
+                    } else if (typeof mostrarAdvertencia === 'function') {
+                        mostrarAdvertencia(mensajeBloqueo, 4);
+                    } else {
+                        window.alert(mensajeBloqueo);
+                    }
+                    break;
+                }
+
                 var id = $(elemento).closest('tr').data('id');
                 window.location.href='seguimiento_form.php?acci=e&id='+id;
             break;
@@ -852,7 +1048,7 @@ function presupuestoAcciones(elemento){
                     break;
                 }
 
-                const ejecutarActualizacionEstadoComercial = () => {
+                const ejecutarActualizacionEstadoComercial = (comentarios) => {
                     Swal.fire({
                         title: 'Actualizando historial...',
                         allowOutsideClick: false,
@@ -872,6 +1068,7 @@ function presupuestoAcciones(elemento){
                             id_previsita: idPrevisitaEstado,
                             id_presupuesto: idPresupuestoEstado,
                             accion_comercial: accionComercial,
+                            comentarios: comentarios || '',
                             id_usuario: window.ACTIVE_USER_ID || 0
                         },
                         success: function (response) {
@@ -937,36 +1134,11 @@ function presupuestoAcciones(elemento){
                     });
                 };
 
-                if (typeof mostrarConfirmacion === 'function') {
-                    mostrarConfirmacion(
-                        confirmText,
-                        ejecutarActualizacionEstadoComercial,
-                        null,
-                        'AD',
-                        'Confirmar',
-                        'Cancelar',
-                        confirmTitle,
-                        false,
-                        false
-                    );
-                } else {
-                    Swal.fire({
-                        icon: 'question',
-                        title: confirmTitle,
-                        text: confirmText,
-                        showCancelButton: true,
-                        confirmButtonText: 'Confirmar',
-                        cancelButtonText: 'Cancelar',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false
-                    }).then((result) => {
-                        if (!result.isConfirmed) {
-                            return;
-                        }
-
-                        ejecutarActualizacionEstadoComercial();
-                    });
-                }
+                solicitarComentariosAccionHistorialPresupuesto(
+                    confirmTitle,
+                    confirmText,
+                    ejecutarActualizacionEstadoComercial
+                );
             break;
 
             case 'contacto_comercial_presupuesto':
@@ -984,11 +1156,18 @@ function presupuestoAcciones(elemento){
                             'ACCION NO DISPONIBLE',
                             'OK'
                         );
+                    } else if (window.Swal && typeof Swal.fire === 'function') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Accion no disponible',
+                            text: 'No se pudo identificar el presupuesto sobre el que queres registrar el contacto.',
+                            confirmButtonText: 'OK'
+                        });
                     }
                     break;
                 }
 
-                const ejecutarRegistroContactoComercial = () => {
+                const ejecutarRegistroContactoComercial = (comentarios) => {
                     Swal.fire({
                         title: 'Registrando contacto...',
                         allowOutsideClick: false,
@@ -1008,6 +1187,7 @@ function presupuestoAcciones(elemento){
                             id_previsita: idPrevisitaContacto,
                             id_presupuesto: idPresupuestoContacto,
                             accion_comercial: accionContacto,
+                            comentarios: comentarios || '',
                             id_usuario: window.ACTIVE_USER_ID || 0
                         },
                         success: function (response) {
@@ -1023,6 +1203,13 @@ function presupuestoAcciones(elemento){
                                         'NO SE PUDO REGISTRAR EL CONTACTO',
                                         'OK'
                                     );
+                                } else if (window.Swal && typeof Swal.fire === 'function') {
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'No se pudo registrar el contacto',
+                                        text: mensajeErrorContacto,
+                                        confirmButtonText: 'OK'
+                                    });
                                 }
                                 return;
                             }
@@ -1037,6 +1224,13 @@ function presupuestoAcciones(elemento){
                                     'CONTACTO REGISTRADO',
                                     'OK'
                                 );
+                            } else if (window.Swal && typeof Swal.fire === 'function') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Contacto registrado',
+                                    text: response.msg || 'El contacto comercial se registro correctamente.',
+                                    confirmButtonText: 'OK'
+                                });
                             }
                         },
                         error: function () {
@@ -1047,25 +1241,125 @@ function presupuestoAcciones(elemento){
                                     'NO SE PUDO REGISTRAR EL CONTACTO',
                                     'OK'
                                 );
+                            } else if (window.Swal && typeof Swal.fire === 'function') {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'No se pudo registrar el contacto',
+                                    text: 'Ocurrio un error al registrar el contacto comercial.',
+                                    confirmButtonText: 'OK'
+                                });
                             }
                         }
                     });
                 };
 
-                if (typeof mostrarConfirmacion === 'function') {
-                    mostrarConfirmacion(
-                        confirmTextContacto,
-                        ejecutarRegistroContactoComercial,
-                        null,
+                solicitarComentariosAccionHistorialPresupuesto(
+                    confirmTitleContacto,
+                    confirmTextContacto,
+                    ejecutarRegistroContactoComercial
+                );
+            break;
+
+            case 'reabrir_comercial_presupuesto':
+                var idPrevisitaReapertura = Number($(elemento).data('id') || $('#modalHistorialPresupuesto').data('id') || 0);
+                var idPresupuestoReapertura = Number($(elemento).data('id-presupuesto') || $('#modalHistorialPresupuesto').data('id-presupuesto') || 0);
+                var confirmTitleReapertura = String($(elemento).data('confirm-title') || 'Reabrir presupuesto');
+                var confirmTextReapertura = String($(elemento).data('confirm-text') || 'Se va a reabrir el circuito comercial del presupuesto.');
+
+                if (!idPrevisitaReapertura) {
+                    if (window.Swal && typeof Swal.fire === 'function') {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Accion no disponible',
+                            text: 'No se pudo identificar el presupuesto que queres reabrir.',
+                            confirmButtonText: 'OK'
+                        });
+                    }
+                    break;
+                }
+
+                const ejecutarReaperturaComercial = (comentarios) => {
+                    Swal.fire({
+                        title: 'Reabriendo circuito...',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+
+                    $.ajax({
+                        url: '../03-controller/presupuestos_guardar.php',
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            via: 'ajax',
+                            funcion: 'registrarReaperturaComercialPresupuesto',
+                            id_previsita: idPrevisitaReapertura,
+                            id_presupuesto: idPresupuestoReapertura,
+                            comentarios: comentarios || '',
+                            id_usuario: window.ACTIVE_USER_ID || 0
+                        },
+                        success: function (response) {
+                            if (!response || response.ok !== true) {
+                                const mensajeErrorReapertura = response && response.msg
+                                    ? response.msg
+                                    : 'Ocurrio un error al reabrir el circuito comercial.';
+
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'No se pudo reabrir el circuito',
+                                    text: mensajeErrorReapertura,
+                                    confirmButtonText: 'OK'
+                                });
+                                return;
+                            }
+
+                            actualizarEstadoPresupuestoListado(idPrevisitaReapertura, response.estado_actual || '');
+                            cargarHistorialPresupuesto(idPrevisitaReapertura);
+
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Circuito reabierto',
+                                text: response.msg || 'El circuito comercial se reabrio correctamente.',
+                                confirmButtonText: 'OK'
+                            });
+                        },
+                        error: function () {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'No se pudo reabrir el circuito',
+                                text: 'Ocurrio un error al reabrir el circuito comercial.',
+                                confirmButtonText: 'OK'
+                            });
+                        }
+                    });
+                };
+
+                solicitarComentariosAccionHistorialPresupuesto(
+                    confirmTitleReapertura,
+                    confirmTextReapertura,
+                    ejecutarReaperturaComercial
+                );
+            break;
+
+            case 'orden_compra_presupuesto':
+                if (typeof mostrarMensajeConfirmable === 'function') {
+                    mostrarMensajeConfirmable(
+                        'El circuito de orden de compra todavia esta en desarrollo.',
                         'AD',
-                        'Confirmar',
-                        'Cancelar',
-                        confirmTitleContacto,
-                        false,
-                        false
+                        'ORDEN DE COMPRA',
+                        'OK'
                     );
+                } else if (window.Swal && typeof Swal.fire === 'function') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Orden de compra',
+                        text: 'El circuito de orden de compra todavia esta en desarrollo.',
+                        confirmButtonText: 'OK'
+                    });
                 } else {
-                    ejecutarRegistroContactoComercial();
+                    window.alert('El circuito de orden de compra todavia esta en desarrollo.');
                 }
             break;
 
@@ -1361,6 +1655,7 @@ $(document).on('hidden.bs.modal', '#modalDocumentosEmitidosPresupuesto', functio
 });
 
 $(document).on('hidden.bs.modal', '#modalHistorialPresupuesto', function(){
+    $(this).removeData('id').removeData('id-presupuesto');
     $('#modalHistorialContexto').removeData('base-context').html('');
     $('#modalHistorialPresupuestoBody').html('<div class="text-muted">Cargando historial...</div>');
 });

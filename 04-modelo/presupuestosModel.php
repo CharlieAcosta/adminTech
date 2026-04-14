@@ -77,20 +77,28 @@ function modGetAllRegistros($filtro){
          id_previsita,
          id_presupuesto,
          SUM(CASE WHEN modo_circuito = 'simulacion' THEN 1 ELSE 0 END) AS total_historial_comercial_simulacion,
-         SUM(CASE WHEN modo_circuito = 'smtp' THEN 1 ELSE 0 END) AS total_historial_comercial_smtp
+         SUM(CASE WHEN modo_circuito = 'smtp' THEN 1 ELSE 0 END) AS total_historial_comercial_smtp,
+         MAX(CASE WHEN modo_circuito = 'simulacion' THEN id_historial_comercial ELSE 0 END) AS ultimo_historial_comercial_simulacion,
+         MAX(CASE WHEN modo_circuito = 'smtp' THEN id_historial_comercial ELSE 0 END) AS ultimo_historial_comercial_smtp
       FROM presupuesto_historial_comercial
       GROUP BY id_previsita, id_presupuesto
    ) AS hc ON hc.id_previsita = v.id_previsita
-          AND hc.id_presupuesto = p.id_presupuesto"
+          AND hc.id_presupuesto = p.id_presupuesto
+   LEFT JOIN presupuesto_historial_comercial AS hcs ON hcs.id_historial_comercial = hc.ultimo_historial_comercial_simulacion
+   LEFT JOIN presupuesto_historial_comercial AS hcm ON hcm.id_historial_comercial = hc.ultimo_historial_comercial_smtp"
       : '';
 
    $selectHistorialComercial = $tieneTablaHistorialComercial
       ? "
       COALESCE(hc.total_historial_comercial_simulacion, 0) AS total_historial_comercial_simulacion,
-      COALESCE(hc.total_historial_comercial_smtp, 0) AS total_historial_comercial_smtp"
+      COALESCE(hc.total_historial_comercial_smtp, 0) AS total_historial_comercial_smtp,
+      COALESCE(hcs.estado_resultante, '') AS ultimo_estado_historial_comercial_simulacion,
+      COALESCE(hcm.estado_resultante, '') AS ultimo_estado_historial_comercial_smtp"
       : "
       0 AS total_historial_comercial_simulacion,
-      0 AS total_historial_comercial_smtp";
+      0 AS total_historial_comercial_smtp,
+      '' AS ultimo_estado_historial_comercial_simulacion,
+      '' AS ultimo_estado_historial_comercial_smtp";
 
    $query = "
    SELECT 

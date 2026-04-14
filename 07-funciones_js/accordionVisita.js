@@ -32,6 +32,37 @@ $(document).ready(function() {
     window.marcarPresupuestoComoModificado = marcarPresupuestoComoModificado;
     window.marcarPresupuestoComoGuardado = marcarPresupuestoComoGuardado;
 
+    function edicionComercialBloqueada() {
+      if (typeof window.obtenerBloqueoEdicionComercialSeguimiento !== 'function') {
+        return false;
+      }
+      const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+      return !!(bloqueo && bloqueo.bloqueado);
+    }
+
+    function mostrarAlertaBloqueoEdicionComercial() {
+      const mensaje = typeof window.mensajeBloqueoEdicionComercialSeguimiento === 'function'
+        ? window.mensajeBloqueoEdicionComercialSeguimiento()
+        : 'La edicion del seguimiento esta bloqueada por el estado comercial actual.';
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Edicion bloqueada',
+          text: mensaje,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (typeof mostrarAdvertencia === 'function') {
+        mostrarAdvertencia(mensaje, 4);
+        return;
+      }
+
+      window.alert(mensaje);
+    }
+
 
     // === Vista detallada por usuario (sin ojito) ===
     // IDs habilitados a ver utilidades/porcentajes/“vista completa”
@@ -85,7 +116,7 @@ $(document).ready(function() {
         // - No estamos en modo visualización (modoVisualizacion === false)
         // - **No existe presupuesto generado** (!presupuestoGenerado)
       
-        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado;
+        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado && !edicionComercialBloqueada();
       
         const $btn = $('#btn-generar-presupuesto');
         if ($btn.length) {
@@ -913,6 +944,11 @@ $(document).ready(function() {
     
     // Botón: Generar Presupuesto
     $(document).on('click', '.btn-generar-presupuesto', function() {
+      if (edicionComercialBloqueada()) {
+        mostrarAlertaBloqueoEdicionComercial();
+        return;
+      }
+
       presupuestoGenerado = true; 
       // 1. Si no existe el accordion, lo crea usando el template
       if ($('#accordionPresupuesto').length === 0) {
@@ -1109,6 +1145,44 @@ $(document).ready(function() {
     hayCambios = false;
     controlarBotonGenerarPresupuesto(); 
     
+    function obtenerTextoVisibleSelect(selector, placeholders = []) {
+      const $select = $(selector).first();
+      if (!$select.length) return '';
+
+      const invalidos = new Set(
+        ['']
+          .concat(placeholders || [])
+          .map((item) => String(item ?? '').replace(/\s+/g, ' ').trim())
+      );
+
+      const candidatos = [];
+
+      const textoSeleccionado = String($select.find('option:selected').text() || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (textoSeleccionado) {
+        candidatos.push(textoSeleccionado);
+      }
+
+      const selectId = String($select.attr('id') || '').trim();
+      if (selectId !== '') {
+        const textoSelect2 = String($(`#select2-${selectId}-container`).first().text() || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (textoSelect2) {
+          candidatos.push(textoSelect2);
+        }
+      }
+
+      for (const texto of candidatos) {
+        if (texto && !invalidos.has(texto)) {
+          return texto;
+        }
+      }
+
+      return '';
+    }
+
     // ======= Obtiene los datos para el presupuesto =======
     function recolectarDatosParaPresupuesto() {
       // === CLIENTE ===
@@ -1118,11 +1192,11 @@ $(document).ready(function() {
       const email = $('#email_contacto_obra').val() || null;
       const telefono = $('#tel_contacto_obra').val() || null;
 
-      const calle = $('#select2-calle_visita-container').text().trim();
+      const calle = obtenerTextoVisibleSelect('#calle_visita', ['Calle']);
       const altura = $('#altura_visita').val()?.trim() || '';
-      const localidad = $('#select2-localidad_visita-container').text().trim();
-      const partido = $('#select2-partido_visita-container').text().trim();
-      const provincia = $('#select2-provincia_visita-container').text().trim();
+      const localidad = obtenerTextoVisibleSelect('#localidad_visita', ['Localidad']);
+      const partido = obtenerTextoVisibleSelect('#partido_visita', ['Partido']);
+      const provincia = obtenerTextoVisibleSelect('#provincia_visita', ['Provincia']);
       const cp = $('#cp_visita').val()?.trim() || '';
 
       const direccion = [calle, altura, localidad, partido, provincia, cp].filter(Boolean).join(', ');
@@ -1685,6 +1759,9 @@ $(document).ready(function() {
 
        const claseUtilidades = mostrarVistaDetallada ? '' : 'd-none';
        const claseImpuestos  = mostrarVistaDetallada ? '' : 'd-none';
+      const detalleEditorHtml = (typeof window.renderDetalleTareaEditorHtml === 'function')
+        ? window.renderDetalleTareaEditorHtml(descripcion)
+        : `<textarea class="form-control form-control-sm tarea-descripcion" rows="5">${descripcion}</textarea>`;
 
       const htmlTarea = `
         <div class="tarea-card">
@@ -1706,7 +1783,7 @@ $(document).ready(function() {
               <!-- Detalle -->
               <div class="mb-2">
                 <label class="mb-0"><b>Detalle de la tarea</b></label>
-                <textarea class="form-control form-control-sm" rows="5">${descripcion}</textarea>
+                ${detalleEditorHtml}
               </div>
               <!-- Fotos (PRESUPUESTO: dropzone + input oculto, sin “Seleccionar fotos”) -->
               <div class="mb-2 flex-grow-1">
@@ -1913,6 +1990,10 @@ $(document).ready(function() {
         // referencia a la card recién inyectada
         const $cardRecienAgregada = contenedor.find('.tarea-card').last();
 
+        if (typeof window.initDetalleTareaRichEditors === 'function') {
+          window.initDetalleTareaRichEditors($cardRecienAgregada, { triggerInput: false });
+        }
+
         // inputs a controlar
         const $utilMat = $cardRecienAgregada.find('.utilidad-global-materiales');
         const $utilMO  = $cardRecienAgregada.find('.utilidad-global-mano-obra');
@@ -1975,6 +2056,11 @@ $(document).ready(function() {
       .on('click', '#btn-guardar-presupuesto', async function (e) {
       e.preventDefault();
 
+        if (edicionComercialBloqueada()) {
+          mostrarAlertaBloqueoEdicionComercial();
+          return;
+        }
+
         const $btn = $(this);
         $btn.prop('disabled', true);
 
@@ -1992,7 +2078,9 @@ $(document).ready(function() {
             const $card = $(this);
             const nro = index + 1;
 
-            const descripcion       = $card.find('textarea').first().val()?.trim() || '';
+            const descripcion       = (typeof window.obtenerDetalleTareaHtmlDesdeCard === 'function'
+              ? window.obtenerDetalleTareaHtmlDesdeCard($card)
+              : ($card.find('textarea').first().val() || '')).trim();
             const incluir_en_total  = $card.find('.incluir-en-total').is(':checked') ? 1 : 0;
             const utilidad_materiales = parseFloat($card.find('.tarea-materiales .utilidad-global-materiales').val()) || null;
             const utilidad_mano_obra  = parseFloat($card.find('.tarea-mano-obra .utilidad-global-mano-obra').val()) || null;
@@ -2382,6 +2470,21 @@ $(document).ready(function() {
     
       const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
       const $btnEmitir = $('.btn-emitir-presupuesto');
+
+      if (edicionComercialBloqueada()) {
+        $btnGuardar
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-success');
+
+        $btnEmitir
+          .prop('disabled', true)
+          .addClass('btn-secondary')
+          .removeClass('btn-primary');
+
+        return;
+      }
+
       if (hayVencidos) {
         $btnGuardar
           .prop('disabled', true)
@@ -2581,6 +2684,31 @@ $(document).ready(function() {
     })));
   };
 
+  const ajustarFotosDocumentoEmitido = ($scope) => {
+    const paginas = Array.from($scope.find('.print-page-task'));
+    if (!paginas.length) return;
+
+    paginas.forEach((pagina) => {
+      const contenedorFotos = pagina.querySelector('.fotos');
+      if (!contenedorFotos) return;
+
+      const slots = Array.from(contenedorFotos.querySelectorAll('.foto-slot'));
+      if (!slots.length) return;
+
+      const pageRect = pagina.getBoundingClientRect();
+      const fotosRect = contenedorFotos.getBoundingClientRect();
+      const topRelativo = fotosRect.top - pageRect.top;
+      const altoDisponible = Math.floor(A4_HEIGHT_PX - A4_MARGIN_PX - topRelativo);
+
+      if (altoDisponible <= 0) return;
+
+      contenedorFotos.style.maxHeight = `${altoDisponible}px`;
+      slots.forEach((slot) => {
+        slot.style.maxHeight = `${altoDisponible}px`;
+      });
+    });
+  };
+
   const mostrarSwalGenerandoDocumento = () => {
     if (!window.Swal || typeof Swal.fire !== 'function') return;
 
@@ -2691,6 +2819,7 @@ $(document).ready(function() {
     }
 
     await esperarImagenesRender($printRoot);
+    ajustarFotosDocumentoEmitido($printRoot);
     await esperarSiguienteFrame();
 
     const paginas = Array.from(
@@ -2866,6 +2995,11 @@ $(document).ready(function() {
       e.stopPropagation();
       e.stopImmediatePropagation();
 
+      if (edicionComercialBloqueada()) {
+        mostrarAlertaBloqueoEdicionComercial();
+        return false;
+      }
+
       const $btn = $(this);
 
       // Respeta disabled real si el botón lo trae
@@ -2929,11 +3063,9 @@ $(document).ready(function() {
           const t = String(v ?? '').trim();
           return t ? esc(t) : '-';
         };
-        const cleanSelectText = (selector) => {
-          const t = $(selector).text().trim();
-          if (!t) return '';
-          const invalidos = ['Calle', 'Partido', 'Localidad', 'Provincia'];
-          return invalidos.includes(t) ? '' : t;
+        const cleanSelectText = (selector, invalidos = []) => {
+          const texto = obtenerTextoVisibleSelect(selector, invalidos);
+          return texto || '';
         };
         const formatFechaCorta = (fecha) => {
           const t = String(fecha ?? '').trim();
@@ -2949,31 +3081,319 @@ $(document).ready(function() {
             .trim();
           return limpio || '-';
         };
-        const resumirTituloTarea = (texto, fallback) => {
+        const PDF_DETALLE_BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol', 'li']);
+        const normalizarTextoPdfTarea = (texto) => String(texto ?? '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const descomponerContenidoTarea = (texto, fallback) => {
           const limpio = String(texto ?? '').replace(/\s+/g, ' ').trim();
-          if (!limpio) return String(fallback ?? '').toUpperCase();
-
-          const idxPunto = limpio.indexOf('.');
-          if (idxPunto > -1) {
-            return limpio.slice(0, idxPunto).trim().toUpperCase();
+          const fallbackTitulo = String(fallback ?? '').toUpperCase();
+          const limpiarInicioDetalle = (valor) => String(valor ?? '')
+            .replace(/^[\s\.,:\-*]+/, '')
+            .trim();
+          if (!limpio) {
+            return {
+              titulo: fallbackTitulo,
+              detalle: '',
+              detalleDesde: 0
+            };
           }
 
-          const idxComa = limpio.indexOf(',');
-          if (idxComa > -1) {
-            return limpio.slice(0, idxComa).trim().toUpperCase();
+          const delimitadoresConPunto = ['.', ',', '-', '*', ':'];
+          let idxCorte = -1;
+
+          delimitadoresConPunto.forEach((delimitador) => {
+            const idx = limpio.indexOf(delimitador);
+            if (idx > -1 && (idxCorte === -1 || idx < idxCorte)) {
+              idxCorte = idx;
+            }
+          });
+
+          if (idxCorte > -1) {
+            const baseTitulo = limpio.slice(0, idxCorte).trim();
+            let detalleDesde = idxCorte + 1;
+            while (detalleDesde < limpio.length && /[\s\.,:\-*]/.test(limpio.charAt(detalleDesde))) {
+              detalleDesde += 1;
+            }
+            const detalle = limpiarInicioDetalle(limpio.slice(detalleDesde));
+            if (baseTitulo) {
+              return {
+                titulo: `${baseTitulo}.`.toUpperCase(),
+                detalle,
+                detalleDesde
+              };
+            }
+            return {
+              titulo: fallbackTitulo,
+              detalle,
+              detalleDesde
+            };
           }
 
           const palabras = limpio.split(' ').filter(Boolean);
-          if (palabras.length <= 10) {
-            return limpio.toUpperCase();
+          if (!palabras.length) {
+            return {
+              titulo: fallbackTitulo,
+              detalle: '',
+              detalleDesde: 0
+            };
           }
 
-          return `${palabras.slice(0, 10).join(' ').toUpperCase()}...`;
+          let detalleDesde = limpio.length;
+          if (palabras.length > 12) {
+            const matcher = /\S+/g;
+            let contador = 0;
+            let matchPalabra = null;
+
+            while ((matchPalabra = matcher.exec(limpio)) && contador < 12) {
+              contador += 1;
+              detalleDesde = matcher.lastIndex;
+            }
+
+            while (detalleDesde < limpio.length && /\s/.test(limpio.charAt(detalleDesde))) {
+              detalleDesde += 1;
+            }
+          }
+
+          return {
+            titulo: `${palabras.slice(0, 12).join(' ').toUpperCase()}...`,
+            detalle: palabras.slice(12).join(' ').trim(),
+            detalleDesde
+          };
         };
         const limpiarPrefijoTarea = (texto) => String(texto ?? '')
           .replace(/^\s*tarea\s*\d+\s*[:.-]?\s*/i, '')
           .replace(/\s+/g, ' ')
           .trim();
+        const normalizarTextoOrtografico = (texto) => String(texto ?? '')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+([,.;:!?])/g, '$1')
+          .replace(/([,.;:!?])(?=\S)/g, '$1 ')
+          .replace(/\(\s+/g, '(')
+          .replace(/\s+\)/g, ')')
+          .trim();
+        const convertirDetalleTextoAHtml = (texto) => {
+          const limpio = String(texto ?? '').trim();
+          if (!limpio) return '';
+
+          if (typeof window.normalizarTextoPlanoDetalleTarea === 'function') {
+            return window.normalizarTextoPlanoDetalleTarea(limpio);
+          }
+
+          return esc(limpio).replace(/\n/g, '<br>');
+        };
+        const limpiarInicioHtmlDetalle = (html) => {
+          const parser = new window.DOMParser();
+          const doc = parser.parseFromString(`<div>${String(html ?? '')}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+
+          const nodoSinContenido = (node) => {
+            if (!node) return true;
+            if (node.nodeType === window.Node.TEXT_NODE) {
+              return !String(node.textContent || '').trim();
+            }
+            if (node.nodeType !== window.Node.ELEMENT_NODE) {
+              return true;
+            }
+            const tag = String(node.tagName || '').toLowerCase();
+            if (tag === 'br') {
+              return true;
+            }
+            return !String(node.textContent || '').trim();
+          };
+
+          const recortarInicio = (container) => {
+            while (container.firstChild) {
+              const firstChild = container.firstChild;
+
+              if (firstChild.nodeType === window.Node.TEXT_NODE) {
+                const textoRecortado = String(firstChild.textContent || '').replace(/^[\s\.,:\-*]+/u, '');
+                if (textoRecortado) {
+                  firstChild.textContent = textoRecortado;
+                  return;
+                }
+                firstChild.remove();
+                continue;
+              }
+
+              if (firstChild.nodeType !== window.Node.ELEMENT_NODE) {
+                firstChild.remove();
+                continue;
+              }
+
+              const tag = String(firstChild.tagName || '').toLowerCase();
+              if (tag === 'br') {
+                firstChild.remove();
+                continue;
+              }
+
+              recortarInicio(firstChild);
+
+              if (nodoSinContenido(firstChild)) {
+                firstChild.remove();
+                continue;
+              }
+
+              return;
+            }
+          };
+
+          recortarInicio(root);
+          return root.innerHTML.trim();
+        };
+        const extraerDetalleHtmlPreservandoFormato = (html, detalleEsperado, detalleDesde = 0) => {
+          const htmlFuente = /<[^>]+>/.test(String(html ?? ''))
+            ? String(html ?? '')
+            : convertirDetalleTextoAHtml(html);
+          const detalleNormalizado = normalizarTextoPdfTarea(detalleEsperado);
+
+          if (!htmlFuente || !detalleNormalizado) {
+            return '';
+          }
+
+          const parser = new window.DOMParser();
+          const doc = parser.parseFromString(`<div>${htmlFuente}</div>`, 'text/html');
+          const root = doc.body.firstElementChild || doc.body;
+          const posiciones = [];
+          let textoNormalizado = '';
+          let ultimoFueEspacio = true;
+
+          const emitirCaracter = (caracter, posicion) => {
+            const esEspacio = /\s/.test(caracter);
+
+            if (esEspacio) {
+              if (ultimoFueEspacio || !textoNormalizado.length) {
+                return;
+              }
+              textoNormalizado += ' ';
+              posiciones.push({ ...posicion, esEspacio: true });
+              ultimoFueEspacio = true;
+              return;
+            }
+
+            textoNormalizado += caracter;
+            posiciones.push({ ...posicion, esEspacio: false });
+            ultimoFueEspacio = false;
+          };
+
+          const recorrerNodo = (node) => {
+            if (!node) return;
+
+            if (node.nodeType === window.Node.TEXT_NODE) {
+              const contenido = String(node.textContent || '');
+              for (let idx = 0; idx < contenido.length; idx += 1) {
+                emitirCaracter(contenido.charAt(idx), {
+                  tipo: 'texto',
+                  node,
+                  offset: idx + 1
+                });
+              }
+              return;
+            }
+
+            if (node.nodeType !== window.Node.ELEMENT_NODE) {
+              return;
+            }
+
+            const tag = String(node.tagName || '').toLowerCase();
+
+            if (tag === 'br') {
+              emitirCaracter(' ', { tipo: 'despuesNodo', node });
+              return;
+            }
+
+            if (tag === 'li') {
+              emitirCaracter('-', { tipo: 'inicioElemento', node });
+              emitirCaracter(' ', { tipo: 'inicioElemento', node });
+            }
+
+            Array.from(node.childNodes || []).forEach(recorrerNodo);
+
+            if (PDF_DETALLE_BLOCK_TAGS.has(tag)) {
+              emitirCaracter(' ', { tipo: 'despuesNodo', node });
+            }
+          };
+
+          Array.from(root.childNodes || []).forEach(recorrerNodo);
+
+          while (posiciones.length && posiciones[posiciones.length - 1].esEspacio) {
+            posiciones.pop();
+            textoNormalizado = textoNormalizado.slice(0, -1);
+          }
+
+          const coincidenciaPrefijo = textoNormalizado.match(/^tarea\s*\d+\s*[:.-]?\s*/i);
+          const prefijoConsumido = coincidenciaPrefijo ? coincidenciaPrefijo[0].length : 0;
+          const detalleTextoEnHtml = textoNormalizado.slice(prefijoConsumido);
+          const detalleDesdeBase = Math.max(0, (Number(detalleDesde) || 0) - prefijoConsumido);
+          const indiceDetalleReal = detalleTextoEnHtml.indexOf(detalleNormalizado, detalleDesdeBase);
+          const totalConsumido = indiceDetalleReal > -1
+            ? prefijoConsumido + indiceDetalleReal
+            : Math.max(0, Number(detalleDesde) || 0);
+
+          if (totalConsumido <= 0) {
+            return limpiarInicioHtmlDetalle(root.innerHTML);
+          }
+
+          if (totalConsumido >= posiciones.length) {
+            return '';
+          }
+
+          const posicionInicio = posiciones[totalConsumido - 1];
+          const range = doc.createRange();
+
+          if (!posicionInicio) {
+            range.setStart(root, 0);
+          } else if (posicionInicio.tipo === 'texto') {
+            range.setStart(posicionInicio.node, posicionInicio.offset);
+          } else if (posicionInicio.tipo === 'inicioElemento') {
+            range.setStart(posicionInicio.node, 0);
+          } else {
+            range.setStartAfter(posicionInicio.node);
+          }
+
+          range.setEnd(root, root.childNodes.length);
+
+          const fragment = range.cloneContents();
+          const container = doc.createElement('div');
+          container.appendChild(fragment);
+
+          return limpiarInicioHtmlDetalle(container.innerHTML);
+        };
+        const descomponerContenidoTareaHtml = (html, fallback) => {
+          const htmlSeguro = String(html ?? '').trim();
+          const textoPlano = (typeof window.detalleTareaHtmlToPlainText === 'function')
+            ? window.detalleTareaHtmlToPlainText(htmlSeguro)
+            : String(htmlSeguro).replace(/<[^>]+>/g, ' ');
+          const textoLimpio = limpiarPrefijoTarea(textoPlano || fallback);
+          const resultadoPlano = descomponerContenidoTarea(textoLimpio, fallback);
+
+          if (!htmlSeguro) {
+            return {
+              titulo: resultadoPlano.titulo,
+              detalleHtml: resultadoPlano.detalle
+                ? convertirDetalleTextoAHtml(resultadoPlano.detalle)
+                : ''
+            };
+          }
+
+          return {
+            titulo: resultadoPlano.titulo,
+            detalleHtml: extraerDetalleHtmlPreservandoFormato(
+              htmlSeguro,
+              resultadoPlano.detalle,
+              resultadoPlano.detalleDesde
+            ) || (resultadoPlano.detalle
+              ? convertirDetalleTextoAHtml(resultadoPlano.detalle)
+              : '')
+          };
+        };
+        const agruparItems = (items, tamanoGrupo) => {
+          const resultado = [];
+          for (let idx = 0; idx < items.length; idx += tamanoGrupo) {
+            resultado.push(items.slice(idx, idx + tamanoGrupo));
+          }
+          return resultado;
+        };
 
         const fechaImpresion = new Date();
         const pad2 = (n) => String(n).padStart(2, '0');
@@ -2986,10 +3406,10 @@ $(document).ready(function() {
           .replace(/\s+/g, '-');
         const nombreArchivoPdf = `${razonSocialArchivo || 'PRESUPUESTO'}_${numeroPresupuestoImpresion}`;
         const responsableImpresion = ($('.nombre-completo').first().text() || '').trim() || '-';
-        const calleObra = cleanSelectText('#select2-calle_visita-container');
+        const calleObra = cleanSelectText('#calle_visita', ['Calle']);
         const alturaObra = ($('#altura_visita').val() || '').toString().trim();
-        const partidoObra = cleanSelectText('#select2-partido_visita-container');
-        const localidadObra = cleanSelectText('#select2-localidad_visita-container');
+        const partidoObra = cleanSelectText('#partido_visita', ['Partido']);
+        const localidadObra = cleanSelectText('#localidad_visita', ['Localidad']);
         const calleYAlturaObra = [calleObra, alturaObra].filter((v) => String(v).trim()).join(' ');
         const resumenObra = [
           cliente?.razon_social || '',
@@ -2998,7 +3418,7 @@ $(document).ready(function() {
           partidoObra
         ].filter((v) => String(v).trim()).join(' | ');
         const requerimientoTecnico = ($('#requerimiento_tecnico').val() || '').trim();
-        const descripcionObra = requerimientoTecnico || 'Requerimiento técnico';
+        const descripcionObra = normalizarTextoOrtografico(requerimientoTecnico || 'Requerimiento técnico');
         const encabezadoDatosHtml = `
     <div class="grid">
       <div class="box">
@@ -3035,12 +3455,21 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
   let $detalle = $card.find('textarea.tarea-descripcion').first();
   if (!$detalle.length) $detalle = $card.find('textarea').first();
-  const detalleOriginal = ($detalle.val() || '').trim();
+  const detalleOriginalHtml = (typeof window.obtenerDetalleTareaHtmlDesdeCard === 'function')
+    ? window.obtenerDetalleTareaHtmlDesdeCard($card)
+    : (($detalle.val() || '').trim());
+  const detalleOriginal = (typeof window.detalleTareaHtmlToPlainText === 'function')
+    ? window.detalleTareaHtmlToPlainText(detalleOriginalHtml)
+    : detalleOriginalHtml;
   const tituloOriginal = detalleOriginal
     || ($card.find('.tarea-encabezado b').text() || '').trim()
     || `Tarea ${nro}`;
   const detalleTarea = limpiarPrefijoTarea(detalleOriginal || tituloOriginal);
-  const tituloTarea = resumirTituloTarea(detalleTarea, `Tarea ${nro}`);
+  const contenidoTareaResuelto = descomponerContenidoTareaHtml(detalleOriginalHtml || detalleTarea, `Tarea ${nro}`);
+  const tituloTarea = contenidoTareaResuelto.titulo;
+  const detalleTareaHtml = contenidoTareaResuelto.detalleHtml
+    ? `<div class="detalle-tarea">${contenidoTareaResuelto.detalleHtml}</div>`
+    : '';
 
   // Materiales
   let filasMat = '';
@@ -3093,24 +3522,51 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
         </tr>`;
     });
 
-  const otrosMO = ($card.find('.input-otros-mano').val() ?? '').toString();
   const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
   const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
 
   // Fotos
-  let fotosHtml = '';
+  const fotos = [];
   const $prev = $(`#presu_preview_${nro}`);
   if ($prev.length) {
     $prev.find('img').each(function () {
       const src = $(this).attr('src');
       if (!src) return;
-      fotosHtml += `<img class="foto" src="${esc(src)}" alt="Foto tarea ${nro}">`;
+      fotos.push({
+        src,
+        alt: `Foto tarea ${nro}`
+      });
     });
   }
-  if (!fotosHtml) fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
+  const fotosInline = fotos.slice(0, 2);
+  const fotosExtra = fotos.slice(2);
+  let fotosHtml = '';
+  if (fotosInline.length) {
+    fotosInline.forEach((foto) => {
+      fotosHtml += `
+        <div class="foto-slot">
+          <img class="foto" src="${esc(foto.src)}" alt="${esc(foto.alt)}">
+        </div>`;
+    });
+  } else {
+    fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
+  }
+  const paginasImagenesExtra = agruparItems(fotosExtra, 4).map((grupo, grupoIdx) => `
+      <section class="print-page-task print-page-task-imagenes-extra page-break-before" data-tarea="${esc(String(nro))}" data-grupo-imagenes="${esc(String(grupoIdx + 1))}">
+        <div class="imagenes-extra-grid">
+          ${grupo.map((foto, fotoIdx) => `
+            <div class="imagen-extra-slot">
+              <img
+                class="imagen-extra"
+                src="${esc(foto.src)}"
+                alt="${esc(foto.alt || `Foto tarea ${nro} ${grupoIdx * 4 + fotoIdx + 3}`)}">
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `).join('');
 
-  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
-  const encabezadoInterno = idx === 0 ? '' : `
+  const encabezadoPaginaSecundaria = `
     <div class="top">
       <div class="logo">
         <img src="${esc(logoSrc)}" alt="Logo">
@@ -3144,13 +3600,15 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       </div>
     </div>
   `;
+  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
+  const encabezadoInterno = idx === 0 ? '' : encabezadoPaginaSecundaria;
 
   const contenidoTarea = `
       ${encabezadoInterno}
 
       <section class="bloque">
         <h3>${esc(tituloTarea)}</h3>
-        <div class="linea detalle-tarea"><b>Detalle:</b> ${esc(detalleTarea || 'FALTA COMPLETAR')}</div>
+        ${detalleTareaHtml}
 
         <h4>Materiales</h4>
         <table class="tabla-resumen">
@@ -3167,10 +3625,6 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
               <th class="num">Días</th>
           <tbody>
             <tr>
-              <td class="label"><b>Otros</b></td>
-              <td class="value">${esc(otrosMO || '0')}</td>
-            </tr>
-            <tr>
               <td class="label"><b>Subtotal Mano de Obra</b></td>
               <td class="value"><b>${esc(subtotalMO || 'FALTA COMPLETAR')}</b></td>
             </tr>
@@ -3186,11 +3640,13 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
   if (idx === 0) {
     htmlPrimeraPagina += contenidoTarea;
+    htmlPaginasTareas += paginasImagenesExtra;
   } else {
     htmlPaginasTareas += `
       <section class="print-page-task page-break-before">
         ${contenidoTarea}
       </section>
+      ${paginasImagenesExtra}
     `;
   }
 });
@@ -3295,6 +3751,7 @@ const htmlPaginaTotal = `
 
   .page { width: 100%; max-width: 100%; padding: 0; overflow-x: hidden; }
   .print-page-total { display:flex; flex-direction:column; }
+  .print-page-task-imagenes-extra { display:flex; align-items:stretch; }
 
   .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .logo img { max-width: 220px; height:auto; }
@@ -3309,12 +3766,27 @@ const htmlPaginaTotal = `
   .box { border:1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
   .linea { margin: 3px 0; font-size: 12px; line-height: 1.25; }
-  .detalle-tarea { white-space: pre-line; overflow-wrap: anywhere; }
+  .detalle-tarea { font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+  .detalle-tarea p,
+  .detalle-tarea div,
+  .detalle-tarea ul,
+  .detalle-tarea ol { margin: 0 0 6px; }
+  .detalle-tarea p:last-child,
+  .detalle-tarea div:last-child,
+  .detalle-tarea ul:last-child,
+  .detalle-tarea ol:last-child { margin-bottom: 0; }
+  .detalle-tarea ul,
+  .detalle-tarea ol { padding-left: 18px; }
+  .detalle-tarea strong,
+  .detalle-tarea b { font-weight: 700; }
+  .detalle-tarea em,
+  .detalle-tarea i { font-style: italic; }
+  .detalle-tarea u { text-decoration: underline; }
 
   .falta { color:#b00020; font-weight:700; }
 
   .bloque { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
-  h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; border-left: 4px solid #111; padding-left: 8px; text-transform: uppercase; text-decoration: underline; }
+  h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; border-left: 4px solid #111; padding-left: 8px; text-transform: uppercase; }
   h4 { margin: 8px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color:#333; }
 
   .grid2 { display:grid; grid-template-columns: 2fr 1fr; gap:10px; }
@@ -3337,16 +3809,64 @@ const htmlPaginaTotal = `
     gap: 10px;
     align-items: flex-start;
     align-content: flex-start;
+    overflow: hidden;
+  }
+
+  .foto-slot {
+    flex: 0 0 calc(50% - 5px);
+    width: calc(50% - 5px);
+    max-width: calc(50% - 5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    padding: 6px;
   }
 
   .foto {
-    width: calc(50% - 5px);
+    display: block;
+    width: auto;
     height: auto;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
-    border: 1px solid #ddd;
-    border-radius: 8px;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .imagenes-extra-grid {
+    width: 100%;
+    min-height: ${A4_HEIGHT_PX - (A4_MARGIN_PX * 2)}px;
+    height: ${A4_HEIGHT_PX - (A4_MARGIN_PX * 2)}px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .imagen-extra-slot {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    padding: 6px;
+  }
+
+  .imagen-extra {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
   }
 
   .total { display:flex; justify-content:flex-end; margin-top: 10px; break-inside: avoid; }
