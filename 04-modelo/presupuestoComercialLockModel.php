@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../06-funciones_php/funciones.php';
 require_once __DIR__ . '/conectDB.php';
+require_once __DIR__ . '/schemaIntrospectionModel.php';
 
 if (!function_exists('normalizarModoCircuitoComercialPresupuestoLock')) {
     function normalizarModoCircuitoComercialPresupuestoLock(?string $modo): string
