@@ -2,6 +2,7 @@
 // ../04-modelo/presupuestoGeneradoModel.php
 
 require_once __DIR__ . '/conectDB.php';
+require_once __DIR__ . '/schemaIntrospectionModel.php';
 require_once __DIR__ . '/presupuestoComercialLockModel.php';
 
 if (!function_exists('repararTextoMojibakePresupuesto')) {
