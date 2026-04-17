@@ -10,6 +10,21 @@
   window.fotosEliminadasPorTarea = window.fotosEliminadasPorTarea || {};
   const DETALLE_TAREA_ALLOWED_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'br', 'ul', 'ol', 'li', 'p', 'div']);
   const DETALLE_TAREA_BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol']);
+  const DETALLE_TAREA_DROP_TAGS = new Set([
+    'style',
+    'script',
+    'meta',
+    'link',
+    'title',
+    'noscript',
+    'template',
+    'iframe',
+    'object',
+    'embed',
+    'svg',
+    'xml',
+    'o:p'
+  ]);
   const DETALLE_TAREA_INLINE_TAG_MAP = {
     b: 'strong',
     strong: 'strong',
@@ -194,6 +209,10 @@
       const tag = (node.tagName || '').toLowerCase();
       const childNodes = Array.from(node.childNodes || []);
 
+      if (DETALLE_TAREA_DROP_TAGS.has(tag)) {
+        return null;
+      }
+
       const normalizedTag = DETALLE_TAREA_ALLOWED_TAGS.has(tag)
         ? (DETALLE_TAREA_INLINE_TAG_MAP[tag] || tag)
         : null;
@@ -330,6 +349,7 @@
   function setDetalleTareaEditorValue(target, htmlValue, opts = {}) {
     const options = {
       triggerInput: false,
+      normalizeEditor: true,
       ...opts
     };
 
@@ -340,7 +360,7 @@
     const $editor = $wrapper.find('.tarea-descripcion-editor').first();
     const $textarea = $wrapper.find('textarea.tarea-descripcion').first();
 
-    if ($editor.length && $editor.html() !== safeHtml) {
+    if (options.normalizeEditor && $editor.length && $editor.html() !== safeHtml) {
       $editor.html(safeHtml);
     }
 
@@ -380,6 +400,7 @@
   function syncDetalleTareaEditor(target, opts = {}) {
     const options = {
       triggerInput: true,
+      normalizeEditor: true,
       ...opts
     };
 
@@ -390,7 +411,9 @@
     if (!$editor.length) return;
 
     setDetalleTareaEditorValue($wrapper, $editor.html() || '', options);
-    guardarSeleccionDetalleTarea($wrapper);
+    if (options.normalizeEditor) {
+      guardarSeleccionDetalleTarea($wrapper);
+    }
   }
 
   function initDetalleTareaRichEditors(root, opts = {}) {
@@ -555,9 +578,18 @@
     .on('mouseup.presu-editor keyup.presu-editor focusin.presu-editor', '.tarea-descripcion-editor', function () {
       guardarSeleccionDetalleTarea($(this).closest('.tarea-detalle-editor'));
     })
-    .on('input.presu-editor blur.presu-editor', '.tarea-descripcion-editor', function () {
+    .on('input.presu-editor', '.tarea-descripcion-editor', function () {
       guardarSeleccionDetalleTarea($(this).closest('.tarea-detalle-editor'));
-      syncDetalleTareaEditor($(this).closest('.tarea-detalle-editor'), { triggerInput: true });
+      syncDetalleTareaEditor($(this).closest('.tarea-detalle-editor'), {
+        triggerInput: true,
+        normalizeEditor: false
+      });
+    })
+    .on('blur.presu-editor', '.tarea-descripcion-editor', function () {
+      syncDetalleTareaEditor($(this).closest('.tarea-detalle-editor'), {
+        triggerInput: true,
+        normalizeEditor: true
+      });
     })
     .on('paste.presu-editor', '.tarea-descripcion-editor', function (e) {
       e.preventDefault();
@@ -575,7 +607,10 @@
         insertarHtmlEnDetalleTarea($wrapper, htmlParaInsertar);
       }
 
-      syncDetalleTareaEditor($wrapper, { triggerInput: true });
+      syncDetalleTareaEditor($wrapper, {
+        triggerInput: true,
+        normalizeEditor: false
+      });
     });
 
   $(function () {

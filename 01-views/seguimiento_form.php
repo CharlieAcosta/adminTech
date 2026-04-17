@@ -1629,12 +1629,13 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   .tarea-detalle-editor-toolbar .btn {
     min-width: 1.85rem;
     padding: 0.12rem 0.35rem;
-    font-size: 0.82rem;
+    font-size: 0.9rem;
     line-height: 1.1;
     border-color: #d7dde4;
     background: #f8f9fb;
   }
 
+  #accordionTareas .tarea-descripcion,
   .tarea-descripcion-editor {
     min-height: 8.6rem;
     height: 8.6rem;
@@ -1642,7 +1643,12 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     overflow-y: auto;
     overflow-x: hidden;
     white-space: pre-wrap;
-    line-height: 1.4;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  .tarea-descripcion-editor {
+    padding: 0.7rem 0.8rem;
   }
 
   .tarea-descripcion-editor:empty::before {

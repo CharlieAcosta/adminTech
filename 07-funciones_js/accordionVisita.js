@@ -1,5 +1,7 @@
 // file: accordionVisita.js 
 
+const SELECTOR_TEXTO_TAREA_VISITA = '#accordionTareas .tarea-descripcion';
+
 // Porcentajes por defecto para el presupuesto
 const porcentajesPorDefecto = {
   materiales: 30,      // Utilidad materiales (puedes cambiarlo fácil)
@@ -497,7 +499,7 @@ $(document).ready(function() {
             controlarBotonGenerarPresupuesto();
             let hayDescripcionIncompleta = false;
 
-              $('.tarea-descripcion').each(function () {
+              $(SELECTOR_TEXTO_TAREA_VISITA).each(function () {
                   const valor = $(this).val();
                   
                   if (!valor || valor.trim() === '') {
@@ -515,7 +517,7 @@ $(document).ready(function() {
     });
 
 
-    $(document).on('input', '.tarea-descripcion', function () {
+    $(document).on('input', SELECTOR_TEXTO_TAREA_VISITA, function () {
         const texto = $(this).val().trim();
 
         // Validación visual
@@ -537,7 +539,7 @@ $(document).ready(function() {
     $(document).on('click', '#btn-agregar-tarea', function () {
           let hayDescripcionIncompleta = false;
 
-          $('.tarea-descripcion').each(function () {
+          $(SELECTOR_TEXTO_TAREA_VISITA).each(function () {
               if ($(this).val().trim() === '') {
                   $(this).addClass('is-invalid');
                   hayDescripcionIncompleta = true;
@@ -804,7 +806,7 @@ $(document).ready(function() {
 
         // 1) Validar descripciones
         let falta = false;
-        $('.tarea-descripcion').each(function () {
+        $(SELECTOR_TEXTO_TAREA_VISITA).each(function () {
           if (!$(this).val().trim()) {
             falta = true;
             $(this).addClass('is-invalid');
