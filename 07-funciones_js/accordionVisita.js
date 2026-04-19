@@ -1779,16 +1779,16 @@ $(document).ready(function() {
         </div>
 
         <div class="container-fluid px-3 pt-3">
-          <div class="row">
+          <div class="row tarea-card-cuerpo">
             <!-- Columna izquierda -->
-            <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height: 100%;">
+            <div class="col-md-4 tarea-columna-izquierda">
               <!-- Detalle -->
-              <div class="mb-2">
+              <div class="mb-2 tarea-columna-panel tarea-columna-panel-detalle">
                 <label class="mb-0"><b>Detalle de la tarea</b></label>
                 ${detalleEditorHtml}
               </div>
               <!-- Fotos (PRESUPUESTO: dropzone + input oculto, sin “Seleccionar fotos”) -->
-              <div class="mb-2 flex-grow-1">
+              <div class="mb-2 tarea-columna-panel tarea-columna-panel-imagenes">
                 <label class="mb-0"><b>Imágenes</b></label>
               
                 <!-- input oculto por tarea (queda igual) -->
@@ -1810,13 +1810,13 @@ $(document).ready(function() {
                   </div>
                   <div class="row presu-preview-fotos m-0 mt-2" id="presu_preview_${numeroTarea}"></div>
                 </div>
-                
+
               </div>
                           
             </div>
 
             <!-- Columna derecha -->
-            <div class="col-md-8 d-flex flex-column justify-content-start">
+            <div class="col-md-8 tarea-columna-derecha d-flex flex-column justify-content-start">
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
@@ -1916,11 +1916,8 @@ $(document).ready(function() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
-        </div>
 
-        <div class="tarea-total d-flex flex-column align-items-end px-3">
+              <div class="tarea-total d-flex flex-column align-items-end px-3">
           <!-- Botones de utilidades: visibilidad depende del ID habilitado -->
           <div class="utilidades-extra w-100">
             <button class="col-2 btn-total-tarea subt-util-materiales w-100 ${claseUtilidades}" id="subt-util-materiales-${numeroTarea}">
@@ -1943,8 +1940,13 @@ $(document).ready(function() {
           <div class="d-flex justify-content-end w-100">
             <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea ${claseUtilidades}" id="porcentajetarea-${numeroTarea}">% : <strong>$0,00</strong></button>
           </div>
-          <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-${numeroTarea}">
-          <div class="tarea-inline-actions d-flex align-items-center mr-auto">
+        </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tarea-barra-inferior d-flex align-items-end px-3 pb-2">
+          <div class="tarea-inline-actions d-flex align-items-center">
             <button
               type="button"
               id="btnGuardarTarea_${numeroTarea}"
@@ -1955,34 +1957,37 @@ $(document).ready(function() {
             <button
               type="button"
               id="btnTraerTarea_${numeroTarea}"
-              class="btn btn-warning btn-traer-tarea"
+              class="btn btn-warning btn-traer-tarea btn-tarea"
               data-nro="${numeroTarea}">
               <i class="fas fa-download"></i> Traer tarea
             </button>
           </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="iibb-${numeroTarea}">IIBB: $0,00</button>
+
+          <div class="fila-impuestos flex-grow-1" id="fila-impuestos-${numeroTarea}">
+            <div class="tarea-impuestos-lista">
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="iibb-${numeroTarea}">IIBB: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="ganancias-${numeroTarea}">Ganancias 35%: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="cheque-${numeroTarea}">Imp. cheque: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="inversion-${numeroTarea}">Costo inv. 3%: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="retiva-${numeroTarea}">Ret. IVA mat: <strong>$0,00</strong></button>
+              </div>
+            </div>
+
+            <div class="tarea-subtotal-col">
+              <button type="button" class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-${numeroTarea}">
+                Subtotal Tarea ${numeroTarea}: $0,00
+              </button>
+            </div>
           </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="ganancias-${numeroTarea}">Ganancias 35%: $0,00</button>
-          </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="cheque-${numeroTarea}">Imp. cheque: $0,00</button>
-          </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="inversion-${numeroTarea}">Costo inv. 3%: $0,00</button>
-          </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="retiva-${numeroTarea}">Ret. IVA mat: <strong>$0,00</strong></button>
-          </div>
-        
-          <!-- ESTE NO SE OCULTA -->
-          <div class="col-2 pr-0 pl-0">
-            <button type="button" class="btn-total-tarea w-100 px-4 util-muy pt-2 mt-0" id="subt-tarea-${numeroTarea}">
-              Subtotal Tarea ${numeroTarea}: $0,00
-            </button>
-          </div>
-        </div>        
         </div>
       </div>`;
         
