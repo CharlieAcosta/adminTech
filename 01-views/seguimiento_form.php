@@ -563,15 +563,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           </div>
 
           <div class="container-fluid px-3 pt-3">
-            <div class="row">
+            <div class="row tarea-card-cuerpo">
               <!-- Izquierda -->
-              <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height:100%;">
-                <div class="mb-2">
+              <div class="col-md-4 tarea-columna-izquierda">
+                <div class="mb-2 tarea-columna-panel tarea-columna-panel-detalle">
                   <label class="mb-0"><b>Detalle de la tarea</b></label>
                   '. renderizar_editor_detalle_tarea_presupuesto((string)$descripcionHtml, $soloLectura) .'
                 </div>
 
-                <div class="mb-2 flex-grow-1">
+                <div class="mb-2 tarea-columna-panel tarea-columna-panel-imagenes">
                   <label class="mb-0"><b>Imágenes</b></label>
 
                   <input type="file" class="presu-fotos d-none" id="presu_fotos_tarea_'. $e($nro) .'"
@@ -603,7 +603,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </div>
 
               <!-- Derecha -->
-              <div class="col-md-8 d-flex flex-column justify-content-start">
+              <div class="col-md-8 tarea-columna-derecha d-flex flex-column justify-content-start">
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
@@ -685,54 +685,59 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                     </tbody>
                   </table>
                 </div>
+
+                <div class="tarea-total d-flex flex-column align-items-end px-3">
+                  <div class="utilidades-extra w-100">
+                    <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
+                  </div>
+                  <div class="utilidades-extra w-100">
+                    <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
+                  </div>
+                  <div class="utilidades-extra w-100">
+                    <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
+                  </div>
+                  <div class="d-flex justify-content-end w-100">
+                    <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
+                  </div>
+                  <div class="d-flex justify-content-end w-100">
+                    <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="tarea-total d-flex flex-column align-items-end px-3">
-            <div class="utilidades-extra w-100">
-              <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
-            </div>
-            <div class="utilidades-extra w-100">
-              <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
-            </div>
-            <div class="utilidades-extra w-100">
-              <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
-            </div>
-            <div class="d-flex justify-content-end w-100">
-              <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
-            </div>
-            <div class="d-flex justify-content-end w-100">
-              <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+          <div class="tarea-barra-inferior d-flex align-items-end px-3 pb-2">
+            <div class="tarea-inline-actions d-flex align-items-center">
+              <button
+                type="button"
+                id="btnGuardarTarea_'. $e($nro) .'"
+                class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
+                data-nro="'. $e($nro) .'"
+                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                <i class="fas fa-save"></i> Guardar tarea
+              </button>
+              <button
+                type="button"
+                id="btnTraerTarea_'. $e($nro) .'"
+                class="btn btn-warning btn-traer-tarea btn-tarea"
+                data-nro="'. $e($nro) .'"
+                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                <i class="fas fa-download"></i> Traer tarea
+              </button>
             </div>
 
-            <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-'. $e($nro) .'">
-            <div class="tarea-inline-actions d-flex align-items-center mr-auto">
-                <button
-                  type="button"
-                  id="btnGuardarTarea_'. $e($nro) .'"
-                  class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
-                  data-nro="'. $e($nro) .'"
-                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
-                  <i class="fas fa-save"></i> Guardar tarea
-                </button>
-                <button
-                  type="button"
-                  id="btnTraerTarea_'. $e($nro) .'"
-                  class="btn btn-warning btn-traer-tarea btn-tarea"
-                  data-nro="'. $e($nro) .'"
-                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
-                  <i class="fas fa-download"></i> Traer tarea
-                </button>
-            </div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+            <div class="fila-impuestos flex-grow-1" id="fila-impuestos-'. $e($nro) .'">
+              <div class="tarea-impuestos-lista">
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+              </div>
 
-              <div class="col-2 pr-0 pl-0">
-                <button type="button" class="btn-total-tarea w-100 px-4 util-muy pt-2 mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
+              <div class="tarea-subtotal-col">
+                <button type="button" class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
               </div>
             </div>
           </div>
@@ -1678,6 +1683,240 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   .tarea-descripcion-editor ul,
   .tarea-descripcion-editor ol {
     padding-left: 1.25rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card {
+    --tarea-totales-width: 300px;
+    --tarea-barra-btn-height: 2.62rem;
+    --tarea-util-gap: 0.45rem;
+    --tarea-editor-line-height: 1.18rem;
+    --tarea-editor-block-gap: 0.04rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor {
+    line-height: var(--tarea-editor-line-height);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor p,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor div,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor ul,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor ol {
+    margin-bottom: var(--tarea-editor-block-gap);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total {
+    row-gap: var(--tarea-util-gap);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.25rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda .btn {
+    margin-right: 0 !important;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    width: 100%;
+    margin-top: var(--tarea-util-gap);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions {
+    flex: 0 0 auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--tarea-totales-width);
+    column-gap: 0.75rem;
+    row-gap: 0.65rem;
+    flex: 1 1 auto;
+    align-items: flex-end;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-end;
+    align-content: flex-end;
+    gap: 0.35rem;
+    min-width: 0;
+    width: fit-content;
+    max-width: 100%;
+    justify-self: end;
+    margin-left: auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista > .col-auto {
+    flex: 0 0 auto;
+    max-width: none;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .btn-total-tarea,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .btn-porcentaje-tarea {
+    margin-top: 0;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.98rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn {
+    white-space: nowrap;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn.bg-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--tarea-barra-btn-height);
+    font-size: 0.92rem;
+    padding: 0.42rem 0.72rem;
+    line-height: 1.5;
+    box-sizing: border-box;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) {
+    width: min(100%, var(--tarea-totales-width));
+    max-width: var(--tarea-totales-width);
+    margin-left: auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra .btn-total-tarea,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-total-tarea,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-porcentaje-tarea {
+    flex: 0 0 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: nowrap;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col {
+    width: 100%;
+    max-width: var(--tarea-totales-width);
+    justify-self: end;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col .btn-total-tarea {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: var(--tarea-barra-btn-height);
+    margin-top: 0;
+    padding: 0.42rem 0.72rem;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  @media (min-width: 768px) {
+    #contenedorPresupuestoGenerado .tarea-card .tarea-card-cuerpo {
+      align-items: stretch;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-izquierda {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      gap: 0.75rem;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-izquierda .tarea-columna-panel {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      min-height: 0;
+      margin-bottom: 0 !important;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-derecha {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-detalle .tarea-detalle-editor,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-imagenes .presu-dropzone {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-detalle .tarea-descripcion,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-detalle .tarea-descripcion-editor {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: auto;
+      max-height: none;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-imagenes .presu-dropzone {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-imagenes .presu-preview-fotos {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      align-content: flex-start;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-izquierda .tarea-acciones-izquierda {
+      flex: 0 0 auto;
+      margin-top: auto;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-derecha .tarea-total {
+      width: 100%;
+      margin-top: auto;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda {
+      flex-wrap: wrap;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior {
+      flex-wrap: wrap;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) {
+      max-width: 100%;
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
+      grid-template-columns: 1fr;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col {
+      width: 100%;
+      max-width: 100%;
+      justify-self: stretch;
+    }
   }
 
   .presupuesto-accordion-header {
