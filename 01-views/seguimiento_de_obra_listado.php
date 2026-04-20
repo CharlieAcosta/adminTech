@@ -140,9 +140,9 @@ $estadosPresupuestoRapidos = array(
                       <div class="seguimiento-filtro-linea">
                         <button
                           type="button"
-                          class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn btn-filtro-rapido is-active"
+                          class="btn btn-sm btn-outline-success seguimiento-filtro-btn btn-filtro-rapido is-active"
                           data-filter-reset="all"
-                          data-variant="secondary">
+                          data-variant="success">
                           Todos
                         </button>
                       </div>

@@ -48,7 +48,8 @@ Este README deja contexto tecnico util para mantenimiento y onboarding. La versi
 - PDFs emitidos de presupuesto: `uploads/presupuestos/{id_presupuesto}/emisiones/`.
 - Fotos cargadas en la visita: `uploads/visitas/{YYYYMMDD}/`.
 - Fotos cargadas dentro del presupuesto: `uploads/presupuestos/{id_presupuesto}/t{nro_tarea}/`.
-- Adjuntos generales de pre-visita o documento fuente: `09-adjuntos/previsita/`.
+- Adjuntos legacy de pre-visita o documento fuente: `09-adjuntos/previsita/`.
+- Adjuntos multiples de pre-visita: `09-adjuntos/previsita/{id_previsita}/`.
 
 Referencias de implementacion:
 
@@ -60,9 +61,14 @@ Referencias de implementacion:
 - `04-modelo/presupuestoIntervencionesModel.php` persiste y lee `comentarios` del historial comercial cuando la columna existe; para filas historicas de accion `Enviado` que hayan quedado sin comentario persistido, recompone el texto en lectura desde `presupuesto_documentos_emitidos_envios` usando `para_email` y `cco`, y sigue excluyendo las CCO configuradas por defecto.
 - `04-modelo/presupuestoIntervencionesModel.php` incorpora la accion `Reabrir` sin crear un estado nuevo: cuando el circuito actual esta en `Cancelado` o `Rechazado`, un usuario autorizado puede registrar `reabierto` y restaurar el ultimo estado comercial no terminal previo (`Enviado`, `Recibido` o `Resolicitado`). Los perfiles habilitados por defecto son `Super Administrador` y `Administrador`, y existe una whitelist adicional editable en `idsUsuariosPermitidosReaperturaHistorialComercialPresupuesto()`.
 - `04-modelo/presupuestoComercialLockModel.php` centraliza la regla de bloqueo comercial del seguimiento: `Resolicitado` sigue permitiendo edicion, mientras que `Aprobado`, `Rechazado` y `Cancelado` bloquean la edicion, el guardado y la generacion de documento de visita/presupuesto. La accion `Reabrir` levanta ese bloqueo al restaurar el ultimo estado comercial no terminal.
+- `04-modelo/previsitaWorkflowModel.php` centraliza el workflow operativo de la pre-visita: solo `Programada`, `Reprogramada` y `Vencida` permiten editar la pre-visita; `Ejecutada` la deja en solo lectura y habilita la visita; `Cancelada` deja la pre-visita en solo lectura y corta cualquier avance adicional de visita/presupuesto/documento.
+- `04-modelo/previsitaDocumentosModel.php` centraliza los adjuntos multiples de la pre-visita: valida tipos (`pdf`, `doc`, `docx`, `xls`, `xlsx`, `txt`, `jpg`, `jpeg`, `png`), guarda nuevos archivos por pre-visita dentro de `09-adjuntos/previsita/{id_previsita}/`, permite borrar adjuntos existentes y mantiene `previsitas.doc_previsita` sincronizado como fallback con el ultimo documento disponible.
+- Ese mismo fallback legacy de `previsitas.doc_previsita` solo debe mostrarse si no duplica un adjunto ya presente en `previsita_documentos`; la deduplicacion compara ruta y nombre de archivo para evitar que el mismo documento aparezca dos veces cuando la tabla nueva y la columna legacy apuntan al mismo adjunto.
+- `01-views/seguimiento_form.php` y `04-modelo/presupuestosGuardarModel.php` dejan el bloque `Documentos` como la unica edicion habilitada en etapas avanzadas del seguimiento: aun cuando la pre-visita ya este `Ejecutada` o el resto del flujo quede en solo lectura, se pueden agregar o quitar adjuntos desde `Guardar documentos`, mientras que el backend ignora cualquier intento de modificar otros campos cuando llega en modo `solo_documentos`.
 - `04-modelo/schemaIntrospectionModel.php` expone `tabla_existe()` y `columna_existe()` como helpers compartidos para que el lock comercial y los flujos de guardado/listado no dependan del orden en que se incluyen otros modelos.
 - `04-modelo/presupuestoDocumentosEmitidosEnviosModel.php` genera automaticamente el comentario del evento `Enviado` con los destinatarios `Para` y las `CCO` agregadas manualmente o por seleccion del usuario, excluyendo las copias ocultas configuradas por defecto en el sistema.
 - `03-controller/presupuestosController.php` renderiza las columnas `Visita` y `Presupuesto` del listado de seguimiento como badges centrados y expone en cada fila `data-estado-visita` y `data-estado-presupuesto` para filtros rapidos sin recargar la grilla.
+- En ese mismo listado, las pre-visitas con estado `Cancelada` no deben mostrar accion `Editar`; el frontend tambien respeta esa regla si la fila se actualiza dinamicamente.
 - `06-funciones_php/guardar_visita.php` guarda fotos de visita en carpetas fechadas `YYYYMMDD`.
 - Para validaciones locales del proyecto ya quedo probado un host Windows con `PHP 8.3 CLI`, `Node.js LTS`, `Composer` en `%LOCALAPPDATA%\Programs\Composer\composer.bat`, `jq`, `Chrome` y `7-Zip`; cuando estas herramientas se agregan por `winget` o modificando el `PATH` del usuario puede hacer falta abrir una terminal nueva para invocarlas sin ruta absoluta.
 - En shells sandboxed que solo pueden escribir dentro del workspace, `Composer` puede necesitar `TMP`/`TEMP` apuntando a una carpeta temporal dentro del repo para evitar avisos de escritura sobre `D:\Temp`.
@@ -74,11 +80,72 @@ Referencias de implementacion:
 - `07-funciones_js/presupuestosAcciones.js` concentra el modal `Historial de presupuesto`: consume el endpoint `obtenerHistorialComercialPresupuesto`, renderiza las acciones disponibles en filas separadas como el diseno original del modal, deja la tabla simplificada en `Fecha`, `Usuario`, `Accion` y `Comentarios`, y antes de ejecutar una accion del modal abre un SweetAlert con textarea para capturar el comentario manual de esa accion. La accion `Reabrir` se muestra solo cuando el estado actual queda en `Cancelado` o `Rechazado` y el usuario tiene permisos, mientras que `OC` se muestra solo cuando el estado comercial actual queda en `Aprobado`, se pinta en verde y por ahora solo abre una alerta de funcionalidad en desarrollo, sin registrar movimientos en el historial. Ese mismo archivo tambien mantiene sincronizado el listado: cuando el estado pasa a `Aprobado`, `Rechazado` o `Cancelado`, desaparece el icono `Editar` y el motivo del bloqueo queda en el tooltip de `Visualizar`; al `Reabrir`, `Editar` vuelve a mostrarse. Como ese alert vive encima de un modal Bootstrap, libera temporalmente `focusin.bs.modal` mientras el textarea esta abierto y restaura el focus trap al cerrarlo. Al cerrar el modal principal tambien se limpian los ids cacheados para evitar contexto residual entre aperturas.
 - `01-views/seguimiento_de_obra_listado.php` agrega una barra de filtros rapidos arriba de la grilla con dos familias de estados (`Visita` y `Presupuesto`) y un boton `Todos` que limpia ambos filtros; el filtrado corre sobre la misma instancia de DataTables para combinarse con la busqueda general y las exportaciones existentes.
 - `01-views/seguimiento_form.php` renderiza el encabezado del accordion de presupuesto y el template que lo recrea; el bloque `Intervino` queda en una sola linea en escritorio y en pantallas angostas baja completo a una nueva fila para no cortar la hora.
-- `01-views/seguimiento_form.php` y `04-modelo/presupuestosGuardarModel.php` manejan la direccion de pre-visita como domicilio estructurado por catalogos (`provincia_visita`, `partido_visita`, `localidad_visita`, `calle_visita`, `altura_visita`, `cp_visita`) y `04-modelo/presupuestosModel.php` la vuelve a resolver con joins contra provincias/partidos/localidades/calles; ademas, al cambiar el `CUIT` puede copiar el domicilio fiscal del cliente existente al bloque de visita usando `existInDB` + `dataByIdCalleLocalidad`.
+- `01-views/seguimiento_form.php` y `04-modelo/presupuestosGuardarModel.php` manejan la direccion de pre-visita como domicilio estructurado por catalogos (`provincia_visita`, `partido_visita`, `localidad_visita`, `calle_visita`, `altura_visita`, `cp_visita`) y `04-modelo/presupuestosModel.php` la vuelve a resolver con joins contra provincias/partidos/localidades/calles; ademas, al cambiar el `CUIT` puede copiar el domicilio fiscal del cliente existente al bloque de visita usando `existInDB` + `dataByIdCalleLocalidad`. Desde abril de 2026 ese autocompletado ya no depende de demoras fijas entre selects: espera a que carguen partido/localidad/calle antes de seleccionarlos, copia `cp_visita` directamente desde `clientes.dirfis_cp`, el helper PHP del domicilio devuelve aliases explicitos (`calle`, `localidad`, `partido`, `provincia`) para evitar `undefined` en el modal, `razon_social` ahora ofrece sugerencias nativas con `datalist` usando clientes no eliminados en formato `RAZON SOCIAL | CUIT` y, si se elige una coincidencia exacta, reutiliza el mismo flujo de confirmacion para copiar `cuit` y domicilio, la alerta visual de “ACTUALIZANDO CAMPOS” se redujo a 1.2 segundos para no dar sensacion de bloqueo, el toast informativo de esa vista ahora usa fondo mas opaco, contraste reforzado y barra de progreso visible con `toastr.options.progressBar = true` y un timeout levemente mayor (`2600ms`), el encabezado verde de la pre-visita se sincroniza en vivo con `razon_social` para no seguir mostrando el cliente anterior si el usuario lo cambia, y al cambiar `estado_visita`, si `fecha_visita` esta vacia o quedo anterior a hoy, el formulario la mueve automaticamente a la fecha actual para evitar validaciones tardias por una fecha vencida.
 - `01-views/obras_form.php` registra ubicacion de obra con Google Maps Places y solo persiste `obra_lat` y `obra_lon` junto con los datos basicos de la obra; hoy no guarda una direccion estructurada equivalente ni reutiliza el circuito de cliente. Por eso, una adaptacion de pre-visita "como obras" no es un reemplazo directo del modelo actual sino, como minimo, una capa adicional de ayuda/autocompletado o una migracion de datos.
 - `09-adjuntos/previsita/` contiene adjuntos operativos de la pre-visita y no debe versionarse; el repo solo conserva un `.gitkeep`.
+- Actualizacion abril 2026: en `01-views/seguimiento_form.php` la sugerencia de `razon_social` ya no usa el popup nativo del navegador; ahora renderiza un desplegable propio con estilo del sistema, filtro por razon social o CUIT, navegacion con teclado y seleccion por click para evitar el tooltip oscuro del `datalist`.
+- Actualizacion abril 2026: la confirmacion de cliente reutiliza el mismo modal, pero el titulo ahora cambia segun el origen del dato: desde `CUIT` mantiene `CLIENTE YA REGISTRADO` y desde la sugerencia de `razon_social` muestra `DATOS DEL CLIENTE`.
+- Actualizacion abril 2026: al confirmar un cliente sugerido desde `razon_social`, la vista cierra el desplegable, desenfoca ese campo y mueve el foco a `contacto_obra` para que no quede reabierta la sugerencia sobre el valor ya aplicado.
+- Ajuste abril 2026: el reenfoque posterior al autocompletado de cliente se programa para despues del alert temporal `ACTUALIZANDO CAMPOS`, evitando que SweetAlert devuelva el foco a `razon_social` al cerrarse.
+- Ajuste abril 2026: el modal de confirmacion de cliente ahora intenta obtener el domicilio expandido por `id_cliente` desde `04-modelo/clientesModel.php::modGetClientesById` antes de recurrir a `dataByIdCalleLocalidad`, porque hay clientes con domicilio correcto en base para los que la reconstruccion auxiliar podia fallar aunque la vista luego completara bien los selects.
 
 ## Migracion SQL requerida por ambiente
+
+- Archivo versionado: `11-migraciones_sql/2026-04-19-A_previsita_documentos.sql`
+- Objetivo: crear la tabla hija `previsita_documentos` para soportar multiples adjuntos por pre-visita y migrar los valores historicos de `previsitas.doc_previsita` sin mover archivos legacy. En ambientes donde `previsitas` siga en `utf8mb4_general_ci`, la migracion ya fuerza `previsita_documentos` a esa misma collation antes de comparar rutas para evitar el error `Illegal mix of collations`.
+
+```sql
+CREATE TABLE IF NOT EXISTS previsita_documentos (
+    id_documento_previsita INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    id_previsita INT UNSIGNED NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL,
+    nombre_archivo_original VARCHAR(255) DEFAULT NULL,
+    ruta_archivo VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(100) DEFAULT NULL,
+    tamano_bytes BIGINT UNSIGNED DEFAULT NULL,
+    id_usuario_alta INT UNSIGNED DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_documento_previsita),
+    KEY idx_previsita_documentos_previsita (id_previsita),
+    KEY idx_previsita_documentos_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+ALTER TABLE previsita_documentos
+CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
+INSERT INTO previsita_documentos (
+    id_previsita,
+    nombre_archivo,
+    nombre_archivo_original,
+    ruta_archivo,
+    mime_type,
+    tamano_bytes,
+    id_usuario_alta,
+    created_at
+)
+SELECT
+    p.id_previsita,
+    p.doc_previsita,
+    p.doc_previsita,
+    CONCAT('09-adjuntos/previsita/', p.doc_previsita),
+    'application/pdf',
+    NULL,
+    p.log_usuario_id,
+    COALESCE(p.log_edicion, p.log_alta, NOW())
+FROM previsitas AS p
+LEFT JOIN previsita_documentos AS pd
+    ON pd.id_previsita = p.id_previsita
+   AND pd.ruta_archivo COLLATE utf8mb4_general_ci = CONCAT('09-adjuntos/previsita/', p.doc_previsita) COLLATE utf8mb4_general_ci
+WHERE CHAR_LENGTH(TRIM(COALESCE(p.doc_previsita, ''))) > 0
+  AND pd.id_documento_previsita IS NULL;
+```
+
+- Verificacion sugerida:
+
+```sql
+SHOW TABLES LIKE 'previsita_documentos';
+SELECT id_previsita, ruta_archivo FROM previsita_documentos ORDER BY id_documento_previsita DESC LIMIT 10;
+```
 
 - Archivo versionado: `11-migraciones_sql/2026-04-11-A_presupuesto_historial_comercial_comentarios.sql`
 - Consulta a ejecutar una sola vez en cada ambiente si `presupuesto_historial_comercial` todavia no tiene la columna `comentarios`:

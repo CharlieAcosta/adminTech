@@ -4,6 +4,7 @@
 require_once __DIR__ . '/conectDB.php';
 require_once __DIR__ . '/schemaIntrospectionModel.php';
 require_once __DIR__ . '/presupuestoComercialLockModel.php';
+require_once __DIR__ . '/previsitaWorkflowModel.php';
 
 if (!function_exists('repararTextoMojibakePresupuesto')) {
     function repararTextoMojibakePresupuesto(?string $texto): string
@@ -192,6 +193,13 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
 
         if (!$id_previsita) {
             throw new RuntimeException('id_previsita es requerido');
+        }
+
+        $bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId($id_previsita);
+        if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
+            throw new RuntimeException(
+                $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? '')
+            );
         }
 
         $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita($id_previsita, $id_presupuesto);

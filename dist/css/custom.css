@@ -156,6 +156,12 @@ th {
   border-color: #6c757d;
 }
 
+.btn-filtro-rapido.btn-outline-success.is-active {
+  color: #fff;
+  background-color: #28a745;
+  border-color: #28a745;
+}
+
 .seguimiento-toolbar-accion {
   flex: 0 0 auto;
 }

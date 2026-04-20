@@ -13,6 +13,7 @@ file_put_contents('../log/log_fotos.txt', "🔵 _FILES:\n" . print_r($_FILES, tr
 include_once '../06-funciones_php/funciones.php';
 include_once '../04-modelo/conectDB.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
+include_once '../04-modelo/previsitaWorkflowModel.php';
 $db = conectDB();
 if (!$db) {
     ob_end_clean();
@@ -70,6 +71,15 @@ if (!empty($bloqueoEdicion['bloqueado'])) {
     echo json_encode([
         'status' => false,
         'mensaje' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId((int)$id_visita);
+if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
+    echo json_encode([
+        'status' => false,
+        'mensaje' => $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? ''),
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

@@ -10,6 +10,7 @@ require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosEnviosModel.php';
 require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
 require_once $BASE . '/../04-modelo/presupuestoComercialLockModel.php';
+require_once $BASE . '/../04-modelo/previsitaWorkflowModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -149,6 +150,15 @@ try {
                 $nombreArchivo = isset($_POST['nombre_archivo']) ? trim((string)$_POST['nombre_archivo']) : '';
                 $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
                 $archivoPdf = $_FILES['documento_pdf'] ?? null;
+
+                $bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId($idPrevisita);
+                if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
+                    echo json_encode([
+                        'ok' => false,
+                        'msg' => $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? ''),
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
 
                 $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita(
                     $idPrevisita,

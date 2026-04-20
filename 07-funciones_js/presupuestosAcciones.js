@@ -492,6 +492,11 @@ function estadoBloqueaEdicionComercialPresupuestoListado(estado) {
     return ['APROBADO', 'RECHAZADO', 'CANCELADO'].includes(normalizado);
 }
 
+function estadoVisitaBloqueaEdicionListado(estadoVisita) {
+    const normalizado = String(estadoVisita || '').trim().toUpperCase();
+    return normalizado === 'CANCELADA';
+}
+
 function actualizarAccionEditarListado($fila, estado) {
     if (!$fila || !$fila.length) {
         return;
@@ -504,14 +509,19 @@ function actualizarAccionEditarListado($fila, estado) {
     }
 
     const visual = resolverEstadoPresupuestoVisual(estado);
-    const bloqueado = estadoBloqueaEdicionComercialPresupuestoListado(visual.normalizado);
-    const mensajeBloqueo = bloqueado
+    const estadoVisita = String($fila.attr('data-estado-visita') || '').trim().toUpperCase();
+    const bloqueadoComercial = estadoBloqueaEdicionComercialPresupuestoListado(visual.normalizado);
+    const bloqueadoVisita = estadoVisitaBloqueaEdicionListado(estadoVisita);
+    const bloqueado = bloqueadoComercial || bloqueadoVisita;
+    const mensajeBloqueo = bloqueadoComercial
         ? `La edicion de la visita y del presupuesto esta bloqueada porque el circuito comercial esta en ${visual.label || visual.normalizado}.`
-        : 'Visualizar';
+        : (bloqueadoVisita
+            ? 'La edicion no esta disponible para pre-visitas canceladas.'
+            : 'Visualizar');
 
     $iconoVisual
-        .attr('data-bloqueo-comercial', bloqueado ? '1' : '0')
-        .attr('data-estado-bloqueo', bloqueado ? (visual.label || '') : '')
+        .attr('data-bloqueo-comercial', bloqueadoComercial ? '1' : '0')
+        .attr('data-estado-bloqueo', bloqueadoComercial ? (visual.label || '') : '')
         .attr('title', mensajeBloqueo);
 
     if ($.fn.tooltip) {
@@ -925,6 +935,24 @@ function presupuestoAcciones(elemento){
             break;
 
             case 'editar': // editar el presupuesto
+                if (estadoVisitaBloqueaEdicionListado($(elemento).closest('tr').data('estado-visita'))) {
+                    const mensajeBloqueoVisita = 'La edicion no esta disponible para pre-visitas canceladas.';
+
+                    if (window.Swal && typeof Swal.fire === 'function') {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Edicion bloqueada',
+                            text: mensajeBloqueoVisita,
+                            confirmButtonText: 'OK'
+                        });
+                    } else if (typeof mostrarAdvertencia === 'function') {
+                        mostrarAdvertencia(mensajeBloqueoVisita, 4);
+                    } else {
+                        window.alert(mensajeBloqueoVisita);
+                    }
+                    break;
+                }
+
                 if (String($(elemento).data('bloqueo-comercial') || '0') === '1') {
                     const estadoBloqueo = String($(elemento).data('estado-bloqueo') || '').trim();
                     const mensajeBloqueo = estadoBloqueo
