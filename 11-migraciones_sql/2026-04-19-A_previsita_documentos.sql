@@ -38,6 +38,6 @@ SELECT
 FROM previsitas AS p
 LEFT JOIN previsita_documentos AS pd
     ON pd.id_previsita = p.id_previsita
-   AND pd.ruta_archivo COLLATE utf8mb4_general_ci = CONCAT('09-adjuntos/previsita/', p.doc_previsita) COLLATE utf8mb4_general_ci
+   AND CONVERT(pd.ruta_archivo USING utf8mb4) = CONVERT(CONCAT('09-adjuntos/previsita/', p.doc_previsita) USING utf8mb4)
 WHERE CHAR_LENGTH(TRIM(COALESCE(p.doc_previsita, ''))) > 0
   AND pd.id_documento_previsita IS NULL;
