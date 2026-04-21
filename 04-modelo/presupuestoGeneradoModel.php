@@ -190,6 +190,8 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         $version        = 1;
         $tieneEstadosComerciales = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion')
             && columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
+        $tieneOrdenMaterialesPresupuesto = columna_existe($db, 'presupuesto_tarea_material', 'orden');
+        $tieneOrdenManoObraPresupuesto = columna_existe($db, 'presupuesto_tarea_mano_obra', 'orden');
 
         if (!$id_previsita) {
             throw new RuntimeException('id_previsita es requerido');
@@ -371,12 +373,16 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             // === Materiales
             $suma_mat_filas = 0.0;
             $materiales = $t['materiales'] ?? [];
-            foreach ($materiales as $m) {
+            foreach ($materiales as $indiceMaterial => $m) {
                 $id_material       = !empty($m['id_material']) ? (int)$m['id_material'] : null;
                 $nombre_material   = trim((string)($m['nombre'] ?? ''));
                 $cantidad          = isset($m['cantidad']) ? (float)$m['cantidad'] : 0.0;
                 $precio_unitario   = isset($m['precio_unitario']) ? (float)$m['precio_unitario'] : 0.0;
                 $porcentaje_extra  = isset($m['porcentaje_extra']) ? (float)$m['porcentaje_extra'] : 0.0;
+                $orden             = isset($m['orden']) ? (int)$m['orden'] : ($indiceMaterial + 1);
+                if ($orden <= 0) {
+                    $orden = $indiceMaterial + 1;
+                }
 
                 $subtotal_fila = ($cantidad * $precio_unitario);
                 if ($porcentaje_extra != 0) {
@@ -384,19 +390,35 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 }
                 $suma_mat_filas += $subtotal_fila;
 
-                $stmt = mysqli_prepare($db, "
-                    INSERT INTO presupuesto_tarea_material
-                    (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
-                     cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
-                     created_at, updated_at)
-                    VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NOW(), NOW())
-                ");
-                mysqli_stmt_bind_param(
-                    $stmt,
-                    "iisdddd",
-                    $id_presu_tarea, $id_material, $nombre_material,
-                    $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila
-                );
+                if ($tieneOrdenMaterialesPresupuesto) {
+                    $stmt = mysqli_prepare($db, "
+                        INSERT INTO presupuesto_tarea_material
+                        (id_presu_tarea, id_material, orden, nombre_material, unidad_venta, unidad_medida,
+                         cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
+                         created_at, updated_at)
+                        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NOW(), NOW())
+                    ");
+                    mysqli_stmt_bind_param(
+                        $stmt,
+                        "iiisdddd",
+                        $id_presu_tarea, $id_material, $orden, $nombre_material,
+                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila
+                    );
+                } else {
+                    $stmt = mysqli_prepare($db, "
+                        INSERT INTO presupuesto_tarea_material
+                        (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
+                         cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
+                         created_at, updated_at)
+                        VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NOW(), NOW())
+                    ");
+                    mysqli_stmt_bind_param(
+                        $stmt,
+                        "iisdddd",
+                        $id_presu_tarea, $id_material, $nombre_material,
+                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila
+                    );
+                }
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al insertar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
                 }
@@ -406,7 +428,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             // === Mano de Obra
             $suma_mo_filas = 0.0;
             $mano_obra = $t['mano_obra'] ?? [];
-            foreach ($mano_obra as $mo) {
+            foreach ($mano_obra as $indiceManoObra => $mo) {
                 $jornal_id         = !empty($mo['jornal_id']) ? (int)$mo['jornal_id'] : null;
                 $nombre_jornal     = trim((string)($mo['nombre'] ?? ''));
                 $cantidad          = isset($mo['cantidad']) ? (float)$mo['cantidad'] : 0.0;
@@ -414,26 +436,53 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 $porcentaje_extra  = isset($mo['porcentaje_extra']) ? (float)$mo['porcentaje_extra'] : 0.0;
                 $dias              = isset($mo['dias']) ? (int)$mo['dias'] : 1;
                 $observacion       = isset($mo['observacion']) ? trim((string)$mo['observacion']) : null;
+                $orden             = isset($mo['orden']) ? (int)$mo['orden'] : ($indiceManoObra + 1);
+                if ($dias <= 0) {
+                    $dias = 1;
+                }
+                $jornales          = isset($mo['jornales']) ? (float)$mo['jornales'] : ($cantidad * $dias);
+                if ($jornales < 0) {
+                    $jornales = 0;
+                }
+                if ($orden <= 0) {
+                    $orden = $indiceManoObra + 1;
+                }
 
-                $subtotal_fila = ($cantidad * $valor_jornal);
+                $subtotal_fila = ($jornales * $valor_jornal);
                 if ($porcentaje_extra != 0) {
                     $subtotal_fila *= (1 + ($porcentaje_extra / 100.0));
                 }
                 $suma_mo_filas += $subtotal_fila;
 
-                $stmt = mysqli_prepare($db, "
-                    INSERT INTO presupuesto_tarea_mano_obra
-                    (id_presu_tarea, id_jornal, nombre_jornal,
-                     cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
-                     updated_at_origen, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
-                ");
-                mysqli_stmt_bind_param(
-                    $stmt,
-                    "iisdiddsd",
-                    $id_presu_tarea, $jornal_id, $nombre_jornal,
-                    $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila
-                );
+                if ($tieneOrdenManoObraPresupuesto) {
+                    $stmt = mysqli_prepare($db, "
+                        INSERT INTO presupuesto_tarea_mano_obra
+                        (id_presu_tarea, id_jornal, orden, nombre_jornal,
+                         cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
+                         updated_at_origen, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
+                    ");
+                    mysqli_stmt_bind_param(
+                        $stmt,
+                        "iiisdiddsd",
+                        $id_presu_tarea, $jornal_id, $orden, $nombre_jornal,
+                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila
+                    );
+                } else {
+                    $stmt = mysqli_prepare($db, "
+                        INSERT INTO presupuesto_tarea_mano_obra
+                        (id_presu_tarea, id_jornal, nombre_jornal,
+                         cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
+                         updated_at_origen, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
+                    ");
+                    mysqli_stmt_bind_param(
+                        $stmt,
+                        "iisdiddsd",
+                        $id_presu_tarea, $jornal_id, $nombre_jornal,
+                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila
+                    );
+                }
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al insertar mano de obra: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
                 }
@@ -852,7 +901,10 @@ function _obtenerTareasConDetalle(mysqli $db, int $id_presupuesto): array
 
     // === MATERIALES
     $materialesPorTarea = [];
-    $sqlMat = "SELECT * FROM `presupuesto_tarea_material` WHERE `id_presu_tarea` IN ($placeholders) ORDER BY `id_ptm` ASC";
+    $ordenMateriales = columna_existe($db, 'presupuesto_tarea_material', 'orden')
+        ? '`id_presu_tarea` ASC, `orden` ASC, `id_ptm` ASC'
+        : '`id_presu_tarea` ASC, `id_ptm` ASC';
+    $sqlMat = "SELECT * FROM `presupuesto_tarea_material` WHERE `id_presu_tarea` IN ($placeholders) ORDER BY $ordenMateriales";
     $stmtM  = stmt_or_throw($db, $sqlMat);
     bind_params_dynamic($stmtM, $types, $ids);
     mysqli_stmt_execute($stmtM);
@@ -864,7 +916,10 @@ function _obtenerTareasConDetalle(mysqli $db, int $id_presupuesto): array
 
     // === MANO DE OBRA
     $moPorTarea = [];
-    $sqlMO = "SELECT * FROM `presupuesto_tarea_mano_obra` WHERE `id_presu_tarea` IN ($placeholders) ORDER BY `id_ptmo` ASC";
+    $ordenManoObra = columna_existe($db, 'presupuesto_tarea_mano_obra', 'orden')
+        ? '`id_presu_tarea` ASC, `orden` ASC, `id_ptmo` ASC'
+        : '`id_presu_tarea` ASC, `id_ptmo` ASC';
+    $sqlMO = "SELECT * FROM `presupuesto_tarea_mano_obra` WHERE `id_presu_tarea` IN ($placeholders) ORDER BY $ordenManoObra";
     $stmtMO = stmt_or_throw($db, $sqlMO);
     bind_params_dynamic($stmtMO, $types, $ids);
     mysqli_stmt_execute($stmtMO);

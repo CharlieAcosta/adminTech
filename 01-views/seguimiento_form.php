@@ -502,13 +502,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $pctExtra = $m['porcentaje_extra'] ?? '0';
             $subfila  = $m['subtotal_fila'] ?? '0.00';
             $idMat    = $m['id_material'] ?? null;
+            $ordenMat = $m['orden'] ?? null;
 
             // vigencia: log_edicion o log_alta
             $fechaRef = $m['log_edicion'] ?? $m['log_alta'] ?? null;
             [$clase, $ro] = $vigencia($fechaRef);
 
             $rowsMat[] = '
-            <tr data-material-id="'. $e($idMat) .'">
+            <tr data-material-id="'. $e($idMat) .'" data-orden="'. $e($ordenMat) .'">
               <td>'. $e($nombre) .'</td>
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-material"
@@ -536,6 +537,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $pctExtra = $mo['porcentaje_extra'] ?? '0';
             $subfila  = $mo['subtotal_fila'] ?? '0.00';
             $jId      = $mo['id_jornal'] ?? $mo['jornal_id'] ?? null;
+            $ordenMo  = $mo['orden'] ?? null;
 
             // vigencia: updated_at_origen preferente, si no updated_at
             $fechaRef = $mo['updated_at_origen'] ?? $mo['updated_at'] ?? null;
@@ -574,7 +576,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             }
 
             $rowsMo[] = '
-            <tr data-jornal_id="'. $e($jId) .'">
+            <tr data-jornal_id="'. $e($jId) .'" data-orden="'. $e($ordenMo) .'">
               <td>'. $e($nombre) .'</td>
 
               <!-- Operarios -->

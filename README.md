@@ -56,6 +56,7 @@ Referencias de implementacion:
 - `04-modelo/presupuestoDocumentosEmitidosModel.php` arma la ruta de emision como base de presupuesto + `/emisiones`.
 - `04-modelo/presupuestoGeneradoModel.php` guarda fotos del presupuesto por tarea dentro de `t1`, `t2`, etc.
 - `04-modelo/presupuestoGeneradoModel.php` tambien sanea el HTML permitido del detalle de tarea antes de persistirlo; hoy solo admite formato basico como negrita, cursiva, subrayado y listas.
+- `04-modelo/visitaModel.php`, `06-funciones_php/guardar_visita.php`, `07-funciones_js/accordionVisita.js` y `04-modelo/presupuestoGeneradoModel.php` mantienen coordinado el orden de materiales y mano de obra entre visita y presupuesto mediante la columna `orden`. El presupuesto debe renderizar y persistir los items en el mismo orden visual de la visita, y la mano de obra debe calcular jornales como `operarios x dias` tanto en frontend como en backend.
 - `04-modelo/presupuestoIntervencionesModel.php` usa el ultimo `estado_resultante` del historial comercial como fallback del estado visible del modal cuando el presupuesto todavia no tiene persistido un estado comercial activo en sus columnas propias.
 - `04-modelo/presupuestosModel.php` y `04-modelo/presupuestoIntervencionesModel.php` tambien usan el ultimo `estado_resultante` del historial comercial del modo activo como fallback para la columna `Presupuesto` del listado de seguimiento, de modo que la grilla refleje `Recibido`, `Resolicitado`, `Aprobado`, `Rechazado`, `Cancelado` y, despues de `Reabrir`, el ultimo estado restaurado en lugar de mostrar la accion `Reabierto`.
 - `04-modelo/presupuestoIntervencionesModel.php` persiste y lee `comentarios` del historial comercial cuando la columna existe; para filas historicas de accion `Enviado` que hayan quedado sin comentario persistido, recompone el texto en lectura desde `presupuesto_documentos_emitidos_envios` usando `para_email` y `cco`, y sigue excluyendo las CCO configuradas por defecto.
@@ -145,6 +146,29 @@ WHERE CHAR_LENGTH(TRIM(COALESCE(p.doc_previsita, ''))) > 0
 ```sql
 SHOW TABLES LIKE 'previsita_documentos';
 SELECT id_previsita, ruta_archivo FROM previsita_documentos ORDER BY id_documento_previsita DESC LIMIT 10;
+```
+
+- Archivo versionado: `11-migraciones_sql/2026-04-21-A_orden_detalle_visita_presupuesto.sql`
+- Objetivo: agregar `orden` a materiales/mano de obra de visita y presupuesto, backfillear el orden historico, alinear presupuestos existentes contra el orden de la visita cuando coinciden por material/jornal, y recalcular los subtotales de mano de obra usando `operarios x dias x valor_jornal`.
+
+```sql
+ALTER TABLE visita_tarea_material ADD COLUMN orden INT UNSIGNED NOT NULL DEFAULT 0;
+ALTER TABLE visita_tarea_mano_obra ADD COLUMN orden INT UNSIGNED NOT NULL DEFAULT 0;
+ALTER TABLE presupuesto_tarea_material ADD COLUMN orden INT UNSIGNED NOT NULL DEFAULT 0;
+ALTER TABLE presupuesto_tarea_mano_obra ADD COLUMN orden INT UNSIGNED NOT NULL DEFAULT 0;
+```
+
+- Verificacion sugerida:
+
+```sql
+SHOW COLUMNS FROM visita_tarea_material LIKE 'orden';
+SHOW COLUMNS FROM visita_tarea_mano_obra LIKE 'orden';
+SHOW COLUMNS FROM presupuesto_tarea_material LIKE 'orden';
+SHOW COLUMNS FROM presupuesto_tarea_mano_obra LIKE 'orden';
+SELECT COUNT(*) FROM visita_tarea_material WHERE orden = 0;
+SELECT COUNT(*) FROM visita_tarea_mano_obra WHERE orden = 0;
+SELECT COUNT(*) FROM presupuesto_tarea_material WHERE orden = 0;
+SELECT COUNT(*) FROM presupuesto_tarea_mano_obra WHERE orden = 0;
 ```
 
 - Archivo versionado: `11-migraciones_sql/2026-04-11-A_presupuesto_historial_comercial_comentarios.sql`
