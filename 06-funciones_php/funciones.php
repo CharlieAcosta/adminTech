@@ -889,7 +889,15 @@ function dataByIdCallelocalidad($idCalle, $idLocalidad, $callType){
     $db = conectaDB(); 
 
     $query =
-    "SELECT c.*, par.*, loc.*, pro.*
+    "SELECT
+    c.id_calle AS id_calle,
+    c.calle AS calle,
+    par.id_partido AS id_partido,
+    par.partido AS partido,
+    loc.id_localidad AS id_localidad,
+    loc.localidad AS localidad,
+    pro.id_provincia AS id_provincia,
+    pro.provincia AS provincia
     FROM calles AS c
 
     LEFT JOIN partidos AS par
@@ -909,6 +917,10 @@ function dataByIdCallelocalidad($idCalle, $idLocalidad, $callType){
     if($resultado !== false && $resultado->num_rows > 0){
         while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
         $rows = $rows[0];
+        $rows['calle'] = ucwords(mb_strtolower((string)($rows['calle'] ?? '')));
+        $rows['localidad'] = ucwords(mb_strtolower((string)($rows['localidad'] ?? '')));
+        $rows['partido'] = (string)($rows['partido'] ?? '');
+        $rows['provincia'] = (string)($rows['provincia'] ?? '');
     } 
 
     mysqli_close($db); // cierra la base de datos

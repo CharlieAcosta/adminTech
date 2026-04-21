@@ -1,6 +1,8 @@
-// funcion ajax guardar los usuarios
-function previsitaGuardar() {
-    if (typeof window.obtenerBloqueoEdicionComercialSeguimiento === 'function') {
+function previsitaGuardar(options) {
+    var config = options && typeof options === 'object' ? options : {};
+    var soloDocumentos = config.soloDocumentos === true;
+
+    if (!soloDocumentos && typeof window.obtenerBloqueoEdicionComercialSeguimiento === 'function') {
         var bloqueoEdicion = window.obtenerBloqueoEdicionComercialSeguimiento();
         if (bloqueoEdicion && bloqueoEdicion.bloqueado) {
             Swal.fire({
@@ -17,27 +19,52 @@ function previsitaGuardar() {
         }
     }
 
-    if ($(".v-id").val() != "") {
-        var accion = "edicion&log_accion=editar";
-        var leyenda = "¿Quieres continuar editando esta previsita";
-        var accionPost = 'edicion';
-    } else {
-        var accion = "alta&log_accion=alta";
-        var accionPost = 'alta';
-        var leyenda = "¿Quieres ingresar otra previsita?";
+    var esEdicion = $(".v-id").val() !== "";
+    var accionPost = esEdicion ? 'edicion' : 'alta';
+    var leyenda = esEdicion
+        ? 'Quieres continuar editando esta previsita?'
+        : 'Quieres ingresar otra previsita?';
+
+    if (soloDocumentos) {
+        if (!esEdicion) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Pre-visita invalida',
+                text: 'Primero debe guardar la pre-visita antes de administrar documentos.',
+                confirmButtonText: 'OK',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+            return;
+        }
+
+        if (
+            window.previsitaDocumentosManager &&
+            typeof window.previsitaDocumentosManager.hasPendingChanges === 'function' &&
+            !window.previsitaDocumentosManager.hasPendingChanges()
+        ) {
+            Swal.fire({
+                icon: 'info',
+                title: 'Sin cambios',
+                text: 'No hay cambios pendientes en los documentos.',
+                confirmButtonText: 'OK',
+                allowOutsideClick: false,
+                allowEscapeKey: false
+            });
+            return;
+        }
     }
 
     var formData = new FormData($('#currentForm')[0]);
     formData.append('ajax', 'on');
     formData.append('accion', accionPost);
+    if (soloDocumentos) {
+        formData.append('solo_documentos', '1');
+    }
 
-    // Obtener los archivos seleccionados de cada campo de tipo file
-    // $('input[type="file"]').each(function() {
-    //     var files = $(this)[0].files;
-    //     for (var i = 0; i < files.length; i++) {
-    //         formData.append($(this).attr('name'), files[i]);
-    //     }
-    // });
+    if (window.previsitaDocumentosManager && typeof window.previsitaDocumentosManager.appendToFormData === 'function') {
+        window.previsitaDocumentosManager.appendToFormData(formData);
+    }
 
     $.ajax({
         url: '../04-modelo/presupuestosGuardarModel.php',
@@ -59,49 +86,64 @@ function previsitaGuardar() {
                 return;
             }
 
-            //console.log('success: '+(data));
+            if (window.previsitaDocumentosManager && typeof window.previsitaDocumentosManager.setPersistedDocuments === 'function') {
+                window.previsitaDocumentosManager.setPersistedDocuments(data.documentos_previsita || []);
+            }
+
+            if (soloDocumentos) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Documentos actualizados',
+                    text: 'Los documentos de la pre-visita se actualizaron correctamente.',
+                    confirmButtonText: 'OK',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                });
+                return;
+            }
+
             Swal.fire({
                 icon: 'success',
                 title: 'Los datos se han registrado correctamente',
-                html: (data.error_file ? data.error_file + '<br>' : '') + leyenda,
+                html: leyenda,
                 showDenyButton: true,
                 confirmButtonText: 'Si',
                 denyButtonText: 'No',
                 allowOutsideClick: false,
                 allowEscapeKey: false
-            }).then((result) => {
-                /* Read more about isConfirmed, isDenied below */
+            }).then(function (result) {
                 if (result.isConfirmed) {
-                    if(accion=="alta&log_accion=alta"){
+                    if (!esEdicion) {
                         $("#currentForm")[0].reset();
                         $(".v-select2").val('').trigger('change');
-                         abm_detect();
+                        if (window.previsitaDocumentosManager && typeof window.previsitaDocumentosManager.clearAll === 'function') {
+                            window.previsitaDocumentosManager.clearAll();
+                        }
+                        abm_detect();
                     }
                 } else if (result.isDenied) {
-                    window.location.href='seguimiento_de_obra_listado.php';
+                    window.location.href = 'seguimiento_de_obra_listado.php';
                 }
-            })
-
-
+            });
         },
-        error: function (data) {
+        error: function () {
             Swal.fire({
                 icon: 'error',
-                title: 'Algó ha salido mal',
-                text: "Intentalo más tarde o comunicate con el administrador",
+                title: 'Algo ha salido mal',
+                text: 'Intentalo mas tarde o comunicate con el administrador',
                 confirmButtonText: 'OK',
                 allowOutsideClick: false,
                 allowEscapeKey: false
-               }).then((result) => {
-                /* Read more about isConfirmed, isDenied below */
+            }).then(function (result) {
                 if (result.isConfirmed) {
-                     window.location.href='seguimiento_de_obra_listado.php';
+                    window.location.href = 'seguimiento_de_obra_listado.php';
                 }
-            })
+            });
         }
-    });   
+    });
 }
 
-
-
-
+$(document).on('click', '.btn-guardar-documentos-previsita', function (event) {
+    event.preventDefault();
+    previsitaGuardar({ soloDocumentos: true });
+});

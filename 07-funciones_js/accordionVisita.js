@@ -849,6 +849,7 @@ $(document).ready(function() {
               const cant  = $(this).find('td:nth-child(3)').text();
               formData.append(`tareas[${tareaIndex}][materiales][${j}][id]`, idMat);
               formData.append(`tareas[${tareaIndex}][materiales][${j}][cantidad]`, cant);
+              formData.append(`tareas[${tareaIndex}][materiales][${j}][orden]`, j + 1);
             }
           });
       
@@ -864,6 +865,7 @@ $(document).ready(function() {
                 formData.append(`tareas[${tareaIndex}][mano_obra][${j}][cantidad]`, cant);
                 formData.append(`tareas[${tareaIndex}][mano_obra][${j}][dias]`, dias);
                 formData.append(`tareas[${tareaIndex}][mano_obra][${j}][observacion]`, obs);
+                formData.append(`tareas[${tareaIndex}][mano_obra][${j}][orden]`, j + 1);
             }
           });
       
@@ -1246,7 +1248,7 @@ $(document).ready(function() {
         };
 
         // --- Materiales
-        $card.find('.materiales-table tbody tr').each(function() {
+        $card.find('.materiales-table tbody tr').each(function(index) {
           const $fila = $(this);
           if ($fila.hasClass('fila-vacia-materiales')) return;
 
@@ -1270,18 +1272,20 @@ $(document).ready(function() {
             unidad_venta: unidad_venta,
             contenido: contenido,
             log_edicion: log_edicion,
-            log_alta: log_alta
+            log_alta: log_alta,
+            orden: index + 1
           });
         });
 
         // --- Mano de Obra
-        $card.find('.mano-obra-table tbody tr').each(function() {
+        $card.find('.mano-obra-table tbody tr').each(function(index) {
           const $fila = $(this);
           if ($fila.hasClass('fila-vacia-mano-obra')) return;
 
           const id = $fila.find('input[name="mano_obra_id[]"]').val();
           const cantidad = parseFloat($fila.find('input[name="mano_obra_cantidad[]"]').val()) || 0;
           const dias = parseFloat($fila.find('input[name="mano_obra_dias[]"]').val()) || 1;
+          const jornales = cantidad * dias;
           const observacion = $fila.find('input[name="mano_obra_observacion[]"]').val().trim();
           const nombre = $fila.find('td:nth-child(2) span').text().trim();
 
@@ -1298,7 +1302,9 @@ $(document).ready(function() {
             observacion: observacion,
             jornal_valor: jornal_valor,
             updated_at: updated_at,
-            jornal_id: jornal_id
+            jornal_id: jornal_id,
+            jornales: jornales,
+            orden: index + 1
           });
         });
 
@@ -1606,9 +1612,10 @@ $(document).ready(function() {
     
       // HTML dinámico de materiales
       let htmlMateriales = '';
-      tarea.materiales.forEach((mat) => {
+      tarea.materiales.forEach((mat, indexMaterial) => {
         const precioUnitario = mat.precio_unitario ?? 0;
         const cantidad = mat.cantidad ?? 0;
+        const ordenMaterial = mat.orden ?? (indexMaterial + 1);
 
         let claseAlerta = '';
         let fechaRef = null;
@@ -1630,7 +1637,7 @@ $(document).ready(function() {
         }
 
         htmlMateriales += `
-        <tr data-material-id="${mat.id_material ?? ''}">
+        <tr data-material-id="${mat.id_material ?? ''}" data-orden="${ordenMaterial}">
           <td>${mat.nombre || ''}</td>
           <td>
             <input
@@ -1668,9 +1675,10 @@ $(document).ready(function() {
       
       // HTML dinámico de mano de obra
       let htmlManoObra = '';
-      tarea.mano_obra.forEach((mo) => {
+      tarea.mano_obra.forEach((mo, indexManoObra) => {
         const valorJornal = mo.jornal_valor ?? 0;
         const cantidadMo  = mo.cantidad ?? 0;
+        const ordenManoObra = mo.orden ?? (indexManoObra + 1);
 
         // Jornales iniciales: los trae la visita.
         // Priorizamos mo.jornales si viene; si no, intentamos cantidad×días si viene mo.dias; si no, fallback cantidad.
@@ -1694,7 +1702,7 @@ $(document).ready(function() {
         }
 
         htmlManoObra += `
-        <tr data-jornal_id="${mo.jornal_id ?? ''}">
+        <tr data-jornal_id="${mo.jornal_id ?? ''}" data-orden="${ordenManoObra}">
           <td>${mo.nombre || ''}</td>
         
           <!-- Operarios (internamente cantidad) -->
@@ -1779,16 +1787,16 @@ $(document).ready(function() {
         </div>
 
         <div class="container-fluid px-3 pt-3">
-          <div class="row">
+          <div class="row tarea-card-cuerpo">
             <!-- Columna izquierda -->
-            <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height: 100%;">
+            <div class="col-md-4 tarea-columna-izquierda">
               <!-- Detalle -->
-              <div class="mb-2">
+              <div class="mb-2 tarea-columna-panel tarea-columna-panel-detalle">
                 <label class="mb-0"><b>Detalle de la tarea</b></label>
                 ${detalleEditorHtml}
               </div>
               <!-- Fotos (PRESUPUESTO: dropzone + input oculto, sin “Seleccionar fotos”) -->
-              <div class="mb-2 flex-grow-1">
+              <div class="mb-2 tarea-columna-panel tarea-columna-panel-imagenes">
                 <label class="mb-0"><b>Imágenes</b></label>
               
                 <!-- input oculto por tarea (queda igual) -->
@@ -1810,13 +1818,13 @@ $(document).ready(function() {
                   </div>
                   <div class="row presu-preview-fotos m-0 mt-2" id="presu_preview_${numeroTarea}"></div>
                 </div>
-                
+
               </div>
                           
             </div>
 
             <!-- Columna derecha -->
-            <div class="col-md-8 d-flex flex-column justify-content-start">
+            <div class="col-md-8 tarea-columna-derecha d-flex flex-column justify-content-start">
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
@@ -1916,11 +1924,8 @@ $(document).ready(function() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
-        </div>
 
-        <div class="tarea-total d-flex flex-column align-items-end px-3">
+              <div class="tarea-total d-flex flex-column align-items-end px-3">
           <!-- Botones de utilidades: visibilidad depende del ID habilitado -->
           <div class="utilidades-extra w-100">
             <button class="col-2 btn-total-tarea subt-util-materiales w-100 ${claseUtilidades}" id="subt-util-materiales-${numeroTarea}">
@@ -1943,8 +1948,13 @@ $(document).ready(function() {
           <div class="d-flex justify-content-end w-100">
             <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea ${claseUtilidades}" id="porcentajetarea-${numeroTarea}">% : <strong>$0,00</strong></button>
           </div>
-          <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-${numeroTarea}">
-          <div class="tarea-inline-actions d-flex align-items-center mr-auto">
+        </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tarea-barra-inferior d-flex align-items-end px-3 pb-2">
+          <div class="tarea-inline-actions d-flex align-items-center">
             <button
               type="button"
               id="btnGuardarTarea_${numeroTarea}"
@@ -1955,34 +1965,37 @@ $(document).ready(function() {
             <button
               type="button"
               id="btnTraerTarea_${numeroTarea}"
-              class="btn btn-warning btn-traer-tarea"
+              class="btn btn-warning btn-traer-tarea btn-tarea"
               data-nro="${numeroTarea}">
               <i class="fas fa-download"></i> Traer tarea
             </button>
           </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="iibb-${numeroTarea}">IIBB: $0,00</button>
+
+          <div class="fila-impuestos flex-grow-1" id="fila-impuestos-${numeroTarea}">
+            <div class="tarea-impuestos-lista">
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="iibb-${numeroTarea}">IIBB: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="ganancias-${numeroTarea}">Ganancias 35%: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="cheque-${numeroTarea}">Imp. cheque: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="inversion-${numeroTarea}">Costo inv. 3%: $0,00</button>
+              </div>
+              <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
+                <button type="button" class="btn bg-secondary w-100" id="retiva-${numeroTarea}">Ret. IVA mat: <strong>$0,00</strong></button>
+              </div>
+            </div>
+
+            <div class="tarea-subtotal-col">
+              <button type="button" class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-${numeroTarea}">
+                Subtotal Tarea ${numeroTarea}: $0,00
+              </button>
+            </div>
           </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="ganancias-${numeroTarea}">Ganancias 35%: $0,00</button>
-          </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="cheque-${numeroTarea}">Imp. cheque: $0,00</button>
-          </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="inversion-${numeroTarea}">Costo inv. 3%: $0,00</button>
-          </div>
-          <div class="col-auto pr-1 pl-0 ${claseImpuestos}">
-            <button type="button" class="btn bg-secondary w-100" id="retiva-${numeroTarea}">Ret. IVA mat: <strong>$0,00</strong></button>
-          </div>
-        
-          <!-- ESTE NO SE OCULTA -->
-          <div class="col-2 pr-0 pl-0">
-            <button type="button" class="btn-total-tarea w-100 px-4 util-muy pt-2 mt-0" id="subt-tarea-${numeroTarea}">
-              Subtotal Tarea ${numeroTarea}: $0,00
-            </button>
-          </div>
-        </div>        
         </div>
       </div>`;
         
@@ -2090,28 +2103,32 @@ $(document).ready(function() {
             const otros_mano_obra     = parseFloat($card.find('.tarea-mano-obra .input-otros-mano').val()) || 0;
 
             const materiales = [];
-            $card.find('.tarea-materiales tbody tr').not('.fila-subtotal,.fila-otros-materiales').each(function () {
+            $card.find('.tarea-materiales tbody tr').not('.fila-subtotal,.fila-otros-materiales').each(function (indexMaterial) {
               const $tr = $(this);
               const nombre            = $tr.find('td').eq(0).text().trim();
               const cantidad          = parseFloat($tr.find('.cantidad-material').val()) || 0;
               const precio_unitario   = parseFloat($tr.find('.precio-unitario').val()) || 0;
               const porcentaje_extra  = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
               const id_material       = $tr.data('material_id') || $tr.data('material-id') || null;
+              const orden             = indexMaterial + 1;
               if (nombre || cantidad || precio_unitario) {
-                materiales.push({ id_material, nombre, cantidad, precio_unitario, porcentaje_extra });
+                materiales.push({ id_material, nombre, cantidad, precio_unitario, porcentaje_extra, orden });
               }
             });
 
             const mano_obra = [];
-            $card.find('.tarea-mano-obra tbody tr').not('.fila-subtotal,.fila-otros-mano').each(function () {
+            $card.find('.tarea-mano-obra tbody tr').not('.fila-subtotal,.fila-otros-mano').each(function (indexManoObra) {
               const $tr = $(this);
               const nombre            = $tr.find('td').eq(0).text().trim();
               const cantidad          = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0;
+              const dias              = parseFloat($tr.find('.dias-mano-obra').val()) || 1;
+              const jornales          = parseFloat($tr.find('.jornales-mano-obra').val()) || (cantidad * dias);
               const jornal_valor      = parseFloat($tr.find('.valor-jornal').val()) || 0;
               const porcentaje_extra  = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
               const jornal_id         = $tr.data('jornal_id') || $tr.data('jornal-id') || null;
+              const orden             = indexManoObra + 1;
               if (nombre || cantidad || jornal_valor) {
-                mano_obra.push({ jornal_id, nombre, cantidad, jornal_valor, porcentaje_extra });
+                mano_obra.push({ jornal_id, nombre, cantidad, dias, jornales, jornal_valor, porcentaje_extra, orden });
               }
             });
 

@@ -13,6 +13,8 @@ include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
+include_once '../04-modelo/previsitaWorkflowModel.php';
+include_once '../04-modelo/previsitaDocumentosModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
@@ -35,19 +37,24 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
 
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
+$visualizacionSolicitada = false;
 $bloqueoEdicionComercial = [
   'bloqueado' => false,
   'estado' => '',
   'estado_label' => '',
   'mensaje' => '',
 ];
+$documentosPrevisita = [];
+$documentosPrevisitaJson = '[]';
+$permiteEditarDocumentosPrevisita = true;
+$workflowPrevisita = snapshotWorkflowPrevisitaEstado(null);
 $presupuestoIntervinoResumen = construirResumenIntervencionesPresupuesto([]);
 $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
 $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
 
 if(isset($_GET['id']) && isset($_GET['acci'])){
   $id = $_GET['id'];
-  if($_GET['acci'] == "v"){$visualiza="on";} // pone los campos en modo visualización
+  if($_GET['acci'] == "v"){$visualiza="on"; $visualizacionSolicitada = true;} // pone los campos en modo visualización
   if($_GET['acci'] == "pdf"){$pdf="on";}
 
   $datos = modGetPresupuestoById($id, 'php');
@@ -65,10 +72,11 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   ) : [];
 
   $intervino_previsita_apenom = ($intervino_previsita_agente[0]['apellidos'] ?? '')." ".($intervino_previsita_agente[0]['nombres'] ?? '')." | ".strToDateFormat($datos['log_edicion'] ?? '', 'd/m/Y H:i:s');
+  $workflowPrevisita = snapshotWorkflowPrevisitaEstado($datos['estado_visita'] ?? null);
 
   $tareas_visitadas = [];
 
-  if (($datos['estado_visita'] ?? '') == 'Ejecutada' && isset($datos['id_previsita'])) {
+  if (!empty($workflowPrevisita['habilita_visita']) && isset($datos['id_previsita'])) {
       $id_visita = $datos['id_previsita'];
 
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
@@ -83,9 +91,9 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $orden_compra_card = 'card-danger';
     $presupuesto_display = 'd-none';
 
-    if(($datos['estado_visita'] ?? '') !== 'Ejecutada'){$previsita_show = "show";} else {$previsita_show = "";}
+    if (!empty($workflowPrevisita['habilita_visita'])) {$previsita_show = "";} else {$previsita_show = "show";}
     
-    if(($datos['estado_visita'] ?? '') == 'Ejecutada'){
+    if (!empty($workflowPrevisita['habilita_visita'])) {
         $itemNumber = 0;
 
         //$itemNota = SelectAllDB('visita_notas', 'id_visita', '=', arrayPrintValue('', $datos, 'id_previsita', ''), $callType = 'php');
@@ -120,7 +128,15 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
 
         $visualiza_prevista = "on";
 
-    }else{
+    } elseif (!empty($workflowPrevisita['bloqueado'])) {
+        $previsita_buttons = 'd-none';
+        $visita_show = "";
+        $visualiza_prevista = "on";
+
+        if (!empty($workflowPrevisita['bloquea_avance'])) {
+          $visualiza = "on";
+        }
+    } else {
         $visita_show = ""; //muestra el accordion de visita cerrado
     } 
 
@@ -131,6 +147,38 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
   $presupuesto_card = 'card-danger'; $presupuesto_show = "";
   $orden_compra_card = 'card-danger'; $orden_compra_show = "";
 
+}
+
+$clientesSugeridosDisponibles = modGetAllClientes('todos');
+$clientesSugeridosMap = [];
+
+if (!is_array($clientesSugeridosDisponibles)) {
+  $clientesSugeridosDisponibles = [];
+}
+
+foreach ($clientesSugeridosDisponibles as $clienteSugerido) {
+  $razonSocialSugerida = trim((string)($clienteSugerido['razon_social'] ?? ''));
+  $cuitSugerido = trim((string)($clienteSugerido['cuit'] ?? ''));
+
+  if ($razonSocialSugerida === '') {
+    continue;
+  }
+
+  $sugerenciaVisible = $razonSocialSugerida . ($cuitSugerido !== '' ? ' | ' . $cuitSugerido : '');
+  $claveSugerencia = mb_strtoupper(preg_replace('/\s+/', ' ', trim($sugerenciaVisible)), 'UTF-8');
+
+  $clientesSugeridosMap[$claveSugerencia] = [
+    'id_cliente' => (int)($clienteSugerido['id_cliente'] ?? 0),
+    'label' => $sugerenciaVisible,
+    'razon_social' => $razonSocialSugerida,
+    'cuit' => $cuitSugerido,
+    'dirfis_provincia' => $clienteSugerido['dirfis_provincia'] ?? '',
+    'dirfis_partido' => $clienteSugerido['dirfis_partido'] ?? '',
+    'dirfis_localidad' => $clienteSugerido['dirfis_localidad'] ?? '',
+    'dirfis_calle' => $clienteSugerido['dirfis_calle'] ?? '',
+    'dirfis_altura' => $clienteSugerido['dirfis_altura'] ?? '',
+    'dirfis_cp' => $clienteSugerido['dirfis_cp'] ?? '',
+  ];
 }
 
 $provincias = getAllProvincias();
@@ -266,7 +314,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
               $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true);            
               $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
               $bloqueoEdicionComercial = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$datos["id_previsita"]);
-              if (!empty($bloqueoEdicionComercial['bloqueado'])) {
+              if (!empty($bloqueoEdicionComercial['bloqueado']) || !empty($workflowPrevisita['bloquea_avance'])) {
                 $visualiza = "on";
               }
               if ($presupuesto_generado['presupuesto']) {
@@ -288,6 +336,19 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
         // END PRESUPUESTO GENERADO 
 
       }
+
+if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
+  $documentosPrevisita = listarDocumentosPrevisita((int)$datos['id_previsita'], $datos);
+}
+
+$permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visualiza === '' && $visualiza_prevista === '' && empty($bloqueoEdicionComercial['bloqueado']) && empty($workflowPrevisita['bloqueado']));
+$permiteEditarDocumentosPrevisita = ($visualizacionSolicitada === false && $pdf === '');
+$mostrarGuardarSoloDocumentosPrevisita = ($permiteEditarDocumentosPrevisita && !$permiteEditarPrevisitaCompleta && !empty($datos['id_previsita']));
+$previsita_buttons = $permiteEditarPrevisitaCompleta ? 'd-flex' : 'd-none';
+$documentosPrevisitaJson = json_encode($documentosPrevisita, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+if ($documentosPrevisitaJson === false) {
+  $documentosPrevisitaJson = '[]';
+}
 
 function intervinientes_names($b_array){
   $intervinieron_agentes = [];
@@ -441,13 +502,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $pctExtra = $m['porcentaje_extra'] ?? '0';
             $subfila  = $m['subtotal_fila'] ?? '0.00';
             $idMat    = $m['id_material'] ?? null;
+            $ordenMat = $m['orden'] ?? null;
 
             // vigencia: log_edicion o log_alta
             $fechaRef = $m['log_edicion'] ?? $m['log_alta'] ?? null;
             [$clase, $ro] = $vigencia($fechaRef);
 
             $rowsMat[] = '
-            <tr data-material-id="'. $e($idMat) .'">
+            <tr data-material-id="'. $e($idMat) .'" data-orden="'. $e($ordenMat) .'">
               <td>'. $e($nombre) .'</td>
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-material"
@@ -475,6 +537,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $pctExtra = $mo['porcentaje_extra'] ?? '0';
             $subfila  = $mo['subtotal_fila'] ?? '0.00';
             $jId      = $mo['id_jornal'] ?? $mo['jornal_id'] ?? null;
+            $ordenMo  = $mo['orden'] ?? null;
 
             // vigencia: updated_at_origen preferente, si no updated_at
             $fechaRef = $mo['updated_at_origen'] ?? $mo['updated_at'] ?? null;
@@ -513,7 +576,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             }
 
             $rowsMo[] = '
-            <tr data-jornal_id="'. $e($jId) .'">
+            <tr data-jornal_id="'. $e($jId) .'" data-orden="'. $e($ordenMo) .'">
               <td>'. $e($nombre) .'</td>
 
               <!-- Operarios -->
@@ -563,15 +626,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           </div>
 
           <div class="container-fluid px-3 pt-3">
-            <div class="row">
+            <div class="row tarea-card-cuerpo">
               <!-- Izquierda -->
-              <div class="col-md-4 d-flex flex-column justify-content-between" style="min-height:100%;">
-                <div class="mb-2">
+              <div class="col-md-4 tarea-columna-izquierda">
+                <div class="mb-2 tarea-columna-panel tarea-columna-panel-detalle">
                   <label class="mb-0"><b>Detalle de la tarea</b></label>
                   '. renderizar_editor_detalle_tarea_presupuesto((string)$descripcionHtml, $soloLectura) .'
                 </div>
 
-                <div class="mb-2 flex-grow-1">
+                <div class="mb-2 tarea-columna-panel tarea-columna-panel-imagenes">
                   <label class="mb-0"><b>Imágenes</b></label>
 
                   <input type="file" class="presu-fotos d-none" id="presu_fotos_tarea_'. $e($nro) .'"
@@ -603,7 +666,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </div>
 
               <!-- Derecha -->
-              <div class="col-md-8 d-flex flex-column justify-content-start">
+              <div class="col-md-8 tarea-columna-derecha d-flex flex-column justify-content-start">
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
@@ -685,54 +748,59 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                     </tbody>
                   </table>
                 </div>
+
+                <div class="tarea-total d-flex flex-column align-items-end px-3">
+                  <div class="utilidades-extra w-100">
+                    <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
+                  </div>
+                  <div class="utilidades-extra w-100">
+                    <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
+                  </div>
+                  <div class="utilidades-extra w-100">
+                    <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
+                  </div>
+                  <div class="d-flex justify-content-end w-100">
+                    <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
+                  </div>
+                  <div class="d-flex justify-content-end w-100">
+                    <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="tarea-total d-flex flex-column align-items-end px-3">
-            <div class="utilidades-extra w-100">
-              <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
-            </div>
-            <div class="utilidades-extra w-100">
-              <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
-            </div>
-            <div class="utilidades-extra w-100">
-              <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
-            </div>
-            <div class="d-flex justify-content-end w-100">
-              <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
-            </div>
-            <div class="d-flex justify-content-end w-100">
-              <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+          <div class="tarea-barra-inferior d-flex align-items-end px-3 pb-2">
+            <div class="tarea-inline-actions d-flex align-items-center">
+              <button
+                type="button"
+                id="btnGuardarTarea_'. $e($nro) .'"
+                class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
+                data-nro="'. $e($nro) .'"
+                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                <i class="fas fa-save"></i> Guardar tarea
+              </button>
+              <button
+                type="button"
+                id="btnTraerTarea_'. $e($nro) .'"
+                class="btn btn-warning btn-traer-tarea btn-tarea"
+                data-nro="'. $e($nro) .'"
+                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                <i class="fas fa-download"></i> Traer tarea
+              </button>
             </div>
 
-            <div class="d-flex justify-content-end flex-wrap fila-impuestos mt-2 w-100" id="fila-impuestos-'. $e($nro) .'">
-            <div class="tarea-inline-actions d-flex align-items-center mr-auto">
-                <button
-                  type="button"
-                  id="btnGuardarTarea_'. $e($nro) .'"
-                  class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
-                  data-nro="'. $e($nro) .'"
-                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
-                  <i class="fas fa-save"></i> Guardar tarea
-                </button>
-                <button
-                  type="button"
-                  id="btnTraerTarea_'. $e($nro) .'"
-                  class="btn btn-warning btn-traer-tarea btn-tarea"
-                  data-nro="'. $e($nro) .'"
-                  data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
-                  <i class="fas fa-download"></i> Traer tarea
-                </button>
-            </div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
-              <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+            <div class="fila-impuestos flex-grow-1" id="fila-impuestos-'. $e($nro) .'">
+              <div class="tarea-impuestos-lista">
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+              </div>
 
-              <div class="col-2 pr-0 pl-0">
-                <button type="button" class="btn-total-tarea w-100 px-4 util-muy pt-2 mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
+              <div class="tarea-subtotal-col">
+                <button type="button" class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
               </div>
             </div>
           </div>
@@ -798,6 +866,87 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <!-- Custom -->
   <link rel="stylesheet" href="../dist/css/custom.css">
+  <style>
+    #toast-container > .toast-info {
+      background-color: #0f6d85 !important;
+      color: #ffffff !important;
+      opacity: 0.98 !important;
+      box-shadow: 0 10px 28px rgba(15, 109, 133, 0.35) !important;
+      border-left: 4px solid #083b48;
+    }
+
+    #toast-container > .toast-info .toast-message,
+    #toast-container > .toast-info .toast-title,
+    #toast-container > .toast-info .toast-close-button {
+      color: #ffffff !important;
+      text-shadow: none !important;
+      opacity: 1 !important;
+    }
+
+    #toast-container > .toast-info .toast-progress {
+      background-color: rgba(255, 255, 255, 0.7) !important;
+      opacity: 1 !important;
+    }
+
+    .cliente-sugerencias-group {
+      position: relative;
+    }
+
+    .cliente-sugerencias-menu {
+      position: absolute;
+      top: calc(100% - 1px);
+      left: 0;
+      right: 0;
+      z-index: 1060;
+      display: none;
+      background: #ffffff;
+      border: 1px solid #ced4da;
+      border-top: none;
+      border-radius: 0 0 0.25rem 0.25rem;
+      box-shadow: 0 14px 28px rgba(31, 45, 61, 0.16);
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .cliente-sugerencia-item {
+      display: block;
+      width: 100%;
+      padding: 0.65rem 0.8rem;
+      border: none;
+      border-top: 1px solid #eef2f6;
+      background: #ffffff;
+      color: #1f2d3d;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .cliente-sugerencia-item:first-child {
+      border-top: none;
+    }
+
+    .cliente-sugerencia-item:hover,
+    .cliente-sugerencia-item:focus {
+      background: #edf7fa;
+      outline: none;
+    }
+
+    .cliente-sugerencia-item.is-active {
+      background: #dff1f7;
+    }
+
+    .cliente-sugerencia-titulo {
+      display: block;
+      font-weight: 600;
+      color: #1f2d3d;
+    }
+
+    .cliente-sugerencia-meta {
+      display: block;
+      margin-top: 0.15rem;
+      font-size: 0.82rem;
+      color: #5c6b77;
+    }
+  </style>
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
   <script src="../05-plugins/html2canvas/html2canvas.min.js"></script>
@@ -846,12 +995,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     <div class="card-header" id="headingOne">
       <h2 class="mb-0 d-flex justify-content-between align-items-center">
         <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-        Pre-visita <?php 
-          echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>');
-          if (!empty($datos['razon_social'])) {
-            echo ' | ' . strtoupper($datos['razon_social']);
-          }
-        ?>
+        <span class="previsita-titulo-base">Pre-visita <?php echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>'); ?></span><span id="previsita_cliente_titulo"><?php if (!empty($datos['razon_social'])) { echo ' | ' . strtoupper($datos['razon_social']); } ?></span>
         </button>
         <span class="col-3 card-title text-right"><?php imprimirValido("Intervino", "intervino_previsita_apenom", true, 'strong', ': ') ?></span>
       </h2>
@@ -940,11 +1084,12 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
                   <div class="col-3 form-group mb-1 mt-1">
                       <small class="v-visual-edit d-none"><label class="mb-0">Razón Social</label></small>
-                      <div class="input-group mb-0">
+                      <div class="input-group mb-0 cliente-sugerencias-group">
                         <div class="input-group-prepend">
                           <span class="input-group-text"><i class="fas fa-city v-requerido-icon"></i></span>
                         </div>
-                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Razón Social" id="razon_social" name="razon_social" value="<?php echo arrayPrintValue(null, $datos, 'razon_social', null); ?>">
+                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Razón Social" id="razon_social" name="razon_social" list="clientes_razon_social_list" autocomplete="off" value="<?php echo arrayPrintValue(null, $datos, 'razon_social', null); ?>">
+                        <div id="razon_social_sugerencias" class="cliente-sugerencias-menu" role="listbox" aria-label="Clientes sugeridos"></div>
                       </div>
                   </div>
 
@@ -1191,21 +1336,48 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                       </div>
                 </div>                
 
-                <div class="input-group col-6 form-group mb-1 mt-2">
-                    <small class="input-group v-visual-edit d-none"><label class="mb-0">Documento<strong><small class="text-primary"></small></strong></label></small>
-                    <div class="input-group-prepend">
-                         <span class="input-group-text"><i class="fas fa-file-invoice v-documento-link" data-tipo="previsita"></i></span>
-                    </div>
-                    <div class="custom-file <?php echo '';//$previsita_v_disabled; ?>">
-                        <input type="file" class="custom-file-input v-archivos-admitidos-pdf" name="doc_previsita" id="doc_previsita" data-browse="Buscar" value="">
-                        <label class="custom-file-label <?php '';//$previsita_v_disabled; ?>" for="exampleInputFile"><?php echo arrayPrintValue(null, $datos, 'doc_previsita', null, 'Seleccionar documento'); ?></label>
-                    </div>
+                <div class="row">
+                  <div class="col-12 form-group mb-1 mt-2">
+                      <small class="v-visual-edit d-none"><label class="mb-1">Documentos</label></small>
+                      <div class="previsita-documentos-panel" id="previsitaDocumentosPanel" data-readonly="<?php echo $permiteEditarDocumentosPrevisita ? '0' : '1'; ?>" data-documentos-iniciales="<?php echo htmlspecialchars($documentosPrevisitaJson, ENT_QUOTES, 'UTF-8'); ?>">
+                        <input
+                          type="file"
+                          class="d-none"
+                          id="doc_previsita"
+                          multiple
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,image/jpeg,image/png"
+                        >
+                        <input type="hidden" id="previsita_documentos_eliminados" name="previsita_documentos_eliminados" value="">
+
+                        <div class="previsita-documentos-dropzone border rounded bg-light p-3 text-muted mb-2" id="previsitaDocumentosDropzone" role="button" tabindex="0" aria-label="Adjuntar documentos de la pre-visita">
+                          <div class="previsita-documentos-dropzone-copy text-center">
+                            <i class="fas fa-file-upload mb-2"></i>
+                            <div><strong>Arrastre aqui los archivos</strong> o haga click.</div>
+                            <small class="d-block mt-1">PDF, Word, Excel, JPG, PNG o TXT. Maximo 5 MB por archivo.</small>
+                          </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2 previsita-documentos-encabezado">
+                          <div class="small text-muted" id="previsitaDocumentosResumen"></div>
+                        </div>
+
+                        <div class="row previsita-documentos-grid" id="previsitaDocumentosGrid"></div>
+                      </div>
+                  </div>
                 </div>
 
                 <div class="row <?php echo $previsita_buttons;?> text-center justify-content-center pr-1 mt-2">
                   <button type="submit" class="col-1 btn btn-primary btn-block m-2 v-alta-edit d-none" data-accion="guardar"><i class="fa fa-plus-circle"></i> Guardar</button>
                   <button type="button" class="col-1 btn btn-warning btn-block m-2 v-alta-edit d-none v-accion-cancelar" data-accion="cancelar"><i class="fa fa-ban"></i> Cancelar</button>
                 </div>
+
+                <?php if ($mostrarGuardarSoloDocumentosPrevisita): ?>
+                <div class="row text-center justify-content-center pr-1 mt-2">
+                  <button type="button" class="btn btn-primary btn-uniform m-2 btn-guardar-documentos-previsita">
+                    <i class="fa fa-save"></i> Guardar documentos
+                  </button>
+                </div>
+                <?php endif; ?>
 
           </div>
           <!-- end card accordion 1 -->
@@ -1478,7 +1650,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           <!-- Aquí se insertará el contenido dinámico generado -->
             <?php 
               if($presupuestoGenerado): 
-                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada, !empty($bloqueoEdicionComercial['bloqueado']));
+                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada, !empty($bloqueoEdicionComercial['bloqueado']) || !empty($workflowPrevisita['bloquea_avance']));
               endif;                
             ?>
         </div>
@@ -1610,6 +1782,189 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </div>
 
 <style>
+  .previsita-documentos-panel {
+    padding: 0.6rem 0.7rem;
+    border: 1px solid #d9e0e7;
+    border-radius: 0.6rem;
+    background: #ffffff;
+  }
+
+  .previsita-documentos-dropzone {
+    border: 2px dashed #c7d2dc !important;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    cursor: pointer;
+    padding: 0.55rem 0.75rem !important;
+  }
+
+  .previsita-documentos-dropzone-copy i {
+    font-size: 1rem;
+    margin-bottom: 0.2rem !important;
+  }
+
+  .previsita-documentos-dropzone-copy {
+    font-size: 0.92rem;
+    line-height: 1.2;
+  }
+
+  .previsita-documentos-dropzone.is-dragover {
+    background: #eef6ff !important;
+    border-color: #2f6fad !important;
+    color: #2f6fad !important;
+  }
+
+  .previsita-documentos-panel[data-readonly="1"] .previsita-documentos-dropzone {
+    cursor: default;
+    background: #f8f9fa !important;
+    border-style: solid !important;
+    color: #6c757d !important;
+  }
+
+  .previsita-documentos-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0;
+    min-height: 0.5rem;
+  }
+
+  .previsita-documento-slot {
+    display: flex;
+    flex: 0 0 290px;
+    max-width: 290px;
+    padding: 0;
+    margin: 0 !important;
+  }
+
+  .previsita-documento-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 100%;
+    min-height: 104px;
+    padding: 0.55rem 0.65rem 0.5rem;
+    border: 1px solid #dde4ea;
+    border-radius: 0.55rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
+    box-shadow: 0 1px 2px rgba(34, 53, 74, 0.06);
+  }
+
+  @media (max-width: 575.98px) {
+    .previsita-documento-slot {
+      flex-basis: 100%;
+      max-width: 100%;
+    }
+  }
+
+  .previsita-documento-open {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .previsita-documento-open:focus {
+    outline: 0;
+  }
+
+  .previsita-documento-icon {
+    flex: 0 0 auto;
+    font-size: 1.55rem;
+    line-height: 1;
+  }
+
+  .previsita-documento-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .previsita-documento-nombre {
+    display: -webkit-box;
+    overflow: hidden;
+    font-weight: 600;
+    font-size: 0.92rem;
+    line-height: 1.15;
+    color: #243444;
+    word-break: break-word;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .previsita-documento-meta {
+    font-size: 0.72rem;
+    line-height: 1.2;
+    color: #6c757d;
+  }
+
+  .previsita-documento-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    margin-top: auto;
+  }
+
+  .previsita-documento-remove {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    width: 1.45rem;
+    height: 1.45rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(220, 53, 69, 0.12);
+    color: #c82333;
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+
+  .previsita-documento-remove:hover {
+    background: rgba(220, 53, 69, 0.2);
+  }
+
+  .previsita-documentos-empty {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px dashed #d7dde4;
+    border-radius: 0.55rem;
+    background: #f8f9fb;
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.86rem;
+  }
+
+  .previsita-documento-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.08rem 0.34rem;
+    border-radius: 999px;
+    background: #e9eef5;
+    font-size: 0.64rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #516170;
+    text-transform: uppercase;
+  }
+
+  .previsita-documento-actions .btn {
+    padding: 0.18rem 0.48rem;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+
+  .previsita-documento-estado {
+    white-space: nowrap;
+    font-size: 0.72rem;
+  }
+
   .tarea-detalle-editor {
     display: flex;
     flex-direction: column;
@@ -1678,6 +2033,240 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   .tarea-descripcion-editor ul,
   .tarea-descripcion-editor ol {
     padding-left: 1.25rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card {
+    --tarea-totales-width: 300px;
+    --tarea-barra-btn-height: 2.62rem;
+    --tarea-util-gap: 0.45rem;
+    --tarea-editor-line-height: 1.18rem;
+    --tarea-editor-block-gap: 0.04rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor {
+    line-height: var(--tarea-editor-line-height);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor p,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor div,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor ul,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor ol {
+    margin-bottom: var(--tarea-editor-block-gap);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total {
+    row-gap: var(--tarea-util-gap);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.25rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda .btn {
+    margin-right: 0 !important;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    width: 100%;
+    margin-top: var(--tarea-util-gap);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions {
+    flex: 0 0 auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--tarea-totales-width);
+    column-gap: 0.75rem;
+    row-gap: 0.65rem;
+    flex: 1 1 auto;
+    align-items: flex-end;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-end;
+    align-content: flex-end;
+    gap: 0.35rem;
+    min-width: 0;
+    width: fit-content;
+    max-width: 100%;
+    justify-self: end;
+    margin-left: auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista > .col-auto {
+    flex: 0 0 auto;
+    max-width: none;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .btn-total-tarea,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .btn-porcentaje-tarea {
+    margin-top: 0;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.98rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn {
+    white-space: nowrap;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn.bg-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--tarea-barra-btn-height);
+    font-size: 0.92rem;
+    padding: 0.42rem 0.72rem;
+    line-height: 1.5;
+    box-sizing: border-box;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) {
+    width: min(100%, var(--tarea-totales-width));
+    max-width: var(--tarea-totales-width);
+    margin-left: auto;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra .btn-total-tarea,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-total-tarea,
+  #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-porcentaje-tarea {
+    flex: 0 0 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: nowrap;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col {
+    width: 100%;
+    max-width: var(--tarea-totales-width);
+    justify-self: end;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col .btn-total-tarea {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: var(--tarea-barra-btn-height);
+    margin-top: 0;
+    padding: 0.42rem 0.72rem;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+
+  @media (min-width: 768px) {
+    #contenedorPresupuestoGenerado .tarea-card .tarea-card-cuerpo {
+      align-items: stretch;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-izquierda {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      gap: 0.75rem;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-izquierda .tarea-columna-panel {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      min-height: 0;
+      margin-bottom: 0 !important;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-derecha {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-detalle .tarea-detalle-editor,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-imagenes .presu-dropzone {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-detalle .tarea-descripcion,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-detalle .tarea-descripcion-editor {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: auto;
+      max-height: none;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-imagenes .presu-dropzone {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-panel-imagenes .presu-preview-fotos {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      align-content: flex-start;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-izquierda .tarea-acciones-izquierda {
+      flex: 0 0 auto;
+      margin-top: auto;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-columna-derecha .tarea-total {
+      width: 100%;
+      margin-top: auto;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda {
+      flex-wrap: wrap;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior {
+      flex-wrap: wrap;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) {
+      max-width: 100%;
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
+      grid-template-columns: 1fr;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col {
+      width: 100%;
+      max-width: 100%;
+      justify-self: stretch;
+    }
   }
 
   .presupuesto-accordion-header {
@@ -1912,6 +2501,17 @@ $(function () {
   var camposLimpios = "";
 
 $(document).ready(function() {
+  toastr.options = {
+    closeButton: true,
+    progressBar: true,
+    newestOnTop: true,
+    timeOut: 2600,
+    extendedTimeOut: 350,
+    showDuration: 150,
+    hideDuration: 150,
+    preventDuplicates: false
+  };
+
   $('[data-mask]').inputmask({ clearIncomplete: false });
 
   // Aplicar la máscara con opciones correctas
@@ -1941,14 +2541,429 @@ $(document).ready(function() {
      inputEmptyDetect("input, select, textarea");
     }
 
-    // Obtener la fecha actual
-    var fechaActual = new Date();
+    function obtenerFechaLocalInput(fecha) {
+      const fechaBase = fecha instanceof Date ? fecha : new Date();
+      const year = fechaBase.getFullYear();
+      const month = String(fechaBase.getMonth() + 1).padStart(2, '0');
+      const day = String(fechaBase.getDate()).padStart(2, '0');
+      return year + '-' + month + '-' + day;
+    }
 
-    // Obtener la referencia al campo de fecha
-    var campoFecha = document.getElementById('fecha_visita');
+    function sincronizarFechaVisitaMinima() {
+      var campoFecha = document.getElementById('fecha_visita');
+      if (!campoFecha) {
+        return '';
+      }
 
-    // Establecer el atributo 'min' del campo de fecha a la fecha actual
-    campoFecha.min = fechaActual.toISOString().split('T')[0];
+      var fechaActualInput = obtenerFechaLocalInput(new Date());
+      campoFecha.min = fechaActualInput;
+      return fechaActualInput;
+    }
+
+    function sincronizarTituloClientePrevisita() {
+      var $tituloCliente = $('#previsita_cliente_titulo');
+      var $campoRazonSocial = $('#razon_social');
+
+      if (!$tituloCliente.length || !$campoRazonSocial.length) {
+        return;
+      }
+
+      var razonSocialActual = String($campoRazonSocial.val() || '').trim();
+      if (razonSocialActual.indexOf(' | ') !== -1) {
+        razonSocialActual = razonSocialActual.split(' | ')[0].trim();
+      }
+
+      $tituloCliente.text(razonSocialActual !== '' ? ' | ' + razonSocialActual.toUpperCase() : '');
+    }
+
+    function normalizarClaveClienteSugerido(texto) {
+      return String(texto || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .toUpperCase();
+    }
+
+    function escaparHtmlClienteSugerencia(texto) {
+      return String(texto || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function obtenerListadoClientesSugeridos() {
+      var clientesSugeridos = window.SEGUIMIENTO_CLIENTES_SUGERIDOS || {};
+      var clientesUnicos = [];
+      var clientesIndexados = {};
+
+      Object.keys(clientesSugeridos).forEach(function (claveCliente) {
+        var clienteSugerido = clientesSugeridos[claveCliente];
+
+        if (!clienteSugerido) {
+          return;
+        }
+
+        var claveUnica = [
+          String(clienteSugerido['id_cliente'] || ''),
+          String(clienteSugerido['cuit'] || ''),
+          String(clienteSugerido['razon_social'] || '')
+        ].join('|');
+
+        if (clientesIndexados[claveUnica]) {
+          return;
+        }
+
+        clientesIndexados[claveUnica] = true;
+        clientesUnicos.push(clienteSugerido);
+      });
+
+      return clientesUnicos;
+    }
+
+    function obtenerClienteSugeridoPorRazonSocial(valorIngresado) {
+      var claveClienteBuscada = normalizarClaveClienteSugerido(valorIngresado);
+      var clientesSugeridos = obtenerListadoClientesSugeridos();
+
+      if (claveClienteBuscada === '') {
+        return null;
+      }
+
+      for (var i = 0; i < clientesSugeridos.length; i++) {
+        var clienteSugerido = clientesSugeridos[i];
+        var razonSocial = normalizarClaveClienteSugerido(clienteSugerido['razon_social'] || '');
+        var cuit = normalizarClaveClienteSugerido(clienteSugerido['cuit'] || '');
+        var label = normalizarClaveClienteSugerido(clienteSugerido['label'] || '');
+
+        if (
+          claveClienteBuscada === razonSocial ||
+          (cuit !== '' && claveClienteBuscada === cuit) ||
+          (label !== '' && claveClienteBuscada === label)
+        ) {
+          return clienteSugerido;
+        }
+      }
+
+      return null;
+    }
+
+    function filtrarClientesSugeridosPorRazonSocial(valorIngresado) {
+      var terminoBuscado = normalizarClaveClienteSugerido(valorIngresado);
+
+      if (terminoBuscado.length < 2) {
+        return [];
+      }
+
+      return obtenerListadoClientesSugeridos()
+        .map(function (clienteSugerido) {
+          var razonSocial = normalizarClaveClienteSugerido(clienteSugerido['razon_social'] || '');
+          var cuit = normalizarClaveClienteSugerido(clienteSugerido['cuit'] || '');
+          var label = normalizarClaveClienteSugerido(clienteSugerido['label'] || '');
+          var prioridad = 99;
+
+          if (razonSocial.indexOf(terminoBuscado) === 0) {
+            prioridad = 0;
+          } else if (label.indexOf(terminoBuscado) === 0) {
+            prioridad = 1;
+          } else if (cuit.indexOf(terminoBuscado) === 0) {
+            prioridad = 2;
+          } else if (razonSocial.indexOf(terminoBuscado) !== -1) {
+            prioridad = 3;
+          } else if (label.indexOf(terminoBuscado) !== -1 || cuit.indexOf(terminoBuscado) !== -1) {
+            prioridad = 4;
+          }
+
+          if (prioridad === 99) {
+            return null;
+          }
+
+          return {
+            prioridad: prioridad,
+            cliente: clienteSugerido
+          };
+        })
+        .filter(function (item) {
+          return item !== null;
+        })
+        .sort(function (a, b) {
+          if (a.prioridad !== b.prioridad) {
+            return a.prioridad - b.prioridad;
+          }
+
+          return String(a.cliente['razon_social'] || '').localeCompare(
+            String(b.cliente['razon_social'] || ''),
+            'es',
+            { sensitivity: 'base' }
+          );
+        })
+        .slice(0, 8)
+        .map(function (item) {
+          return item.cliente;
+        });
+    }
+
+    function ocultarSugerenciasRazonSocial() {
+      window.SEGUIMIENTO_CLIENTES_SUGERENCIAS_ACTIVAS = [];
+      window.SEGUIMIENTO_CLIENTE_SUGERENCIA_ACTIVA = -1;
+      $('#razon_social_sugerencias').stop(true, true).hide().empty();
+    }
+
+    function actualizarIndiceSugerenciaActiva(indiceSugerido) {
+      var sugerenciasActivas = window.SEGUIMIENTO_CLIENTES_SUGERENCIAS_ACTIVAS || [];
+      var $menuSugerencias = $('#razon_social_sugerencias');
+
+      if (!$menuSugerencias.length || !sugerenciasActivas.length) {
+        window.SEGUIMIENTO_CLIENTE_SUGERENCIA_ACTIVA = -1;
+        return;
+      }
+
+      var indiceNormalizado = parseInt(indiceSugerido, 10);
+
+      if (isNaN(indiceNormalizado) || indiceNormalizado < 0) {
+        indiceNormalizado = -1;
+      } else if (indiceNormalizado >= sugerenciasActivas.length) {
+        indiceNormalizado = sugerenciasActivas.length - 1;
+      }
+
+      window.SEGUIMIENTO_CLIENTE_SUGERENCIA_ACTIVA = indiceNormalizado;
+
+      var $itemsSugeridos = $menuSugerencias.find('.cliente-sugerencia-item');
+      $itemsSugeridos.removeClass('is-active').attr('aria-selected', 'false');
+
+      if (indiceNormalizado < 0) {
+        return;
+      }
+
+      var $itemActivo = $itemsSugeridos.filter('[data-index="' + indiceNormalizado + '"]');
+      $itemActivo.addClass('is-active').attr('aria-selected', 'true');
+
+      if ($itemActivo.length && typeof $itemActivo.get(0).scrollIntoView === 'function') {
+        $itemActivo.get(0).scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function renderizarSugerenciasRazonSocial(clientesSugeridos) {
+      var $menuSugerencias = $('#razon_social_sugerencias');
+
+      if (!$menuSugerencias.length) {
+        return;
+      }
+
+      if (!Array.isArray(clientesSugeridos) || !clientesSugeridos.length) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      window.SEGUIMIENTO_CLIENTES_SUGERENCIAS_ACTIVAS = clientesSugeridos;
+      window.SEGUIMIENTO_CLIENTE_SUGERENCIA_ACTIVA = -1;
+
+      var htmlSugerencias = '';
+
+      clientesSugeridos.forEach(function (clienteSugerido, indiceSugerencia) {
+        var razonSocial = escaparHtmlClienteSugerencia(clienteSugerido['razon_social'] || '');
+        var cuit = escaparHtmlClienteSugerencia(clienteSugerido['cuit'] || '');
+
+        htmlSugerencias += '<button type="button" class="cliente-sugerencia-item" data-index="' + indiceSugerencia + '" role="option" aria-selected="false">';
+        htmlSugerencias += '<span class="cliente-sugerencia-titulo">' + (razonSocial !== '' ? razonSocial : 'Cliente sin razon social') + '</span>';
+
+        if (cuit !== '') {
+          htmlSugerencias += '<span class="cliente-sugerencia-meta">CUIT: ' + cuit + '</span>';
+        }
+
+        htmlSugerencias += '</button>';
+      });
+
+      $menuSugerencias.html(htmlSugerencias).show();
+    }
+
+    function seleccionarClienteSugerido(clienteSugerido, valorReferencia) {
+      if (!clienteSugerido) {
+        return;
+      }
+
+      var razonSocialActual = String(clienteSugerido['razon_social'] || '').trim();
+      var cuitActual = String(clienteSugerido['cuit'] || '').trim();
+
+      if (razonSocialActual === '') {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      $('#razon_social').val(razonSocialActual);
+      ocultarSugerenciasRazonSocial();
+      sincronizarTituloClientePrevisita();
+
+      if (
+        String($('#razon_social').val() || '').trim() === razonSocialActual &&
+        String($('#cuit').val() || '').trim() === cuitActual
+      ) {
+        return;
+      }
+
+      mostrarSugerenciaClienteRegistrado(
+        clienteSugerido,
+        String(valorReferencia || clienteSugerido['label'] || razonSocialActual).trim(),
+        'razon_social'
+      );
+    }
+
+    function seleccionarClienteSugeridoPorIndice(indiceSugerencia) {
+      var sugerenciasActivas = window.SEGUIMIENTO_CLIENTES_SUGERENCIAS_ACTIVAS || [];
+      var indiceNormalizado = parseInt(indiceSugerencia, 10);
+
+      if (
+        isNaN(indiceNormalizado) ||
+        indiceNormalizado < 0 ||
+        indiceNormalizado >= sugerenciasActivas.length
+      ) {
+        return;
+      }
+
+      var clienteSugerido = sugerenciasActivas[indiceNormalizado];
+      $('#razon_social').data('omitir-autosugerencia-change', true);
+      seleccionarClienteSugerido(clienteSugerido, clienteSugerido['label'] || clienteSugerido['razon_social'] || '');
+    }
+
+    var fechaActualInput = sincronizarFechaVisitaMinima();
+    sincronizarTituloClientePrevisita();
+    ocultarSugerenciasRazonSocial();
+
+    $(document).on('input blur', '#razon_social', function () {
+      sincronizarTituloClientePrevisita();
+    });
+
+    $(document).on('input', '#razon_social', function () {
+      if ($(this).is(':disabled')) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      if (sugerenciasRazonSocialTemporalmenteBloqueadas()) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      var valorRazonSocial = String($(this).val() || '').trim();
+
+      if (valorRazonSocial.length < 2) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      renderizarSugerenciasRazonSocial(filtrarClientesSugeridosPorRazonSocial(valorRazonSocial));
+    });
+
+    $(document).on('focus', '#razon_social', function () {
+      if ($(this).is(':disabled')) {
+        return;
+      }
+
+      if (sugerenciasRazonSocialTemporalmenteBloqueadas()) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      var valorRazonSocial = String($(this).val() || '').trim();
+
+      if (valorRazonSocial.length < 2) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      renderizarSugerenciasRazonSocial(filtrarClientesSugeridosPorRazonSocial(valorRazonSocial));
+    });
+
+    $(document).on('keydown', '#razon_social', function (event) {
+      var valorRazonSocial = String($(this).val() || '').trim();
+      var sugerenciasActivas = window.SEGUIMIENTO_CLIENTES_SUGERENCIAS_ACTIVAS || [];
+      var indiceActivo = parseInt(window.SEGUIMIENTO_CLIENTE_SUGERENCIA_ACTIVA, 10);
+
+      if (event.key === 'Escape') {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      if (!sugerenciasActivas.length && valorRazonSocial.length >= 2) {
+        renderizarSugerenciasRazonSocial(filtrarClientesSugeridosPorRazonSocial(valorRazonSocial));
+        sugerenciasActivas = window.SEGUIMIENTO_CLIENTES_SUGERENCIAS_ACTIVAS || [];
+      }
+
+      if (!sugerenciasActivas.length) {
+        return;
+      }
+
+      if (isNaN(indiceActivo)) {
+        indiceActivo = -1;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        actualizarIndiceSugerenciaActiva(indiceActivo + 1);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        actualizarIndiceSugerenciaActiva(indiceActivo <= 0 ? 0 : indiceActivo - 1);
+        return;
+      }
+
+      if (event.key === 'Enter' && indiceActivo >= 0) {
+        event.preventDefault();
+        seleccionarClienteSugeridoPorIndice(indiceActivo);
+      }
+    });
+
+    $(document).on('mouseenter', '.cliente-sugerencia-item', function () {
+      actualizarIndiceSugerenciaActiva($(this).data('index'));
+    });
+
+    $(document).on('mousedown', '.cliente-sugerencia-item', function (event) {
+      event.preventDefault();
+      seleccionarClienteSugeridoPorIndice($(this).data('index'));
+    });
+
+    $(document).on('mousedown', function (event) {
+      if ($(event.target).closest('.cliente-sugerencias-group').length) {
+        return;
+      }
+
+      ocultarSugerenciasRazonSocial();
+    });
+
+    $(document).on('change', '#razon_social', function () {
+      if ($(this).data('omitir-autosugerencia-change')) {
+        $(this).removeData('omitir-autosugerencia-change');
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      var valorRazonSocial = String($(this).val() || '').trim();
+      var clienteSugerido = obtenerClienteSugeridoPorRazonSocial(valorRazonSocial);
+
+      if (!clienteSugerido) {
+        ocultarSugerenciasRazonSocial();
+        return;
+      }
+
+      seleccionarClienteSugerido(clienteSugerido, valorRazonSocial);
+    });
+
+    $(document).on('change', '#estado_visita', function () {
+      var $campoFechaVisita = $('#fecha_visita');
+
+      if (!$campoFechaVisita.length || $campoFechaVisita.is(':disabled')) {
+        return;
+      }
+
+      var fechaMinima = sincronizarFechaVisitaMinima();
+      var fechaActualCampo = String($campoFechaVisita.val() || '').trim();
+
+      if (fechaActualCampo === '' || fechaActualCampo < fechaMinima) {
+        $campoFechaVisita.val(fechaMinima).trigger('change');
+        toastr.info('La fecha de visita se actualizo a hoy al cambiar el estado.');
+      }
+    });
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2018,7 +3033,374 @@ $(document).ready(function() {
 //////////////////////////////////////////////////////////////////////////////////
 
 
+  function obtenerClienteRegistradoExpandido(idCliente) {
+      return new Promise(function(resolve, reject) {
+        if (idCliente === undefined || idCliente === null || idCliente === '') {
+          resolve(null);
+          return;
+        }
+
+        $.ajax({
+          type: 'POST',
+          url: '../04-modelo/clientesModel.php',
+          data: {
+            via: 'ajax',
+            funcion: 'modGetClientesById',
+            id: idCliente
+          },
+          dataType: 'json',
+          success: function(data) {
+            if (Array.isArray(data) && data.length > 0) {
+              resolve(data[0]);
+              return;
+            }
+
+            resolve(null);
+          },
+          error: function(xhr, status, error) {
+            reject(error);
+          }
+        });
+      });
+  }
+
+  function normalizarDetalleDomicilioCliente(detalleDomicilio) {
+      if (!detalleDomicilio || detalleDomicilio['status'] === false) {
+        return null;
+      }
+
+      return {
+        calle: String(detalleDomicilio['calle'] || detalleDomicilio['callenom'] || '').trim(),
+        localidad: String(detalleDomicilio['localidad'] || detalleDomicilio['localidadnom'] || '').trim(),
+        partido: String(detalleDomicilio['partido'] || detalleDomicilio['partidonom'] || '').trim(),
+        provincia: String(detalleDomicilio['provincia'] || detalleDomicilio['provincianom'] || '').trim()
+      };
+  }
+
+  function detalleDomicilioClienteValido(detalleDomicilio) {
+      return !!(
+        detalleDomicilio &&
+        detalleDomicilio['calle'] &&
+        detalleDomicilio['localidad'] &&
+        detalleDomicilio['provincia']
+      );
+  }
+
+  function obtenerDetalleDomicilioCliente(clienteEncontrado) {
+      if (!clienteEncontrado) {
+        return Promise.resolve(null);
+      }
+
+      var detalleDesdeCliente = normalizarDetalleDomicilioCliente(clienteEncontrado);
+      if (detalleDomicilioClienteValido(detalleDesdeCliente)) {
+        return Promise.resolve(detalleDesdeCliente);
+      }
+
+      var intentarPorClienteId = Promise.resolve(null);
+      if (clienteEncontrado['id_cliente']) {
+        intentarPorClienteId = obtenerClienteRegistradoExpandido(clienteEncontrado['id_cliente'])
+        .then(function(clienteExpandido) {
+          return normalizarDetalleDomicilioCliente(clienteExpandido);
+        })
+        .catch(function() {
+          return null;
+        });
+      }
+
+      return intentarPorClienteId.then(function(detalleExpandido) {
+        if (detalleDomicilioClienteValido(detalleExpandido)) {
+          return detalleExpandido;
+        }
+
+        if (
+          !clienteEncontrado['dirfis_calle'] ||
+          !clienteEncontrado['dirfis_localidad']
+        ) {
+          return null;
+        }
+
+        return dataByIdCalleLocalidad(
+          '../06-funciones_php/funciones.php',
+          'dataByIdCalleLocalidad',
+          clienteEncontrado['dirfis_calle'],
+          clienteEncontrado['dirfis_localidad']
+        )
+        .then(function(detalleDomicilio) {
+          return normalizarDetalleDomicilioCliente(detalleDomicilio);
+        })
+        .catch(function() {
+          return null;
+        });
+      });
+  }
+
+  function esperarOpcionSelect($select, value, descripcion) {
+      return new Promise(function(resolve, reject) {
+        if (value === undefined || value === null || value === '') {
+          resolve();
+          return;
+        }
+
+        const valueString = String(value);
+        const inicio = Date.now();
+        const timeoutMs = 6000;
+
+        function verificarOpcion() {
+          const existeOpcion = $select.find('option').filter(function() {
+            return String($(this).val()) === valueString;
+          }).length > 0;
+
+          if (existeOpcion) {
+            resolve();
+            return;
+          }
+
+          if ((Date.now() - inicio) >= timeoutMs) {
+            reject('No se pudo cargar ' + descripcion + ' del domicilio del cliente.');
+            return;
+          }
+
+          setTimeout(verificarOpcion, 120);
+        }
+
+        verificarOpcion();
+      });
+  }
+
+  function seleccionarValorSelect($select, value) {
+      if (value === undefined || value === null || value === '') {
+        return;
+      }
+
+      $select.val(String(value)).trigger('change.select2').trigger('change');
+  }
+
+  function aplicarDomicilioClienteRegistrado(clienteEncontrado) {
+      if (!clienteEncontrado || !clienteEncontrado['dirfis_provincia']) {
+        return Promise.resolve();
+      }
+
+      const $provincia = $("#provincia_visita");
+      const $partido = $("#partido_visita");
+      const $localidad = $("#localidad_visita");
+      const $calle = $("#calle_visita");
+
+      seleccionarValorSelect($provincia, clienteEncontrado['dirfis_provincia']);
+
+      if (!clienteEncontrado['dirfis_partido']) {
+        return Promise.resolve();
+      }
+
+      return esperarOpcionSelect($partido, clienteEncontrado['dirfis_partido'], 'el partido')
+      .then(function() {
+        seleccionarValorSelect($partido, clienteEncontrado['dirfis_partido']);
+
+        const esperas = [];
+
+        if (clienteEncontrado['dirfis_localidad']) {
+          esperas.push(esperarOpcionSelect($localidad, clienteEncontrado['dirfis_localidad'], 'la localidad'));
+        }
+
+        if (clienteEncontrado['dirfis_calle']) {
+          esperas.push(esperarOpcionSelect($calle, clienteEncontrado['dirfis_calle'], 'la calle'));
+        }
+
+        return Promise.all(esperas);
+      })
+      .then(function() {
+        seleccionarValorSelect($localidad, clienteEncontrado['dirfis_localidad']);
+        seleccionarValorSelect($calle, clienteEncontrado['dirfis_calle']);
+      });
+  }
+
+  function aplicarDatosClienteRegistrado(clienteEncontrado) {
+      $('#cuit').val(clienteEncontrado['cuit'] || '');
+
+      inputPushValue({
+        "#razon_social": {
+          valor: clienteEncontrado['razon_social'] || '',
+          texto: false
+        },
+        "#altura_visita": {
+          valor: clienteEncontrado['dirfis_altura'] || '',
+          texto: false
+        },
+        "#cp_visita": {
+          valor: clienteEncontrado['dirfis_cp'] || '',
+          texto: false
+        }
+      });
+
+      return aplicarDomicilioClienteRegistrado(clienteEncontrado);
+  }
+
+  function bloquearSugerenciasRazonSocialTemporalmente(duracionMs) {
+      window.SEGUIMIENTO_RAZON_SOCIAL_SUGERENCIAS_BLOQUEADAS_HASTA = Date.now() + Math.max(0, parseInt(duracionMs, 10) || 0);
+  }
+
+  function sugerenciasRazonSocialTemporalmenteBloqueadas() {
+      return Number(window.SEGUIMIENTO_RAZON_SOCIAL_SUGERENCIAS_BLOQUEADAS_HASTA || 0) > Date.now();
+  }
+
+  function finalizarAutocompletadoClienteRegistrado(demoraMs) {
+      var $campoRazonSocial = $('#razon_social');
+      var $campoSiguiente = $('#contacto_obra');
+      var demoraBaseMs = Math.max(0, parseInt(demoraMs, 10) || 0);
+      var demoraEnfoqueMs = demoraBaseMs + 220;
+
+      bloquearSugerenciasRazonSocialTemporalmente(demoraEnfoqueMs + 900);
+      ocultarSugerenciasRazonSocial();
+
+      if ($campoRazonSocial.length) {
+        $campoRazonSocial.trigger('blur');
+      }
+
+      if (window.SEGUIMIENTO_FINALIZAR_CLIENTE_TIMEOUT) {
+        window.clearTimeout(window.SEGUIMIENTO_FINALIZAR_CLIENTE_TIMEOUT);
+      }
+
+      window.SEGUIMIENTO_FINALIZAR_CLIENTE_TIMEOUT = window.setTimeout(function() {
+        ocultarSugerenciasRazonSocial();
+
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+          document.activeElement.blur();
+        }
+
+        if (
+          $campoSiguiente.length &&
+          !$campoSiguiente.is(':disabled') &&
+          $campoSiguiente.is(':visible')
+        ) {
+          $campoSiguiente.trigger('focus');
+          return;
+        }
+
+        if ($campoRazonSocial.length) {
+          $campoRazonSocial.trigger('blur');
+        }
+      }, demoraEnfoqueMs);
+  }
+
+  function obtenerTituloAvisoClienteRegistrado(origenAviso) {
+      return origenAviso === 'razon_social' ? 'DATOS DEL CLIENTE' : 'CLIENTE YA REGISTRADO';
+  }
+
+  function mostrarSugerenciaClienteRegistrado(clienteEncontrado, valorReferencia, origenAviso) {
+      if (!clienteEncontrado || clienteEncontrado['status'] === false) {
+        return;
+      }
+
+      var tituloAviso = obtenerTituloAvisoClienteRegistrado(origenAviso);
+
+      obtenerDetalleDomicilioCliente(clienteEncontrado)
+      .then(function(detalleDomicilio) {
+        var mensajeCuit = 'CUIT: ' + (clienteEncontrado['cuit'] || valorReferencia || '') + '<br>';
+        mensajeCuit += '<strong>' + (clienteEncontrado['razon_social'] || '') + '</strong><br><br>';
+
+        const calleDomicilio = detalleDomicilio && detalleDomicilio['calle'] ? detalleDomicilio['calle'] : '';
+        const localidadDomicilio = detalleDomicilio && detalleDomicilio['localidad'] ? detalleDomicilio['localidad'] : '';
+        const provinciaDomicilio = detalleDomicilio && detalleDomicilio['provincia'] ? detalleDomicilio['provincia'] : '';
+
+        if (calleDomicilio && localidadDomicilio && provinciaDomicilio) {
+          mensajeCuit += 'Domicilio<br>';
+          mensajeCuit += '<strong>' + calleDomicilio + ' Nro: ' + (clienteEncontrado['dirfis_altura'] || '') + ' - ' + localidadDomicilio + '<br>';
+          mensajeCuit += provinciaDomicilio + ' - CP: ' + (clienteEncontrado['dirfis_cp'] || '') + '</strong><br><br>';
+        } else {
+          mensajeCuit += 'Se encontro el cliente, pero no se pudo reconstruir el domicilio fiscal completo para mostrarlo en el aviso.<br><br>';
+        }
+
+        mensajeCuit += '¿Desea utilizar estos datos del cliente?';
+
+        sAlertDialog(
+          'info',
+          '<h3><strong>' + tituloAviso + '</strong></h3>',
+          mensajeCuit,
+          'SI',
+          'success',
+          'NO',
+          'warning',
+          function() {
+            var demoraActualizacionCamposMs = 1200;
+
+            sAlertAutoClose("info", "ACTUALIZANDO CAMPOS", "", demoraActualizacionCamposMs);
+            finalizarAutocompletadoClienteRegistrado(demoraActualizacionCamposMs);
+
+            aplicarDatosClienteRegistrado(clienteEncontrado)
+            .catch(function(error) {
+              sAlertConfirm('warning', 'NO SE PUDO COMPLETAR TODO EL DOMICILIO', error, 'OK', '#ffc107');
+            });
+          },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined
+        );
+      });
+  }
+
   $(document).on('change',"#cuit",function(){
+
+      var valueSearchNormalizado = String($(this).val() || '').trim();
+
+      if (valueSearchNormalizado === '') {
+        return;
+      }
+
+      existInDB('../06-funciones_php/funciones.php', 'existInDB', 'clientes', 'cuit', valueSearchNormalizado)
+      .then(function(clienteEncontrado) {
+
+            if (!clienteEncontrado || clienteEncontrado['status'] === false) {
+              return;
+            }
+
+            obtenerDetalleDomicilioCliente(clienteEncontrado)
+            .then(function(detalleDomicilio) {
+              var mensajeCuit = 'CUIT: ' + (clienteEncontrado['cuit'] || valueSearchNormalizado) + '<br>';
+              mensajeCuit += '<strong>' + (clienteEncontrado['razon_social'] || '') + '</strong><br><br>';
+
+              const calleDomicilio = detalleDomicilio && detalleDomicilio['calle'] ? detalleDomicilio['calle'] : '';
+              const localidadDomicilio = detalleDomicilio && detalleDomicilio['localidad'] ? detalleDomicilio['localidad'] : '';
+              const provinciaDomicilio = detalleDomicilio && detalleDomicilio['provincia'] ? detalleDomicilio['provincia'] : '';
+
+              if (calleDomicilio && localidadDomicilio && provinciaDomicilio) {
+                mensajeCuit += 'Domicilio<br>';
+                mensajeCuit += '<strong>' + calleDomicilio + ' Nro: ' + (clienteEncontrado['dirfis_altura'] || '') + ' - ' + localidadDomicilio + '<br>';
+                mensajeCuit += provinciaDomicilio + ' - CP: ' + (clienteEncontrado['dirfis_cp'] || '') + '</strong><br><br>';
+              } else {
+                mensajeCuit += 'Se encontro el cliente, pero no se pudo reconstruir el domicilio fiscal completo para mostrarlo en el aviso.<br><br>';
+              }
+
+              mensajeCuit += '¿Desea utilizar estos datos del cliente?';
+
+              sAlertDialog(
+                'info',
+                '<h3><strong>CLIENTE YA REGISTRADO</strong></h3>',
+                mensajeCuit,
+                'SI',
+                'success',
+                'NO',
+                'warning',
+                function() {
+                  sAlertAutoClose("info", "ACTUALIZANDO CAMPOS", "", 1200);
+
+                  aplicarDatosClienteRegistrado(clienteEncontrado)
+                  .catch(function(error) {
+                    sAlertConfirm('warning', 'NO SE PUDO COMPLETAR TODO EL DOMICILIO', error, 'OK', '#ffc107');
+                  });
+                },
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined
+              );
+            });
+
+      })
+      .catch(function(error){ sAlertConfirm('error', 'SE HA PRODUCIDO EL SIGUIENTE ERROR (636)', error, 'OK', '#dc3545'); });
+
+      return;
 
       var valueSearch = $(this).val();
       existInDB('../06-funciones_php/funciones.php', 'existInDB', 'clientes', 'cuit', valueSearch)
@@ -2469,6 +3851,12 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
     'mensaje' => (string)($bloqueoEdicionComercial['mensaje'] ?? ''),
   ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
+  window.SEGUIMIENTO_CLIENTES_SUGERIDOS = <?= json_encode(
+    $clientesSugeridosMap,
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES |
+    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+  ); ?>;
+
   window.obtenerBloqueoEdicionComercialSeguimiento = function () {
     return window.SEGUIMIENTO_BLOQUEO_COMERCIAL || {};
   };
@@ -2502,6 +3890,7 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
 <script src="../07-funciones_js/calculaEdad.js"></script>
 <!-- Guarda usuarios en la base -->
 <script src="../07-funciones_js/presupuestosAcciones.js"></script>
+<script src="../07-funciones_js/previsitaDocumentos.js"></script>
 <!-- Guarda usuarios en la base -->
 <script src="../07-funciones_js/previsitaGuardar.js"></script>
 

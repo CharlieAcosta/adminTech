@@ -180,8 +180,14 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		  $mostrarIconoDocumentosEmitidos = false;
 		  $mostrarIconoHistorialPresupuesto = false;
 		  $editarBloqueadoComercial = false;
+		  $editarBloqueadoVisita = false;
 		  $editarBloqueadoEstado = '';
 		  $editarBloqueadoTooltip = 'Editar';
+
+		  if ($estadoVisitaVisual['normalizado'] === 'CANCELADA') {
+		  	$editarBloqueadoVisita = true;
+		  	$editarBloqueadoTooltip = 'La edicion no esta disponible para pre-visitas canceladas.';
+		  }
 
 		  if ($estadoVisitaVisual['normalizado'] === 'EJECUTADA') {
             $estadoPresupuesto = isset($value_all_registros['estado_presupuesto']) ? $value_all_registros['estado_presupuesto'] : null;
@@ -372,7 +378,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 						data-toggle="tooltip"
 						title="'.htmlspecialchars($editarBloqueadoComercial ? $editarBloqueadoTooltip : 'Visualizar', ENT_QUOTES, 'UTF-8').'"></i>';
 
-			if (!$editarBloqueadoComercial) {
+			if (!$editarBloqueadoComercial && !$editarBloqueadoVisita) {
 				$filas .= '<i class="v-icon-accion p-1 fas fa-edit"
 							data-accion="editar"
 							data-bloqueo-comercial="0"

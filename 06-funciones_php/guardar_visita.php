@@ -13,6 +13,7 @@ file_put_contents('../log/log_fotos.txt', "🔵 _FILES:\n" . print_r($_FILES, tr
 include_once '../06-funciones_php/funciones.php';
 include_once '../04-modelo/conectDB.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
+include_once '../04-modelo/previsitaWorkflowModel.php';
 $db = conectDB();
 if (!$db) {
     ob_end_clean();
@@ -74,8 +75,19 @@ if (!empty($bloqueoEdicion['bloqueado'])) {
     exit;
 }
 
+$bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId((int)$id_visita);
+if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
+    echo json_encode([
+        'status' => false,
+        'mensaje' => $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? ''),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tareas = $_POST['tareas'] ?? [];
+    $tieneOrdenMaterialesVisita = columna_existe($db, 'visita_tarea_material', 'orden');
+    $tieneOrdenManoObraVisita = columna_existe($db, 'visita_tarea_mano_obra', 'orden');
 
     // ——————————————————————————————
     //  1) Borrar selectivamente tareas quitadas
@@ -142,10 +154,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($tarea['materiales'] as $j => $mat) {
                 $mId = (int)$mat['id'];
                 $cant= (int)$mat['cantidad'];
-                $stm = $db->prepare(
-                    "INSERT INTO visita_tarea_material (id_tarea,id_material,cantidad) VALUES (?,?,?)"
-                );
-                $stm->bind_param('iii', $tareaId, $mId, $cant);
+                $orden = isset($mat['orden']) ? (int)$mat['orden'] : ($j + 1);
+                if ($orden <= 0) {
+                    $orden = $j + 1;
+                }
+
+                if ($tieneOrdenMaterialesVisita) {
+                    $stm = $db->prepare(
+                        "INSERT INTO visita_tarea_material (id_tarea, id_material, cantidad, orden) VALUES (?, ?, ?, ?)"
+                    );
+                    $stm->bind_param('iiii', $tareaId, $mId, $cant, $orden);
+                } else {
+                    $stm = $db->prepare(
+                        "INSERT INTO visita_tarea_material (id_tarea,id_material,cantidad) VALUES (?,?,?)"
+                    );
+                    $stm->bind_param('iii', $tareaId, $mId, $cant);
+                }
                 $stm->execute();
                 $stm->close();
             }
@@ -159,10 +183,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cant = (int)$mo['cantidad'];
                 $obs  = trim((string)($mo['observacion'] ?? ''));
                 $dias = isset($mo['dias']) ? (int)$mo['dias'] : 1;
-                $stm = $db->prepare(
-                    "INSERT INTO visita_tarea_mano_obra (id_tarea, id_jornal, cantidad, dias, observaciones) VALUES (?,?,?,?,?)"
-                );
-                $stm->bind_param('iiiis', $tareaId, $moId, $cant, $dias, $obs);               
+                $orden = isset($mo['orden']) ? (int)$mo['orden'] : ($j + 1);
+                if ($orden <= 0) {
+                    $orden = $j + 1;
+                }
+
+                if ($tieneOrdenManoObraVisita) {
+                    $stm = $db->prepare(
+                        "INSERT INTO visita_tarea_mano_obra (id_tarea, id_jornal, cantidad, dias, observaciones, orden) VALUES (?, ?, ?, ?, ?, ?)"
+                    );
+                    $stm->bind_param('iiiisi', $tareaId, $moId, $cant, $dias, $obs, $orden);
+                } else {
+                    $stm = $db->prepare(
+                        "INSERT INTO visita_tarea_mano_obra (id_tarea, id_jornal, cantidad, dias, observaciones) VALUES (?,?,?,?,?)"
+                    );
+                    $stm->bind_param('iiiis', $tareaId, $moId, $cant, $dias, $obs);
+                }
                 $stm->execute();
                 $stm->close();
             }

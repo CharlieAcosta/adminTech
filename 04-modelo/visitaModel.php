@@ -1,9 +1,17 @@
 <?php
 
+require_once __DIR__ . '/schemaIntrospectionModel.php';
+
 function modGetTareasByVisitaId(int $id_visita, string $callType = 'php') {
     $db = conectDB();
     if (!$db) return false;
     $id_visita = intval($id_visita);
+    $ordenMateriales = columna_existe($db, 'visita_tarea_material', 'orden')
+        ? 'ORDER BY tm.orden ASC, tm.id ASC'
+        : 'ORDER BY tm.id ASC';
+    $ordenManoObra = columna_existe($db, 'visita_tarea_mano_obra', 'orden')
+        ? 'ORDER BY mo.orden ASC, mo.id ASC'
+        : 'ORDER BY mo.id ASC';
 
     // 1) Traigo todas las tareas
     $sqlT = "SELECT id_tarea, id_visita, descripcion
@@ -31,7 +39,8 @@ function modGetTareasByVisitaId(int $id_visita, string $callType = 'php') {
                         m.descripcion_corta, m.unidad_venta, m.contenido, m.unidad_medida
                  FROM visita_tarea_material tm
                  JOIN materiales m ON m.id_material = tm.id_material
-                 WHERE tm.id_tarea = $tid";
+                 WHERE tm.id_tarea = $tid
+                 $ordenMateriales";
         $resM = mysqli_query($db, $sqlM);
         if ($resM) {
             while ($rowM = mysqli_fetch_assoc($resM)) {
@@ -51,7 +60,8 @@ function modGetTareasByVisitaId(int $id_visita, string $callType = 'php') {
         j.jornal_codigo, j.jornal_descripcion
         FROM visita_tarea_mano_obra mo
         JOIN tipo_jornales j ON j.jornal_id = mo.id_jornal
-        WHERE mo.id_tarea = $tid";
+        WHERE mo.id_tarea = $tid
+        $ordenManoObra";
         $resJ = mysqli_query($db, $sqlJ);
         if ($resJ) {
             while ($rowJ = mysqli_fetch_assoc($resJ)) {
