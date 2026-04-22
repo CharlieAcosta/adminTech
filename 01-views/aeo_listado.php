@@ -1,7 +1,9 @@
 <?php  
 // file: aeo_listado.php
 session_start();
-$usuarioLogueado = json_encode($_SESSION['usuario']);
+$usuarioLogueado = json_encode([
+    'id_usuario' => (int) ($_SESSION['usuario']['id_usuario'] ?? 0)
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 $usuario_logueado = $_SESSION['usuario'];
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../06-funciones_php/funciones.php';
@@ -356,6 +358,45 @@ $filas = registrosToFilas($arrayJoineado, $claves, $acciones, $clases, $trData);
 <script>
 var usuarioLogueado = <?php echo $usuarioLogueado; ?>;
 var currentTable;
+const dataTableAeoLanguage = {
+    processing: "Procesando...",
+    lengthMenu: "Mostrar _MENU_ registros",
+    zeroRecords: "No se encontraron resultados",
+    emptyTable: "No hay datos disponibles en esta tabla",
+    info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+    infoEmpty: "Mostrando 0 a 0 de 0 registros",
+    infoFiltered: "(filtrado de _MAX_ registros totales)",
+    loadingRecords: "Cargando...",
+    search: "Buscar:",
+    paginate: {
+      first: "Primero",
+      last: "Ultimo",
+      next: "Siguiente",
+      previous: "Anterior"
+    },
+    aria: {
+      sortAscending: ": Activar para ordenar la columna de manera ascendente",
+      sortDescending: ": Activar para ordenar la columna de manera descendente"
+    },
+    buttons: {
+      copy: "Copiar",
+      csv: "CSV",
+      excel: "Excel",
+      pdf: "PDF",
+      print: "Imprimir",
+      colvis: "Columnas"
+    }
+};
+const dataTableAeoButtons = [
+    { "extend": "copy", "text": "Copiar" },
+    { "extend": "csv", "text": "CSV" },
+    { "extend": "excel", "text": "Excel" },
+    { "extend": "pdf", "text": "PDF" },
+    { "extend": "print", "text": "Imprimir" },
+    { "extend": "colvis", "text": "Columnas" }
+];
+window.dataTableAeoLanguage = dataTableAeoLanguage;
+window.dataTableAeoButtons = dataTableAeoButtons;
 let registrosPresente = []; // Aquí almacenaremos los datos de fecha e 
 
 // Convertimos el array PHP a formato JSON y lo imprimimos para incluirlo en JavaScript
@@ -377,8 +418,8 @@ $("#current_table").DataTable({
     "lengthChange": true,
     "autoWidth": false,
     "pageLength": 100,  // Mostrar 50 registros inicialmente
-    "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
-    "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
+    "buttons": dataTableAeoButtons,
+    "language": dataTableAeoLanguage,
     "columns": [
       { "width": "5%", "type": "date-dd-mm-yyyy" },  // Ajustar esta columna como fecha
       { "width": "7%" },
@@ -751,5 +792,3 @@ function marcarComoError(row, nextRow = null) {
 <script src="../07-funciones_js/aeoAcciones.js"></script>
 </body>
 </html>
-
-

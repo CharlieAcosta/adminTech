@@ -89,6 +89,8 @@ Referencias de implementacion:
 - Actualizacion abril 2026: al confirmar un cliente sugerido desde `razon_social`, la vista cierra el desplegable, desenfoca ese campo y mueve el foco a `contacto_obra` para que no quede reabierta la sugerencia sobre el valor ya aplicado.
 - Ajuste abril 2026: el reenfoque posterior al autocompletado de cliente se programa para despues del alert temporal `ACTUALIZANDO CAMPOS`, evitando que SweetAlert devuelva el foco a `razon_social` al cerrarse.
 - Ajuste abril 2026: el modal de confirmacion de cliente ahora intenta obtener el domicilio expandido por `id_cliente` desde `04-modelo/clientesModel.php::modGetClientesById` antes de recurrir a `dataByIdCalleLocalidad`, porque hay clientes con domicilio correcto en base para los que la reconstruccion auxiliar podia fallar aunque la vista luego completara bien los selects.
+- Ajuste abril 2026: en `01-views/aeo_listado.php`, el objeto JS `usuarioLogueado` expone solo `id_usuario`. Las acciones del AEO solo necesitan ese dato y asi se evita que valores de sesion con encoding invalido rompan el `json_encode` e impidan la inicializacion de DataTables, sus botones de exportacion, busqueda y selector de registros.
+- Ajuste abril 2026: el DataTables del AEO usa textos y botones definidos localmente en espanol, igual que seguimiento, para no depender del JSON remoto de DataTables. El navbar refresca `nombres`, `apellidos` y `perfil` desde `usuarios` cuando `conectaDB()` esta disponible y escapa el texto como UTF-8, evitando sesiones antiguas con caracteres rotos como la `ñ` en `Guiñazu`.
 
 ## Migracion SQL requerida por ambiente
 
