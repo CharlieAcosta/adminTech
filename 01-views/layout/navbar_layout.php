@@ -1,6 +1,46 @@
 <?php
 if(!isset($_SESSION["usuario"])){echo "<script type='text/javascript'>  window.location='../01-views/login.php'; </script>";} 
 $usuario = $_SESSION["usuario"];
+$usuarioIdNavbar = (int) ($usuario['id_usuario'] ?? 0);
+
+if ($usuarioIdNavbar > 0 && function_exists('conectaDB')) {
+    $dbNavbar = conectaDB();
+    if ($dbNavbar) {
+        $dbNavbar->set_charset('utf8mb4');
+        $resultadoNavbar = $dbNavbar->query("
+            SELECT nombres, apellidos, perfil
+            FROM usuarios
+            WHERE id_usuario = " . $usuarioIdNavbar . "
+            LIMIT 1
+        ");
+
+        if ($resultadoNavbar && $usuarioActualizadoNavbar = mysqli_fetch_assoc($resultadoNavbar)) {
+            $usuario = array_merge($usuario, $usuarioActualizadoNavbar);
+            $_SESSION["usuario"] = array_merge($_SESSION["usuario"], $usuarioActualizadoNavbar);
+        }
+
+        if ($resultadoNavbar) {
+            mysqli_free_result($resultadoNavbar);
+        }
+
+        mysqli_close($dbNavbar);
+    }
+}
+
+if (!function_exists('navbarTextoSeguro')) {
+    function navbarTextoSeguro($valor) {
+        $texto = (string) ($valor ?? '');
+
+        if ($texto !== '' && function_exists('mb_check_encoding') && !mb_check_encoding($texto, 'UTF-8')) {
+            $texto = mb_convert_encoding($texto, 'UTF-8', 'ISO-8859-1');
+        }
+
+        return htmlspecialchars($texto, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+}
+
+$nombreCompletoNavbar = trim(($usuario['nombres'] ?? '') . ' ' . ($usuario['apellidos'] ?? ''));
+$perfilNavbar = $usuario['perfil'] ?? '';
 $perfil = $usuario['perfil'];
 
 // Arrays de perfiles que se usan en el panel para controlar la visualización
@@ -15,7 +55,7 @@ $auditoria = array('Super Administrador');
 $mailPresupuestos = array('Super Administrador');
 ?>
 <script>
-  window.ACTIVE_USER_ID = <?= (int) $usuario['id_usuario'] ?>;
+  window.ACTIVE_USER_ID = <?= $usuarioIdNavbar ?>;
 </script>
 
 <nav class="main-header navbar navbar-expand navbar-dark navbar-navy">
@@ -129,8 +169,8 @@ $mailPresupuestos = array('Super Administrador');
             </a>
         </li>
         <li class="nav-item mr-1 mt-2 mb-1 v-li-he">
-            <span class="nombre-completo"><?php echo $usuario['nombres'] . ' ' . $usuario['apellidos']; ?></span>
-            <small class="perfil-usuario"><?php echo $usuario['perfil']; ?></small>
+            <span class="nombre-completo"><?php echo navbarTextoSeguro($nombreCompletoNavbar); ?></span>
+            <small class="perfil-usuario"><?php echo navbarTextoSeguro($perfilNavbar); ?></small>
         </li>
         <li class="nav-item">
             <a href="../03-controller/logout.php" class="nav-link" data-toggle="tooltip" title="Cerrar sesión">

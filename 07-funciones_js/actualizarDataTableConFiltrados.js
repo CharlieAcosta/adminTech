@@ -15,8 +15,8 @@ function actualizarDataTableConFiltrados(htmlFilas) {
         "lengthChange": true,
         "autoWidth": false,
         "pageLength": 100,
-        "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
-        "language": { "url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json" },
+        "buttons": window.dataTableAeoButtons || ["copy", "csv", "excel", "pdf", "print", "colvis"],
+        "language": window.dataTableAeoLanguage || { "url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json" },
         "columns": [
             { "width": "5%", "type": "date-dd-mm-yyyy" },
             { "width": "7%" },
@@ -57,4 +57,3 @@ function actualizarDataTableConFiltrados(htmlFilas) {
         }
     });
 }
-
