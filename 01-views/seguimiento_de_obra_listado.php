@@ -15,7 +15,7 @@ include_once '../03-controller/presupuestosController.php'; //conecta a la base 
 
 // poblarDatableAll(columnas de la tablas, php o ajax, filtro); [reference] 
 $filas = poblarDatableAll(
-    array('id_previsita', 'log_alta', 'cuit', 'razon_social', 'estado_visita', 'fecha_visita', 'hora_visita'),
+    array('id_previsita', 'log_alta', 'cuit', 'razon_social', 'requerimiento_tecnico', 'estado_visita', 'fecha_visita', 'hora_visita'),
     'php',
     'todos',
     $perfil,
@@ -169,6 +169,7 @@ $estadosPresupuestoRapidos = array(
                     <th>Ingreso</th>
                     <th>CUIT</th>
                     <th>Razón Social</th>
+                    <th>Descripci&oacute;n</th>
                     <th>Visita</th>
                     <th>Fecha</th>
                     <th>Hora</th>
@@ -368,26 +369,25 @@ $estadosPresupuestoRapidos = array(
       ],
       "language": dataTableSeguimientoLanguage,
       "columns": [
-        { "width": "1%" },
-        { "width": "6%" },  // Ingreso
+        { "width": "0.8%" },
+        { "width": "5%" },  // Ingreso
         { "width": "6%" },
-        { "width": "11%" },
+        { "width": "13%" },
+        { "width": "18%" },
         { "width": "7%" },
-        { "width": "6%" },
         { "width": "5%" },
-        { "width": "10%" },
-        { "width": "10%" },
-        { "width": "10%" }
+        { "width": "4%" },
+        { "width": "9%" },
+        { "width": "8%" },
+        { "width": "9%" }
       ],
 
-      // CLAVE: decirle a DataTables que la columna 1 (Ingreso) es date-eu
       "columnDefs": [
         { "targets": 1, "type": "date-eu" }, // Ingreso
-        { "targets": 5, "type": "date-eu" }  // Fecha
+        { "targets": 6, "type": "date-eu" }  // Fecha
       ],
 
-      // Tu orden actual (por Visita/Fecha/Hora) queda igual:
-      "order": [[4, "desc"], [5, "asc"], [6, "asc"]]
+      "order": [[5, "desc"], [6, "asc"], [7, "asc"]]
     });
 
     tabla.buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');

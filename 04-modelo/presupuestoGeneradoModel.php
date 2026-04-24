@@ -126,6 +126,38 @@ if (!function_exists('textoPlanoDetalleTareaPresupuesto')) {
     }
 }
 
+if (!function_exists('resumirTextoSegunReglaPresupuesto')) {
+    function resumirTextoSegunReglaPresupuesto(?string $texto, int $maxPalabras = 12): string
+    {
+        $textoPlano = textoPlanoDetalleTareaPresupuesto($texto);
+        if ($textoPlano === '') {
+            return '';
+        }
+
+        $textoPlano = preg_replace('/^[\s\.\:\-\*,]+/u', '', (string)$textoPlano);
+        $textoPlano = preg_replace('/\s+/u', ' ', (string)$textoPlano);
+        $textoPlano = trim((string)$textoPlano);
+
+        if ($textoPlano === '') {
+            return '';
+        }
+
+        if (preg_match('/^(.+?)[\.\:\*,-]/u', $textoPlano, $coincidencia)) {
+            $resumen = trim((string)($coincidencia[1] ?? ''));
+            if ($resumen !== '') {
+                return $resumen . '.';
+            }
+        }
+
+        $palabras = preg_split('/\s+/u', $textoPlano, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (count($palabras) <= $maxPalabras) {
+            return $textoPlano;
+        }
+
+        return implode(' ', array_slice($palabras, 0, $maxPalabras)) . '...';
+    }
+}
+
 if (!function_exists('sanitizarHtmlDetalleTareaPresupuesto')) {
     function sanitizarHtmlDetalleTareaPresupuesto(?string $html): string
     {

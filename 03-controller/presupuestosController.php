@@ -149,6 +149,47 @@ if (!function_exists('resolverBadgeEstadoPresupuestoSeguimientoListado')) {
     }
 }
 
+if (!function_exists('formatearDescripcionSentenceCaseSeguimientoListado')) {
+    function formatearDescripcionSentenceCaseSeguimientoListado(?string $texto): string
+    {
+        $texto = trim((string)($texto ?? ''));
+        if ($texto === '') {
+            return '';
+        }
+
+        $texto = mb_strtolower($texto, 'UTF-8');
+        $primeraLetra = mb_substr($texto, 0, 1, 'UTF-8');
+        $resto = mb_substr($texto, 1, null, 'UTF-8');
+
+        return mb_strtoupper($primeraLetra, 'UTF-8') . $resto;
+    }
+}
+
+if (!function_exists('resolverDescripcionSeguimientoListado')) {
+    function resolverDescripcionSeguimientoListado(?string $texto): array
+    {
+        $textoPlano = function_exists('textoPlanoDetalleTareaPresupuesto')
+            ? textoPlanoDetalleTareaPresupuesto($texto)
+            : trim((string)($texto ?? ''));
+
+        $textoPlano = preg_replace('/\s+/u', ' ', (string)$textoPlano);
+        $textoPlano = trim((string)$textoPlano);
+
+        $resumen = $textoPlano;
+        if ($textoPlano !== '' && function_exists('resumirTextoSegunReglaPresupuesto')) {
+            $resumen = resumirTextoSegunReglaPresupuesto($textoPlano);
+        }
+
+        $textoPlano = formatearDescripcionSentenceCaseSeguimientoListado($textoPlano);
+        $resumen = formatearDescripcionSentenceCaseSeguimientoListado($resumen);
+
+        return [
+            'texto_completo' => $textoPlano,
+            'resumen' => $resumen,
+        ];
+    }
+}
+
 function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){     
 
    $all_registros = modGetAllRegistros($filtro); 		
@@ -256,7 +297,17 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		   		  break;	
 
 		   		  case 'razon_social':
-		   		  		$filas .= '<td class=""><strong>'.$value_all_registros[$value_tds].'</strong></td>';
+		   		  		$filas .= '<td class="seguimiento-col-razon-social"><strong>'.escapeHtmlSeguimientoListado($value_all_registros[$value_tds]).'</strong></td>';
+		   		  break;
+
+		   		  case 'requerimiento_tecnico':
+                        $descripcionSeguimiento = resolverDescripcionSeguimientoListado($value_all_registros[$value_tds] ?? '');
+                        $descripcionCompleta = $descripcionSeguimiento['texto_completo'];
+                        $descripcionResumen = $descripcionSeguimiento['resumen'];
+                        $descripcionHtml = $descripcionResumen !== ''
+                            ? '<span class="seguimiento-descripcion-corta" title="'.escapeHtmlSeguimientoListado($descripcionCompleta).'">'.escapeHtmlSeguimientoListado($descripcionResumen).'</span>'
+                            : '<span class="text-muted">-</span>';
+		   		  		$filas .= '<td class="align-middle seguimiento-col-descripcion" data-search="'.escapeHtmlSeguimientoListado($descripcionCompleta).'">'.$descripcionHtml.'</td>';
 		   		  break;
 
 		   		  default:

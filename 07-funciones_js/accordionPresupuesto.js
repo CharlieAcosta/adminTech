@@ -443,30 +443,21 @@
 
   function resumirTituloTareaPresupuesto(texto) {
     const limpio = detalleTareaHtmlToPlainText(texto)
-      .replace(/\r/g, '')
+      .replace(/\r/g, '\n')
       .trim();
 
     if (!limpio) return '';
 
-    const lineas = limpio
-      .split('\n')
-      .map((linea) => linea.trim())
-      .filter(Boolean);
+    const textoPlano = limpio
+      .replace(/^[\s.,:\-*]+/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-    if (lineas.length > 1) {
-      return lineas[0];
-    }
+    if (!textoPlano) return '';
 
-    const textoPlano = lineas[0] || limpio;
-
-    const idxPunto = textoPlano.indexOf('.');
-    if (idxPunto > -1) {
-      return textoPlano.slice(0, idxPunto + 1).trim();
-    }
-
-    const idxComa = textoPlano.indexOf(',');
-    if (idxComa > -1) {
-      return textoPlano.slice(0, idxComa + 1).trim();
+    const matchDelimitador = textoPlano.match(/^(.+?)[\.,:\*,-]/);
+    if (matchDelimitador && matchDelimitador[1]) {
+      return `${matchDelimitador[1].trim()}.`;
     }
 
     const palabras = textoPlano.split(/\s+/).filter(Boolean);
