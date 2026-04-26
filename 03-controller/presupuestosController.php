@@ -3,26 +3,12 @@ include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestosModel.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
-
-if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
-
-    $perfil = $_SESSION['usuario']['perfil'] ?? null;
-    $deleteIcon = array('Super Administrador', 'Administrador');
-
-    poblarDatableAll(
-        $_POST['tds'],
-        'ajax',
-        $_POST['filtro'],
-        $perfil,
-        $deleteIcon
-    );
-}
 //////// function poblarDatableAll(columnas de la base, php o ajax, filtro){  
 
 if (!function_exists('escapeHtmlSeguimientoListado')) {
     function escapeHtmlSeguimientoListado($value): string
     {
-        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+        return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 }
 
@@ -149,6 +135,136 @@ if (!function_exists('resolverBadgeEstadoPresupuestoSeguimientoListado')) {
     }
 }
 
+if (!function_exists('normalizarEstadoFiltroRapidoSeguimientoListado')) {
+    function normalizarEstadoFiltroRapidoSeguimientoListado(?string $estado): string
+    {
+        $normalizado = strtoupper(trim((string)$estado));
+        if ($normalizado === 'IMPRESO') {
+            return 'EMITIDO';
+        }
+
+        return $normalizado;
+    }
+}
+
+if (!function_exists('esUtf8ValidoSeguimientoListado')) {
+    function esUtf8ValidoSeguimientoListado(?string $texto): bool
+    {
+        $texto = (string)($texto ?? '');
+        return $texto === '' || preg_match('//u', $texto) === 1;
+    }
+}
+
+if (!function_exists('convertirEncodingTextoSeguimientoListado')) {
+    function convertirEncodingTextoSeguimientoListado(string $texto, string $origen): string
+    {
+        if ($texto === '') {
+            return '';
+        }
+
+        if (function_exists('iconv')) {
+            $convertido = @iconv($origen, 'UTF-8//IGNORE', $texto);
+            if (is_string($convertido) && $convertido !== '') {
+                return $convertido;
+            }
+        }
+
+        if (function_exists('mb_convert_encoding')) {
+            $convertido = @mb_convert_encoding($texto, 'UTF-8', $origen);
+            if (is_string($convertido) && $convertido !== '') {
+                return $convertido;
+            }
+        }
+
+        return $texto;
+    }
+}
+
+if (!function_exists('reinterpretarUtf8ComoSingleByteSeguimientoListado')) {
+    function reinterpretarUtf8ComoSingleByteSeguimientoListado(string $texto, string $destino): string
+    {
+        if ($texto === '' || !esUtf8ValidoSeguimientoListado($texto)) {
+            return $texto;
+        }
+
+        if (function_exists('iconv')) {
+            $convertido = @iconv('UTF-8', $destino . '//IGNORE', $texto);
+            if (is_string($convertido) && $convertido !== '' && esUtf8ValidoSeguimientoListado($convertido)) {
+                return $convertido;
+            }
+        }
+
+        return $texto;
+    }
+}
+
+if (!function_exists('scoreMojibakeSeguimientoListado')) {
+    function scoreMojibakeSeguimientoListado(string $texto): int
+    {
+        $marcas = ['Ã', 'Â', 'â', 'ð', 'ï¿½', '�'];
+        $score = 0;
+        foreach ($marcas as $marca) {
+            $score += substr_count($texto, $marca);
+        }
+
+        return $score;
+    }
+}
+
+if (!function_exists('repararTextoDescripcionSeguimientoListado')) {
+    function repararTextoDescripcionSeguimientoListado(?string $texto): string
+    {
+        $texto = trim((string)($texto ?? ''));
+        if ($texto === '') {
+            return '';
+        }
+
+        if (!esUtf8ValidoSeguimientoListado($texto)) {
+            $texto = convertirEncodingTextoSeguimientoListado($texto, 'Windows-1252');
+        }
+
+        $mejor = $texto;
+        $scoreMejor = scoreMojibakeSeguimientoListado($mejor);
+
+        for ($paso = 0; $paso < 3; $paso++) {
+            $huboMejora = false;
+            $candidatos = [];
+
+            if (!esUtf8ValidoSeguimientoListado($mejor)) {
+                foreach (['Windows-1252', 'ISO-8859-1'] as $origen) {
+                    $candidatos[] = convertirEncodingTextoSeguimientoListado($mejor, $origen);
+                }
+            } else {
+                foreach (['Windows-1252', 'ISO-8859-1'] as $destino) {
+                    $candidatos[] = reinterpretarUtf8ComoSingleByteSeguimientoListado($mejor, $destino);
+                }
+            }
+
+            foreach ($candidatos as $candidato) {
+                if ($candidato === '' || !esUtf8ValidoSeguimientoListado($candidato)) {
+                    continue;
+                }
+
+                $score = scoreMojibakeSeguimientoListado($candidato);
+                if ($score < $scoreMejor) {
+                    $mejor = $candidato;
+                    $scoreMejor = $score;
+                    $huboMejora = true;
+                }
+            }
+
+            if (!$huboMejora) {
+                break;
+            }
+        }
+
+        $mejor = html_entity_decode($mejor, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $mejor = str_replace("\xc2\xa0", ' ', $mejor);
+
+        return trim($mejor);
+    }
+}
+
 if (!function_exists('formatearDescripcionSentenceCaseSeguimientoListado')) {
     function formatearDescripcionSentenceCaseSeguimientoListado(?string $texto): string
     {
@@ -157,21 +273,34 @@ if (!function_exists('formatearDescripcionSentenceCaseSeguimientoListado')) {
             return '';
         }
 
-        $texto = mb_strtolower($texto, 'UTF-8');
-        $primeraLetra = mb_substr($texto, 0, 1, 'UTF-8');
-        $resto = mb_substr($texto, 1, null, 'UTF-8');
+        if (
+            esUtf8ValidoSeguimientoListado($texto)
+            && function_exists('mb_strtolower')
+            && function_exists('mb_substr')
+            && function_exists('mb_strtoupper')
+        ) {
+            $texto = mb_strtolower($texto, 'UTF-8');
+            $primeraLetra = mb_substr($texto, 0, 1, 'UTF-8');
+            $resto = mb_substr($texto, 1, null, 'UTF-8');
 
-        return mb_strtoupper($primeraLetra, 'UTF-8') . $resto;
+            return mb_strtoupper($primeraLetra, 'UTF-8') . $resto;
+        }
+
+        $texto = strtolower($texto);
+        return strtoupper(substr($texto, 0, 1)) . substr($texto, 1);
     }
 }
 
 if (!function_exists('resolverDescripcionSeguimientoListado')) {
     function resolverDescripcionSeguimientoListado(?string $texto): array
     {
-        $textoPlano = function_exists('textoPlanoDetalleTareaPresupuesto')
-            ? textoPlanoDetalleTareaPresupuesto($texto)
-            : trim((string)($texto ?? ''));
+        $textoNormalizado = repararTextoDescripcionSeguimientoListado($texto);
 
+        $textoPlano = function_exists('textoPlanoDetalleTareaPresupuesto')
+            ? textoPlanoDetalleTareaPresupuesto($textoNormalizado)
+            : trim((string)$textoNormalizado);
+
+        $textoPlano = repararTextoDescripcionSeguimientoListado($textoPlano);
         $textoPlano = preg_replace('/\s+/u', ' ', (string)$textoPlano);
         $textoPlano = trim((string)$textoPlano);
 
@@ -190,14 +319,16 @@ if (!function_exists('resolverDescripcionSeguimientoListado')) {
     }
 }
 
-function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){     
+function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiempo = '30_dias', $busqueda = '', $estadoVisitaFiltro = '', $estadoPresupuestoFiltro = ''){     
 
-   $all_registros = modGetAllRegistros($filtro); 		
+   $all_registros = modGetAllRegistros($filtro, $rangoTiempo, $busqueda); 		
    $modoCircuitoActivo = obtenerModoActivoCircuitoComercialPresupuestos();
+   $estadoVisitaFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoVisitaFiltro);
+   $estadoPresupuestoFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoPresupuestoFiltro);
 	//var_dump($all_registros); die(); //[DEBUG PERMANENTE]
 
    $filas = "";
-   		foreach ($all_registros as $key_all_registros => $value_all_registros) {
+    		foreach ($all_registros as $key_all_registros => $value_all_registros) {
 
    		$stringFechaHora = $value_all_registros['fecha_visita']." ".$value_all_registros['hora_visita'];
    		$resultadoFechaHora = comparaFechaHora($stringFechaHora, 'fh');
@@ -273,6 +404,14 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
             $presupuestoHtml = $presupuestoVisual['html'];
             $estadoVisiblePresupuestoNormalizado = $presupuestoVisual['normalizado'];
 		  }
+
+          if ($estadoVisitaFiltro !== '' && $estadoVisitaVisual['normalizado'] !== $estadoVisitaFiltro) {
+            continue;
+          }
+
+          if ($estadoPresupuestoFiltro !== '' && $estadoVisiblePresupuestoNormalizado !== $estadoPresupuestoFiltro) {
+            continue;
+          }
 
           $filas .= '<tr data-id="'.$value_all_registros['id_previsita'].'" data-estado-visita="'.escapeHtmlSeguimientoListado($estadoVisitaVisual['normalizado']).'" data-estado-presupuesto="'.escapeHtmlSeguimientoListado($estadoVisiblePresupuestoNormalizado).'">';
 
@@ -477,6 +616,25 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon){
 		echo json_encode($filas);
 	}
 
+}
+
+if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $perfil = $_SESSION['usuario']['perfil'] ?? null;
+    $deleteIcon = array('Super Administrador', 'Administrador');
+
+    poblarDatableAll(
+        $_POST['tds'],
+        'ajax',
+        $_POST['filtro'],
+        $perfil,
+        $deleteIcon,
+        $_POST['tiempo'] ?? '30_dias',
+        $_POST['busqueda'] ?? '',
+        $_POST['estado_visita'] ?? '',
+        $_POST['estado_presupuesto'] ?? ''
+    );
 }
 
 ?>
