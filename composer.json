@@ -6,6 +6,6 @@
         }
     },
     "require": {
-        "dropbox/dropbox-sdk": "*"
+        "phpmailer/phpmailer": "^7.0"
     }
 }
