@@ -2,8 +2,41 @@
 // filename: configIni.php
 // path: 00-config/configIni.php
 
-$appEnv = getenv('APP_ENV') ?: 'production';
+$appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: 'production')));
 $isDocker = file_exists('/.dockerenv');
+
+if (!defined('APP_ENV')) {
+    define('APP_ENV', $appEnv);
+}
+
+if (!defined('APP_IS_DOCKER')) {
+    define('APP_IS_DOCKER', $isDocker);
+}
+
+if (!function_exists('admintechAppEnv')) {
+    function admintechAppEnv(): string
+    {
+        return defined('APP_ENV') ? (string)APP_ENV : 'production';
+    }
+}
+
+if (!function_exists('admintechEsEntornoProduccion')) {
+    function admintechEsEntornoProduccion(): bool
+    {
+        return !in_array(
+            admintechAppEnv(),
+            ['development', 'dev', 'local', 'test', 'testing', 'qa', 'staging', 'preproduction', 'preproduccion'],
+            true
+        );
+    }
+}
+
+if (!function_exists('admintechEsEntornoNoProductivo')) {
+    function admintechEsEntornoNoProductivo(): bool
+    {
+        return !admintechEsEntornoProduccion();
+    }
+}
 
 // BASE DE DATOS
 if ($appEnv === 'development') {
