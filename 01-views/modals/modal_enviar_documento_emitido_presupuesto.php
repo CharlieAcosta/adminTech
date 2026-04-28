@@ -41,7 +41,7 @@
           </div>
 
           <div class="form-group mb-2">
-            <label class="mb-1">Copias internas ocultas (CCO)</label>
+            <label class="mb-1">Copias internas por defecto (CC / CCO)</label>
             <div id="mail_documento_copias" class="border rounded p-2 bg-light small">
               <div class="text-muted">Cargando copias configuradas...</div>
             </div>

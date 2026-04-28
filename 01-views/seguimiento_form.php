@@ -370,42 +370,11 @@ function intervinientes_names($b_array){
 
 function resumir_titulo_tarea_presupuesto(string $descripcion, int $maxPalabras = 12): string
 {
-    if (function_exists('textoPlanoDetalleTareaPresupuesto')) {
-        $descripcion = textoPlanoDetalleTareaPresupuesto($descripcion);
+    if (function_exists('resumirTextoSegunReglaPresupuesto')) {
+        return resumirTextoSegunReglaPresupuesto($descripcion, $maxPalabras);
     }
 
-    $texto = trim(preg_replace('/\r\n?/', "\n", $descripcion));
-    if ($texto === '') {
-        return '';
-    }
-
-    $lineas = preg_split('/\n+/', $texto) ?: [];
-    $lineas = array_values(array_filter(array_map('trim', $lineas), static function ($linea) {
-        return $linea !== '';
-    }));
-
-    if (count($lineas) > 1) {
-        return $lineas[0];
-    }
-
-    $textoPlano = $lineas[0] ?? $texto;
-
-    $posPunto = strpos($textoPlano, '.');
-    if ($posPunto !== false) {
-        return trim(substr($textoPlano, 0, $posPunto + 1));
-    }
-
-    $posComa = strpos($textoPlano, ',');
-    if ($posComa !== false) {
-        return trim(substr($textoPlano, 0, $posComa + 1));
-    }
-
-    $palabras = preg_split('/\s+/u', $textoPlano, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-    if (count($palabras) <= $maxPalabras) {
-        return $textoPlano;
-    }
-
-    return implode(' ', array_slice($palabras, 0, $maxPalabras)) . '...';
+    return trim((string)$descripcion);
 }
 
 function renderizar_editor_detalle_tarea_presupuesto(string $descripcion, bool $soloLectura = false): string

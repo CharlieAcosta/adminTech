@@ -18,29 +18,32 @@ if( isset($_POST['via']) && $_POST['via']=='ajax'){
 
 
 // funcion para traer todos los usuarios activos
-function modGetAllRegistros($filtro){     
+function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){     
    $db = conectDB();
    mysqli_set_charset($db, 'utf8mb4');
-   switch ($filtro) {
-      case 'todos':
-         $were    = "WHERE v.estado_visita <> 'Eliminada'";
-         $orderBy = "ORDER BY v.estado_visita ASC, v.fecha_visita ASC, v.hora_visita ASC";
+
+   $rangoTiempoNormalizado = strtoupper(trim((string)$rangoTiempo));
+   $busqueda = trim((string)$busqueda);
+   $filtroTiempoSql = '';
+   switch ($rangoTiempoNormalizado) {
+      case '15_DIAS':
+         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 15 DAY)";
          break;
-
-      // case 'activos':
-      //    $were = "WHERE v.estado = 'Activo'";
-      //    break;
-      
-      // case 'potenciales':
-      //    $were = "WHERE v.estado = 'Potencial'";
-      //    break;
-
-      // case 'desactivados':
-      //    $were = "WHERE v.estado = 'Desactivado'";
-      //    break;
-      // default:
-      //    // code...
-      //    break;
+      case '30_DIAS':
+         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+         break;
+      case 'TRIMESTRE':
+         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)";
+         break;
+      case 'SEMESTRE':
+         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)";
+         break;
+      case 'ANIO':
+         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
+         break;
+      default:
+         $filtroTiempoSql = '';
+         break;
    }
 
    $tieneTablaDocumentosEmitidos = tabla_existe($db, 'presupuesto_documentos_emitidos');
@@ -99,6 +102,63 @@ function modGetAllRegistros($filtro){
       0 AS total_historial_comercial_smtp,
       '' AS ultimo_estado_historial_comercial_simulacion,
       '' AS ultimo_estado_historial_comercial_smtp";
+
+   $exprBusquedaEstadoComercialSimulacion = $tieneEstadoComercialSimulacion
+      ? "COALESCE(p.estado_comercial_simulacion, '')"
+      : "''";
+   $exprBusquedaEstadoComercialSmtp = $tieneEstadoComercialSmtp
+      ? "COALESCE(p.estado_comercial_smtp, '')"
+      : "''";
+   $exprBusquedaHistorialSimulacion = $tieneTablaHistorialComercial
+      ? "COALESCE(hcs.estado_resultante, '')"
+      : "''";
+   $exprBusquedaHistorialSmtp = $tieneTablaHistorialComercial
+      ? "COALESCE(hcm.estado_resultante, '')"
+      : "''";
+
+   $filtroBusquedaSql = '';
+   if ($busqueda !== '') {
+      $busquedaEsc = mysqli_real_escape_string($db, $busqueda);
+      $likeBusqueda = "'%" . $busquedaEsc . "%'";
+      $filtroBusquedaSql = "
+        AND (
+            CAST(v.id_previsita AS CHAR) LIKE {$likeBusqueda}
+            OR DATE_FORMAT(v.log_alta, '%d-%m-%Y') LIKE {$likeBusqueda}
+            OR COALESCE(v.cuit, '') LIKE {$likeBusqueda}
+            OR COALESCE(v.razon_social, '') LIKE {$likeBusqueda}
+            OR COALESCE(v.requerimiento_tecnico, '') LIKE {$likeBusqueda}
+            OR COALESCE(v.estado_visita, '') LIKE {$likeBusqueda}
+            OR DATE_FORMAT(v.fecha_visita, '%d-%m-%Y') LIKE {$likeBusqueda}
+            OR COALESCE(v.hora_visita, '') LIKE {$likeBusqueda}
+            OR COALESCE(p.estado, '') LIKE {$likeBusqueda}
+            OR {$exprBusquedaEstadoComercialSimulacion} LIKE {$likeBusqueda}
+            OR {$exprBusquedaEstadoComercialSmtp} LIKE {$likeBusqueda}
+            OR {$exprBusquedaHistorialSimulacion} LIKE {$likeBusqueda}
+            OR {$exprBusquedaHistorialSmtp} LIKE {$likeBusqueda}
+        )";
+   }
+
+   switch ($filtro) {
+      case 'todos':
+         $were    = "WHERE v.estado_visita <> 'Eliminada'{$filtroTiempoSql}{$filtroBusquedaSql}";
+         $orderBy = "ORDER BY v.estado_visita ASC, v.fecha_visita ASC, v.hora_visita ASC";
+         break;
+
+      // case 'activos':
+      //    $were = "WHERE v.estado = 'Activo'";
+      //    break;
+      
+      // case 'potenciales':
+      //    $were = "WHERE v.estado = 'Potencial'";
+      //    break;
+
+      // case 'desactivados':
+      //    $were = "WHERE v.estado = 'Desactivado'";
+      //    break;
+      // default:
+      //    // code...
+      //    break;
+   }
 
    $query = "
    SELECT 

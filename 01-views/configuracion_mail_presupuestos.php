@@ -36,8 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $configMail = obtenerConfiguracionMailPresupuestos();
+$configMailPrivada = obtenerConfiguracionMailPresupuestos(true);
 $copiasMail = listarCopiasConfiguracionMailPresupuestos();
-$smtpTransportDisponible = is_file(dirname(__DIR__) . '/vendor/autoload.php');
+$estadoTransporteSmtp = obtenerEstadoTransporteSmtpMailPresupuestos();
+$smtpTransportDisponible = !empty($estadoTransporteSmtp['disponible']);
+$puedeGuardarSecretosSmtp = runtimeCifradoMailPresupuestosDisponible() && hayClaveSecretaMailPresupuestos();
+$validacionModoSmtp = validarConfiguracionSmtpMailPresupuestos($configMailPrivada, [
+  'exigir_password' => $configMail['modo_envio'] === 'smtp',
+]);
+$ayudaHostSmtp = textoAyudaHostSmtpDonWebMailPresupuestos();
 
 function escConfigMail($valor): string
 {
@@ -57,6 +64,63 @@ function escConfigMail($valor): string
   <link rel="stylesheet" href="../05-plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/custom.css">
+  <style>
+    .mail-mode-switch {
+      border: 1px solid #ced4da;
+      border-radius: .25rem;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: .75rem 1rem;
+    }
+
+    .mail-mode-switch__status {
+      display: flex;
+      flex-direction: column;
+      gap: .15rem;
+    }
+
+    .mail-mode-switch__eyebrow {
+      color: #6c757d;
+      font-size: .8rem;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .mail-mode-switch__value {
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .password-toggle-wrap {
+      position: relative;
+    }
+
+    .password-toggle-wrap .form-control {
+      padding-right: 2.75rem;
+    }
+
+    .password-toggle-wrap__button {
+      background: transparent;
+      border: 0;
+      color: #6c757d;
+      cursor: pointer;
+      padding: 0;
+      position: absolute;
+      right: .85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 3;
+    }
+
+    .password-toggle-wrap__button:focus {
+      color: #007bff;
+      outline: 0;
+    }
+  </style>
 </head>
 <body class="hold-transition sidebar-collapse layout-navbar-fixed">
 <div class="wrapper">
@@ -81,14 +145,36 @@ function escConfigMail($valor): string
           </div>
         <?php } ?>
 
-        <div class="alert alert-info">
-          <strong>Regla actual:</strong> en <strong>Simulación</strong> el sistema registra el intento, pero no envía realmente el correo y el presupuesto sigue en <strong>Emitido</strong>.
+        <div class="alert <?php echo $configMail['modo_envio'] === 'smtp' ? 'alert-primary' : 'alert-info'; ?>">
+          <?php if ($configMail['modo_envio'] === 'smtp') { ?>
+            <strong>Modo activo:</strong> el sistema enviará correos reales usando la configuración SMTP activa.
+          <?php } else { ?>
+            <strong>Modo activo:</strong> el sistema registra el intento, pero no envía correo real y el presupuesto sigue en <strong>Emitido</strong>.
+          <?php } ?>
         </div>
 
-        <?php if (!$smtpTransportDisponible) { ?>
+        <div class="alert <?php echo $smtpTransportDisponible ? 'alert-success' : 'alert-warning'; ?>">
+          <?php echo escConfigMail(mensajeDisponibilidadTransporteSmtpMailPresupuestos()); ?>
+        </div>
+
+        <?php if (!$puedeGuardarSecretosSmtp) { ?>
           <div class="alert alert-warning">
-            <strong>Transporte SMTP no disponible todavía.</strong>
-            El modo real va a necesitar la librería del proveedor SMTP instalada por Composer en el servidor.
+            <strong>Protección de credenciales pendiente.</strong>
+            Para guardar o actualizar la contraseña SMTP sin dejarla en claro, configurá la variable de entorno <code>MAIL_PRESUPUESTOS_SECRET</code> o <code>ADMINTECH_MAIL_SECRET</code> en el servidor.
+          </div>
+        <?php } ?>
+
+        <?php if ($configMail['modo_envio'] === 'smtp' && !empty($validacionModoSmtp['errores'])) { ?>
+          <div class="alert alert-danger">
+            <strong>SMTP real incompleto:</strong>
+            <?php echo escConfigMail(implode(' ', $validacionModoSmtp['errores'])); ?>
+          </div>
+        <?php } ?>
+
+        <?php if (!empty($validacionModoSmtp['advertencias'])) { ?>
+          <div class="alert alert-warning">
+            <strong>Recomendaciones DonWeb/Ferozo:</strong>
+            <?php echo escConfigMail(implode(' ', $validacionModoSmtp['advertencias'])); ?>
           </div>
         <?php } ?>
 
@@ -102,11 +188,19 @@ function escConfigMail($valor): string
                 <input type="hidden" name="accion_config_mail" value="guardar_config_mail">
                 <div class="card-body">
                   <div class="form-group">
-                    <label for="modo_envio">Modo de envío</label>
-                    <select class="form-control" id="modo_envio" name="modo_envio">
-                      <option value="simulacion" <?php echo $configMail['modo_envio'] === 'simulacion' ? 'selected' : ''; ?>>Simulación</option>
-                      <option value="smtp" <?php echo $configMail['modo_envio'] === 'smtp' ? 'selected' : ''; ?>>Real SMTP</option>
-                    </select>
+                    <label for="modo_envio_switch">Modo de envío</label>
+                    <input type="hidden" id="modo_envio" name="modo_envio" value="<?php echo escConfigMail($configMail['modo_envio']); ?>">
+                    <div class="mail-mode-switch">
+                      <div class="mail-mode-switch__status">
+                        <span class="mail-mode-switch__eyebrow">Modo actual</span>
+                        <span class="mail-mode-switch__value" id="modo_envio_estado"></span>
+                      </div>
+                      <div class="custom-control custom-switch mb-0">
+                        <input type="checkbox" class="custom-control-input" id="modo_envio_switch" <?php echo $configMail['modo_envio'] === 'smtp' ? 'checked' : ''; ?>>
+                        <label class="custom-control-label" for="modo_envio_switch">Usar SMTP real</label>
+                      </div>
+                    </div>
+                    <small class="form-text text-muted" id="modo_envio_ayuda"></small>
                   </div>
 
                   <div class="form-row">
@@ -117,13 +211,15 @@ function escConfigMail($valor): string
                     <div class="form-group col-md-6">
                       <label for="remitente_email">Email remitente</label>
                       <input type="text" class="form-control" id="remitente_email" name="remitente_email" value="<?php echo escConfigMail($configMail['remitente_email']); ?>" placeholder="presupuestos@dominio.com">
+                      <small class="form-text text-muted">En DonWeb/Ferozo el remitente debe coincidir con la cuenta autenticada del usuario SMTP.</small>
                     </div>
                   </div>
 
                   <div class="form-row">
                     <div class="form-group col-md-6">
                       <label for="smtp_host">SMTP host</label>
-                      <input type="text" class="form-control" id="smtp_host" name="smtp_host" value="<?php echo escConfigMail($configMail['smtp_host']); ?>" placeholder="smtp.dominio.com">
+                      <input type="text" class="form-control" id="smtp_host" name="smtp_host" value="<?php echo escConfigMail($configMail['smtp_host']); ?>" placeholder="c1234567.ferozo.com">
+                      <small class="form-text text-muted"><?php echo escConfigMail($ayudaHostSmtp); ?></small>
                     </div>
                     <div class="form-group col-md-2">
                       <label for="smtp_puerto">Puerto</label>
@@ -143,10 +239,23 @@ function escConfigMail($valor): string
                     <div class="form-group col-md-6">
                       <label for="smtp_usuario">Usuario SMTP</label>
                       <input type="text" class="form-control" id="smtp_usuario" name="smtp_usuario" value="<?php echo escConfigMail($configMail['smtp_usuario']); ?>">
+                      <small class="form-text text-muted">Usá la cuenta completa autenticada, por ejemplo <code>presupuestos@dominio.com</code>.</small>
                     </div>
                     <div class="form-group col-md-6">
                       <label for="smtp_password">Contraseña SMTP</label>
-                      <input type="password" class="form-control" id="smtp_password" name="smtp_password" value="<?php echo escConfigMail($configMail['smtp_password']); ?>">
+                      <div class="password-toggle-wrap">
+                        <input type="password" class="form-control" id="smtp_password" name="smtp_password" value="" placeholder="<?php echo escConfigMail($configMail['smtp_password_placeholder'] ?: 'Ingresar nueva contraseña'); ?>" autocomplete="new-password">
+                        <button type="button" class="password-toggle-wrap__button" id="toggleSmtpPassword" aria-label="Mostrar contraseña SMTP" aria-pressed="false">
+                          <i class="fas fa-eye" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                      <small class="form-text text-muted">
+                        <?php if (!empty($configMail['smtp_password_configurada'])) { ?>
+                          Ya hay una contraseña guardada. Dejalo vacío para conservarla o escribí una nueva para reemplazarla.
+                        <?php } else { ?>
+                          Ingresá la contraseña real de la cuenta SMTP autenticada.
+                        <?php } ?>
+                      </small>
                     </div>
                   </div>
                 </div>
@@ -288,6 +397,28 @@ function escConfigMail($valor): string
 <script src="../dist/js/adminlte.min.js"></script>
 <script>
   (function () {
+    function actualizarModoEnvioUi() {
+      const esSmtp = $('#modo_envio_switch').is(':checked');
+      $('#modo_envio').val(esSmtp ? 'smtp' : 'simulacion');
+      $('#modo_envio_estado').text(esSmtp ? 'SMTP real' : 'Simulación');
+      $('#modo_envio_ayuda').text(
+        esSmtp
+          ? 'Se usarán las credenciales SMTP guardadas para enviar el presupuesto.'
+          : 'Solo se registra el intento y el presupuesto permanece en Emitido.'
+      );
+    }
+
+    function actualizarEstadoPasswordVisible() {
+      const $inputPassword = $('#smtp_password');
+      const esVisible = $inputPassword.attr('type') === 'text';
+      $('#toggleSmtpPassword')
+        .attr('aria-label', esVisible ? 'Ocultar contraseña SMTP' : 'Mostrar contraseña SMTP')
+        .attr('aria-pressed', esVisible ? 'true' : 'false')
+        .find('i')
+        .toggleClass('fa-eye', !esVisible)
+        .toggleClass('fa-eye-slash', esVisible);
+    }
+
     function resetFormularioCopia() {
       $('#id_copia').val('');
       $('#etiqueta').val('');
@@ -298,6 +429,17 @@ function escConfigMail($valor): string
       $('#activo_por_defecto').prop('checked', true);
       $('#submitCopiaMail').html('<i class="fas fa-plus"></i> Guardar copia');
     }
+
+    $('#modo_envio_switch').on('change', function () {
+      actualizarModoEnvioUi();
+    });
+
+    $('#toggleSmtpPassword').on('click', function () {
+      const $inputPassword = $('#smtp_password');
+      const nuevoTipo = $inputPassword.attr('type') === 'password' ? 'text' : 'password';
+      $inputPassword.attr('type', nuevoTipo).trigger('focus');
+      actualizarEstadoPasswordVisible();
+    });
 
     $('#resetCopiaMail').on('click', function () {
       resetFormularioCopia();
@@ -315,6 +457,9 @@ function escConfigMail($valor): string
       $('#submitCopiaMail').html('<i class="fas fa-save"></i> Actualizar copia');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
+
+    actualizarModoEnvioUi();
+    actualizarEstadoPasswordVisible();
   })();
 </script>
 </body>

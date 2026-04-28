@@ -192,6 +192,14 @@ function renderAlertasModalEnviarDocumento(html, tipo = 'info') {
     );
 }
 
+function construirListaAlertasMailDocumento(items) {
+    if (!Array.isArray(items) || !items.length) {
+        return '';
+    }
+
+    return `<ul class="mb-0 pl-3">${items.map((item) => `<li>${escapeHtmlDocumentoEmitido(item)}</li>`).join('')}</ul>`;
+}
+
 function mostrarSwalResultadoEnvioDocumento(response) {
     const estadoEnvio = String(response && response.estado_envio ? response.estado_envio : '').toLowerCase();
     const esSimulado = estadoEnvio === 'simulado';
@@ -881,6 +889,8 @@ function abrirModalEnvioDocumentoEmitido(idDocumentoEmitido) {
             const config = response.config || {};
             const sugerencias = Array.isArray(response.sugerencias_para) ? response.sugerencias_para : [];
             const copias = Array.isArray(response.copias) ? response.copias : [];
+            const smtpErrores = Array.isArray(config.smtp_errores) ? config.smtp_errores : [];
+            const smtpAdvertencias = Array.isArray(config.smtp_advertencias) ? config.smtp_advertencias : [];
 
             $('#mail_id_documento_emitido').val(documento.id_documento_emitido || '');
             $('#mail_id_presupuesto').val(documento.id_presupuesto || '');
@@ -906,8 +916,25 @@ function abrirModalEnvioDocumentoEmitido(idDocumentoEmitido) {
 
             if (String(config.modo_envio || '').toLowerCase() === 'simulacion') {
                 renderAlertasModalEnviarDocumento('Modo simulación activo: el correo no se enviará realmente y el presupuesto permanecerá en Emitido.', 'warning');
+            } else if (config.smtp_disponible !== true) {
+                renderAlertasModalEnviarDocumento(
+                    escapeHtmlDocumentoEmitido(config.smtp_transporte_msg || 'El transporte SMTP real no está disponible en este ambiente.'),
+                    'danger'
+                );
+                $('#btnEnviarDocumentoEmitido').prop('disabled', true);
+            } else if (smtpErrores.length) {
+                renderAlertasModalEnviarDocumento(
+                    `La configuración SMTP activa está incompleta.${construirListaAlertasMailDocumento(smtpErrores)}`,
+                    'danger'
+                );
+                $('#btnEnviarDocumentoEmitido').prop('disabled', true);
+            } else if (smtpAdvertencias.length) {
+                renderAlertasModalEnviarDocumento(
+                    `SMTP real activo.${construirListaAlertasMailDocumento(smtpAdvertencias)}`,
+                    'warning'
+                );
             } else {
-                renderAlertasModalEnviarDocumento('');
+                renderAlertasModalEnviarDocumento('SMTP real activo: el sistema intentará enviar el correo usando la configuración DonWeb/Ferozo guardada.', 'success');
             }
         },
         error: function () {

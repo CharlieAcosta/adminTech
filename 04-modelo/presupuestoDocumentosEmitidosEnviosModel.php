@@ -9,13 +9,7 @@ require_once __DIR__ . '/presupuestoMailConfigModel.php';
 if (!function_exists('cargarComposerAutoloadMailPresupuestos')) {
     function cargarComposerAutoloadMailPresupuestos(): bool
     {
-        $autoload = dirname(__DIR__) . '/vendor/autoload.php';
-        if (!is_file($autoload)) {
-            return false;
-        }
-
-        require_once $autoload;
-        return class_exists('\\PHPMailer\\PHPMailer\\PHPMailer');
+        return smtpTransportMailPresupuestosDisponible();
     }
 }
 
@@ -46,6 +40,94 @@ if (!function_exists('serializarListaEmailsDocumentoEmitido')) {
     function serializarListaEmailsDocumentoEmitido(array $emails): string
     {
         return implode(', ', normalizarListaEmailsDocumentoEmitido($emails));
+    }
+}
+
+if (!function_exists('normalizarDestinatariosPorTipoDocumentoEmitido')) {
+    function normalizarDestinatariosPorTipoDocumentoEmitido(array $paraEmails, array $ccEmails, array $ccoEmails): array
+    {
+        $para = array_values(array_unique(normalizarListaEmailsDocumentoEmitido($paraEmails)));
+        $cc = array_values(array_diff(
+            array_values(array_unique(normalizarListaEmailsDocumentoEmitido($ccEmails))),
+            $para
+        ));
+        $cco = array_values(array_diff(
+            array_values(array_unique(normalizarListaEmailsDocumentoEmitido($ccoEmails))),
+            $para,
+            $cc
+        ));
+
+        return [
+            'para_emails' => $para,
+            'cc_emails' => $cc,
+            'cco_emails' => $cco,
+        ];
+    }
+}
+
+if (!function_exists('sanitizarAsuntoMailPresupuestos')) {
+    function sanitizarAsuntoMailPresupuestos(?string $asunto): string
+    {
+        $asunto = preg_replace('/[\r\n\t]+/', ' ', (string)$asunto);
+        return trim((string)$asunto);
+    }
+}
+
+if (!function_exists('sanitizarCuerpoTextoPlanoMailPresupuestos')) {
+    function sanitizarCuerpoTextoPlanoMailPresupuestos(?string $cuerpo): string
+    {
+        $cuerpo = str_replace("\r\n", "\n", (string)$cuerpo);
+        $cuerpo = str_replace("\r", "\n", $cuerpo);
+        $cuerpo = preg_replace("/\n{3,}/", "\n\n", $cuerpo);
+        return trim((string)$cuerpo);
+    }
+}
+
+if (!function_exists('renderizarHtmlSeguroMailPresupuestos')) {
+    function renderizarHtmlSeguroMailPresupuestos(?string $cuerpo): string
+    {
+        return nl2br(
+            htmlspecialchars(
+                sanitizarCuerpoTextoPlanoMailPresupuestos($cuerpo),
+                ENT_QUOTES,
+                'UTF-8'
+            )
+        );
+    }
+}
+
+if (!function_exists('sanitizarMensajeErrorTransporteSmtpMailPresupuestos')) {
+    function sanitizarMensajeErrorTransporteSmtpMailPresupuestos(string $mensaje, array $config = []): string
+    {
+        $mensaje = trim($mensaje);
+        if ($mensaje === '') {
+            return 'No se pudo enviar el correo por SMTP.';
+        }
+
+        $sensibles = array_filter([
+            trim((string)($config['smtp_host'] ?? '')),
+            trim((string)($config['smtp_usuario'] ?? '')),
+            trim((string)($config['remitente_email'] ?? '')),
+            trim((string)($config['smtp_password'] ?? '')),
+        ]);
+
+        foreach ($sensibles as $sensible) {
+            if ($sensible !== '') {
+                $mensaje = str_replace($sensible, '[dato oculto]', $mensaje);
+            }
+        }
+
+        $mensaje = preg_replace('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/iu', '[email oculto]', $mensaje);
+        $mensaje = preg_replace('/\b(?:c|l)\d{5,}\.ferozo\.com\b/i', '[host smtp oculto]', $mensaje);
+        $mensaje = preg_replace('/\bsmtp\.[A-Z0-9.\-]+\.[A-Z]{2,}\b/i', '[host smtp oculto]', $mensaje);
+
+        if (function_exists('mb_substr')) {
+            $mensaje = mb_substr($mensaje, 0, 280, 'UTF-8');
+        } else {
+            $mensaje = substr($mensaje, 0, 280);
+        }
+
+        return $mensaje !== '' ? $mensaje : 'No se pudo enviar el correo por SMTP.';
     }
 }
 
@@ -275,6 +357,11 @@ if (!function_exists('obtenerContextoEnvioDocumentoEmitidoPresupuesto')) {
         }
 
         $config = obtenerConfiguracionMailPresupuestos();
+        $configPrivada = obtenerConfiguracionMailPresupuestos(true);
+        $estadoTransporte = obtenerEstadoTransporteSmtpMailPresupuestos();
+        $validacionSmtp = validarConfiguracionSmtpMailPresupuestos($configPrivada, [
+            'exigir_password' => normalizarModoEnvioMailPresupuestos($configPrivada['modo_envio'] ?? null) === 'smtp',
+        ]);
         $sugerencias = obtenerSugerenciasDestinatariosDocumentoEmitidoPresupuesto($detalle);
         $paraDefault = $sugerencias[0]['email'] ?? '';
         $copias = obtenerCopiasActivasPorDefectoMailPresupuestos();
@@ -296,6 +383,10 @@ if (!function_exists('obtenerContextoEnvioDocumentoEmitidoPresupuesto')) {
                 'modo_envio_label' => describirModoEnvioMailPresupuestos($config['modo_envio']),
                 'remitente_email' => $config['remitente_email'],
                 'remitente_nombre' => $config['remitente_nombre'],
+                'smtp_disponible' => !empty($estadoTransporte['disponible']),
+                'smtp_transporte_msg' => mensajeDisponibilidadTransporteSmtpMailPresupuestos(),
+                'smtp_errores' => $validacionSmtp['errores'] ?? [],
+                'smtp_advertencias' => $validacionSmtp['advertencias'] ?? [],
             ],
             'sugerencias_para' => $sugerencias,
             'para_default' => $paraDefault,
@@ -565,21 +656,16 @@ if (!function_exists('enviarDocumentoEmitidoPorSmtpPresupuesto')) {
         if (!cargarComposerAutoloadMailPresupuestos()) {
             return [
                 'ok' => false,
-                'msg' => 'No está disponible la librería SMTP. Ejecutá composer install para habilitar el envío real.',
+                'msg' => mensajeDisponibilidadTransporteSmtpMailPresupuestos(),
                 'respuesta' => 'PHPMailer no disponible',
             ];
         }
 
-        if (
-            !validarEmailMailPresupuestos($config['remitente_email'] ?? '') ||
-            trim((string)($config['smtp_host'] ?? '')) === '' ||
-            (int)($config['smtp_puerto'] ?? 0) <= 0 ||
-            trim((string)($config['smtp_usuario'] ?? '')) === '' ||
-            trim((string)($config['smtp_password'] ?? '')) === ''
-        ) {
+        $validacion = validarConfiguracionSmtpMailPresupuestos($config, ['exigir_password' => true]);
+        if (empty($validacion['ok'])) {
             return [
                 'ok' => false,
-                'msg' => 'La configuración SMTP está incompleta para realizar el envío real.',
+                'msg' => implode(' ', $validacion['errores'] ?? ['La configuración SMTP está incompleta para realizar el envío real.']),
                 'respuesta' => 'Configuración SMTP incompleta',
             ];
         }
@@ -588,12 +674,18 @@ if (!function_exists('enviarDocumentoEmitidoPorSmtpPresupuesto')) {
             $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
             $mail->CharSet = 'UTF-8';
             $mail->isSMTP();
+            $mail->SMTPDebug = 0;
             $mail->Host = (string)$config['smtp_host'];
             $mail->Port = (int)$config['smtp_puerto'];
             $mail->SMTPAuth = true;
             $mail->Username = (string)$config['smtp_usuario'];
             $mail->Password = (string)$config['smtp_password'];
+            $mail->SMTPAutoTLS = false;
             $mail->setFrom(
+                (string)$config['remitente_email'],
+                (string)($config['remitente_nombre'] ?: 'Presupuestos AdminTech')
+            );
+            $mail->addReplyTo(
                 (string)$config['remitente_email'],
                 (string)($config['remitente_nombre'] ?: 'Presupuestos AdminTech')
             );
@@ -604,7 +696,7 @@ if (!function_exists('enviarDocumentoEmitidoPorSmtpPresupuesto')) {
             } elseif ($seguridad === 'ssl') {
                 $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
             } else {
-                $mail->SMTPAutoTLS = false;
+                $mail->SMTPSecure = '';
             }
 
             foreach ($payload['para_emails'] as $email) {
@@ -618,15 +710,16 @@ if (!function_exists('enviarDocumentoEmitidoPorSmtpPresupuesto')) {
             }
 
             $mail->isHTML(true);
-            $mail->Subject = (string)$payload['asunto'];
-            $mail->Body = nl2br((string)$payload['cuerpo']);
-            $mail->AltBody = (string)$payload['cuerpo'];
+            $mail->Subject = sanitizarAsuntoMailPresupuestos((string)$payload['asunto']);
+            $mail->Body = renderizarHtmlSeguroMailPresupuestos((string)$payload['cuerpo']);
+            $mail->AltBody = sanitizarCuerpoTextoPlanoMailPresupuestos((string)$payload['cuerpo']);
             $mail->addAttachment((string)$detalle['ruta_absoluta'], (string)$detalle['nombre_archivo']);
             $mail->send();
 
             return ['ok' => true, 'respuesta' => 'SMTP OK'];
         } catch (Throwable $e) {
-            return ['ok' => false, 'msg' => $e->getMessage(), 'respuesta' => $e->getMessage()];
+            $mensajeSanitizado = sanitizarMensajeErrorTransporteSmtpMailPresupuestos($e->getMessage(), $config);
+            return ['ok' => false, 'msg' => $mensajeSanitizado, 'respuesta' => 'SMTP ERROR'];
         }
     }
 }
@@ -648,25 +741,30 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuesto')) {
             return ['ok' => false, 'msg' => 'El archivo PDF no está disponible en el servidor.'];
         }
 
-        $config = obtenerConfiguracionMailPresupuestos();
+        $config = obtenerConfiguracionMailPresupuestos(true);
         $modoEnvio = normalizarModoEnvioMailPresupuestos($config['modo_envio'] ?? null);
-        $paraEmails = normalizarListaEmailsDocumentoEmitido($input['para_email'] ?? '');
-        $ccEmails = normalizarListaEmailsDocumentoEmitido($input['cc_email'] ?? '');
-
-        $ccoEmails = normalizarListaEmailsDocumentoEmitido($input['cco_email'] ?? []);
-        $ccoManual = normalizarListaEmailsDocumentoEmitido($input['cco_manual'] ?? '');
-        $ccoEmails = array_values(array_unique(array_merge($ccoEmails, $ccoManual)));
+        $destinatarios = normalizarDestinatariosPorTipoDocumentoEmitido(
+            normalizarListaEmailsDocumentoEmitido($input['para_email'] ?? ''),
+            normalizarListaEmailsDocumentoEmitido($input['cc_email'] ?? ''),
+            array_merge(
+                normalizarListaEmailsDocumentoEmitido($input['cco_email'] ?? []),
+                normalizarListaEmailsDocumentoEmitido($input['cco_manual'] ?? '')
+            )
+        );
+        $paraEmails = $destinatarios['para_emails'];
+        $ccEmails = $destinatarios['cc_emails'];
+        $ccoEmails = $destinatarios['cco_emails'];
 
         if (!$paraEmails) {
             return ['ok' => false, 'msg' => 'Ingresá al menos un destinatario válido en el campo Para.'];
         }
 
-        $asunto = trim((string)($input['asunto'] ?? ''));
+        $asunto = sanitizarAsuntoMailPresupuestos((string)($input['asunto'] ?? ''));
         if ($asunto === '') {
             $asunto = construirAsuntoDocumentoEmitidoPresupuesto($detalle);
         }
 
-        $cuerpo = trim((string)($input['cuerpo'] ?? ''));
+        $cuerpo = sanitizarCuerpoTextoPlanoMailPresupuestos((string)($input['cuerpo'] ?? ''));
         if ($cuerpo === '') {
             $cuerpo = construirCuerpoDocumentoEmitidoPresupuesto($detalle);
         }
@@ -790,25 +888,31 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
             return ['ok' => false, 'msg' => 'El archivo PDF no esta disponible en el servidor.'];
         }
 
-        $config = obtenerConfiguracionMailPresupuestos();
+        $config = obtenerConfiguracionMailPresupuestos(true);
         $modoEnvio = normalizarModoEnvioMailPresupuestos($config['modo_envio'] ?? null);
-        $paraEmails = normalizarListaEmailsDocumentoEmitido($input['para_email'] ?? '');
-        $ccEmails = normalizarListaEmailsDocumentoEmitido($input['cc_email'] ?? '');
-        $ccoEmails = normalizarListaEmailsDocumentoEmitido($input['cco_email'] ?? []);
-        $ccoManual = normalizarListaEmailsDocumentoEmitido($input['cco_manual'] ?? '');
-        $ccoEmails = array_values(array_unique(array_merge($ccoEmails, $ccoManual)));
+        $destinatarios = normalizarDestinatariosPorTipoDocumentoEmitido(
+            normalizarListaEmailsDocumentoEmitido($input['para_email'] ?? ''),
+            normalizarListaEmailsDocumentoEmitido($input['cc_email'] ?? ''),
+            array_merge(
+                normalizarListaEmailsDocumentoEmitido($input['cco_email'] ?? []),
+                normalizarListaEmailsDocumentoEmitido($input['cco_manual'] ?? '')
+            )
+        );
+        $paraEmails = $destinatarios['para_emails'];
+        $ccEmails = $destinatarios['cc_emails'];
+        $ccoEmails = $destinatarios['cco_emails'];
         $comentariosHistorialEnvio = construirComentarioEnvioHistorialComercialPresupuesto($paraEmails, $ccoEmails);
 
         if (!$paraEmails) {
             return ['ok' => false, 'msg' => 'Ingresa al menos un destinatario valido en el campo Para.'];
         }
 
-        $asunto = trim((string)($input['asunto'] ?? ''));
+        $asunto = sanitizarAsuntoMailPresupuestos((string)($input['asunto'] ?? ''));
         if ($asunto === '') {
             $asunto = construirAsuntoDocumentoEmitidoPresupuesto($detalle);
         }
 
-        $cuerpo = trim((string)($input['cuerpo'] ?? ''));
+        $cuerpo = sanitizarCuerpoTextoPlanoMailPresupuestos((string)($input['cuerpo'] ?? ''));
         if ($cuerpo === '') {
             $cuerpo = construirCuerpoDocumentoEmitidoPresupuesto($detalle);
         }
