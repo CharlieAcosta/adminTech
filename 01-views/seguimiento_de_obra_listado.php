@@ -200,7 +200,7 @@ $rangosTiempoRapidos = array(
                     <th>Ingreso</th>
                     <th>CUIT</th>
                     <th>Razón Social</th>
-                    <th>Descripci&oacute;n</th>
+                    <th>Requerimiento t&eacute;cnico</th>
                     <th>Visita</th>
                     <th>Fecha</th>
                     <th>Hora</th>
