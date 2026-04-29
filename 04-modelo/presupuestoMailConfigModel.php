@@ -143,19 +143,49 @@ if (!function_exists('runtimeCifradoMailPresupuestosDisponible')) {
 if (!function_exists('obtenerClaveSecretaMailPresupuestos')) {
     function obtenerClaveSecretaMailPresupuestos(): string
     {
-        $candidatos = [
-            getenv('MAIL_PRESUPUESTOS_SECRET') ?: '',
-            getenv('ADMINTECH_MAIL_SECRET') ?: '',
-        ];
-
-        foreach ($candidatos as $clave) {
-            $clave = trim((string)$clave);
-            if ($clave !== '') {
-                return $clave;
-            }
+        $clave = normalizarClaveSecretaMailPresupuestos(getenv('MAIL_PRESUPUESTOS_SECRET') ?: '');
+        if ($clave !== '') {
+            return $clave;
         }
 
-        return '';
+        $clave = normalizarClaveSecretaMailPresupuestos(getenv('ADMINTECH_MAIL_SECRET') ?: '');
+        if ($clave !== '') {
+            return $clave;
+        }
+
+        return obtenerClaveSecretaArchivoExternoMailPresupuestos();
+    }
+}
+
+if (!function_exists('normalizarClaveSecretaMailPresupuestos')) {
+    function normalizarClaveSecretaMailPresupuestos(?string $clave): string
+    {
+        $clave = trim((string)$clave);
+        return strlen($clave) >= 32 ? $clave : '';
+    }
+}
+
+if (!function_exists('rutaArchivoSecretoExternoMailPresupuestos')) {
+    function rutaArchivoSecretoExternoMailPresupuestos(): string
+    {
+        return dirname(dirname(__DIR__)) . '/admintech_secrets/mail_secret.php';
+    }
+}
+
+if (!function_exists('obtenerClaveSecretaArchivoExternoMailPresupuestos')) {
+    function obtenerClaveSecretaArchivoExternoMailPresupuestos(): string
+    {
+        $archivoSecreto = rutaArchivoSecretoExternoMailPresupuestos();
+        if (!is_file($archivoSecreto)) {
+            return '';
+        }
+
+        $secretos = @include $archivoSecreto;
+        if (!is_array($secretos)) {
+            return '';
+        }
+
+        return normalizarClaveSecretaMailPresupuestos($secretos['ADMINTECH_MAIL_SECRET'] ?? '');
     }
 }
 
@@ -213,7 +243,7 @@ if (!function_exists('cifrarPasswordSmtpMailPresupuestos')) {
 
         $secret = obtenerClaveSecretaMailPresupuestos();
         if ($secret === '') {
-            return ['ok' => false, 'msg' => 'Antes de guardar la contraseña SMTP configurá la variable de entorno MAIL_PRESUPUESTOS_SECRET o ADMINTECH_MAIL_SECRET en el servidor.'];
+            return ['ok' => false, 'msg' => 'Antes de guardar la contrasena SMTP configura MAIL_PRESUPUESTOS_SECRET o ADMINTECH_MAIL_SECRET por variable de entorno, o el archivo externo /admintech_secrets/mail_secret.php fuera de public_html. El secreto debe tener al menos 32 caracteres.'];
         }
 
         $key = hash('sha256', $secret, true);
@@ -254,7 +284,7 @@ if (!function_exists('descifrarPasswordSmtpMailPresupuestos')) {
 
         $secret = obtenerClaveSecretaMailPresupuestos();
         if ($secret === '') {
-            return ['ok' => false, 'msg' => 'Falta configurar la variable de entorno MAIL_PRESUPUESTOS_SECRET o ADMINTECH_MAIL_SECRET para usar la contraseña SMTP guardada.'];
+            return ['ok' => false, 'msg' => 'Falta configurar una clave valida para usar la contrasena SMTP guardada: variable de entorno MAIL_PRESUPUESTOS_SECRET/ADMINTECH_MAIL_SECRET o archivo externo /admintech_secrets/mail_secret.php fuera de public_html. Si la clave cambio, las contrasenas SMTP cifradas anteriormente pueden quedar ilegibles.'];
         }
 
         $payload = substr($passwordGuardada, strlen(prefijoPasswordSmtpCifradaMailPresupuestos()));
@@ -278,12 +308,12 @@ if (!function_exists('descifrarPasswordSmtpMailPresupuestos')) {
         $macEsperada = hash_hmac('sha256', $iv . $ciphertext, $key, true);
 
         if (!hash_equals($macEsperada, $mac)) {
-            return ['ok' => false, 'msg' => 'La contraseña SMTP guardada no pudo verificarse correctamente.'];
+            return ['ok' => false, 'msg' => 'La contrasena SMTP guardada no pudo verificarse correctamente. Si la clave secreta cambio, las contrasenas SMTP cifradas anteriormente pueden quedar ilegibles.'];
         }
 
         $passwordPlano = openssl_decrypt($ciphertext, $cipher, $key, OPENSSL_RAW_DATA, $iv);
         if ($passwordPlano === false) {
-            return ['ok' => false, 'msg' => 'La contraseña SMTP guardada no pudo descifrarse correctamente.'];
+            return ['ok' => false, 'msg' => 'La contrasena SMTP guardada no pudo descifrarse correctamente. Si la clave secreta cambio, las contrasenas SMTP cifradas anteriormente pueden quedar ilegibles.'];
         }
 
         return ['ok' => true, 'value' => $passwordPlano, 'legacy' => false];
