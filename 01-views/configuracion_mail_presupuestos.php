@@ -160,7 +160,8 @@ function escConfigMail($valor): string
         <?php if (!$puedeGuardarSecretosSmtp) { ?>
           <div class="alert alert-warning">
             <strong>Protección de credenciales pendiente.</strong>
-            Para guardar o actualizar la contraseña SMTP sin dejarla en claro, configurá la variable de entorno <code>MAIL_PRESUPUESTOS_SECRET</code> o <code>ADMINTECH_MAIL_SECRET</code> en el servidor.
+            Para guardar o actualizar la contraseña SMTP sin dejarla en claro, configurá la variable de entorno <code>MAIL_PRESUPUESTOS_SECRET</code> o <code>ADMINTECH_MAIL_SECRET</code> en el servidor, o el archivo externo no versionado <code>/admintech_secrets/mail_secret.php</code> fuera de <code>public_html</code>. El secreto debe tener al menos 32 caracteres.
+            Si el secreto cambia, las contraseñas SMTP cifradas anteriormente pueden quedar ilegibles.
           </div>
         <?php } ?>
 

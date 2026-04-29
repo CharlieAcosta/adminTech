@@ -72,6 +72,16 @@ Referencias de implementacion:
 - La configuracion SMTP de presupuestos esta alineada a DonWeb/Ferozo: el frontend sugiere `465` + `SSL`, el host se documenta como `c######.ferozo.com` o `l######.ferozo.com`, y el email remitente debe coincidir con la cuenta autenticada del usuario SMTP.
 - La contraseña SMTP ya no debe renderizarse en HTML ni viajar por JSON. `04-modelo/presupuestoMailConfigModel.php` la devuelve vacia al frontend, conserva un placeholder `********` cuando ya existe una guardada y solo la reemplaza si el administrador ingresa una nueva.
 - Para guardar o leer la contraseña SMTP de forma protegida, el servidor debe exponer la variable de entorno `MAIL_PRESUPUESTOS_SECRET` o `ADMINTECH_MAIL_SECRET`. Si falta esa clave, AdminTech bloquea el guardado de nuevas contraseñas SMTP para no persistir secretos en claro.
+- En DonWeb/Ferozo, si no hay variables de entorno personalizadas, AdminTech tambien puede leer el secreto de credenciales SMTP desde el archivo PHP externo no versionado `/admintech_secrets/mail_secret.php`, ubicado fuera de `/public_html/`. El archivo debe devolver un array con `ADMINTECH_MAIL_SECRET` y el valor debe tener al menos 32 caracteres. Si el archivo no existe, no devuelve un array o no contiene un secreto valido, se mantiene el bloqueo de credenciales. Si el secreto cambia, las contrasenas SMTP cifradas anteriormente pueden quedar ilegibles.
+- Ejemplo de estructura del archivo externo, sin guardar secretos reales en el repo:
+
+```php
+<?php
+return [
+    'ADMINTECH_MAIL_SECRET' => 'reemplazar-por-un-secreto-largo-de-al-menos-32-caracteres',
+];
+```
+
 - `04-modelo/presupuestoDocumentosEmitidosEnviosModel.php` usa PHPMailer por SMTP autenticado, deduplica destinatarios entre `TO`, `CC` y `CCO`, sanea el cuerpo HTML/errores visibles y no marca el presupuesto como enviado si el transporte SMTP falla.
 - `03-controller/presupuestosController.php` renderiza las columnas `Visita` y `Presupuesto` del listado de seguimiento como badges centrados y expone en cada fila `data-estado-visita` y `data-estado-presupuesto` para filtros rapidos sin recargar la grilla.
 - En ese mismo listado, las pre-visitas con estado `Cancelada` no deben mostrar accion `Editar`; el frontend tambien respeta esa regla si la fila se actualiza dinamicamente.
