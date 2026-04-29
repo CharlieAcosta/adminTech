@@ -505,6 +505,21 @@ function estadoVisitaBloqueaEdicionListado(estadoVisita) {
     return normalizado === 'CANCELADA';
 }
 
+function obtenerIndiceColumnaSeguimientoListado(nombreColumna) {
+    const nombreBuscado = String(nombreColumna || '').trim().toLowerCase();
+    let indice = -1;
+
+    $('#current_table thead th').each(function (index) {
+        const nombreActual = $(this).text().trim().toLowerCase();
+        if (nombreActual === nombreBuscado) {
+            indice = index;
+            return false;
+        }
+    });
+
+    return indice;
+}
+
 function actualizarAccionEditarListado($fila, estado) {
     if (!$fila || !$fila.length) {
         return;
@@ -587,8 +602,13 @@ function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
         return;
     }
 
-    const $celda = $fila.find('td').eq(7);
+    const indicePresupuesto = obtenerIndiceColumnaSeguimientoListado('Presupuesto');
+    const $celda = $fila.find('td').eq(indicePresupuesto >= 0 ? indicePresupuesto : 8);
     const visual = resolverEstadoPresupuestoVisual(estado);
+
+    if (!$celda.length) {
+        return;
+    }
 
     $fila.attr('data-estado-presupuesto', visual.normalizado || '');
     $celda.html(renderizarBadgeEstadoListado(visual.label, visual.badgeClass));
@@ -934,7 +954,7 @@ function abrirModalEnvioDocumentoEmitido(idDocumentoEmitido) {
                     'warning'
                 );
             } else {
-                renderAlertasModalEnviarDocumento('SMTP real activo: el sistema intentará enviar el correo usando la configuración DonWeb/Ferozo guardada.', 'success');
+                renderAlertasModalEnviarDocumento('<div class="text-center"><strong>Envío real activado:</strong> al presionar “Enviar documento”, el destinatario recibirá este mail.</div>', 'success');
             }
         },
         error: function () {
