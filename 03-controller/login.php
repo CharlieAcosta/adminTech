@@ -61,6 +61,12 @@ if (!$db) {
                 $_SESSION["usuario"] = $rows[0];
                 $_SESSION["base_url"] = base_url() . "/adminTech/";
 
+                if (!empty($_POST['recordarme'])) {
+                    crearCookieRecordarmeLogin($rows[0]);
+                } else {
+                    limpiarCookieRecordarmeLogin();
+                }
+
                 // Registro de auditoría - Login exitoso
                 $conexionAuditoria = conectaDB(); // Conectar a la base de datos para auditoría
                 $auditoria = new Auditoria($conexionAuditoria);

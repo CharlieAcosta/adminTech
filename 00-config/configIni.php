@@ -61,6 +61,7 @@ if ($appEnv === 'development') {
 
 // SESION
 define('URL_LOGIN', '../01-views/login.php');
-define('SESION_TIME', 7200);
+define('SESION_TIME', 10800);
+define('REMEMBER_LOGIN_TIME', 2592000);
 define('BASE_PATH', __DIR__ . '/../');
 ?>

@@ -388,10 +388,196 @@ function strToDateFormat($string, $formato){
 // 9)
 // Inicia o reanuda la sesión | URL_DESTINO se define en el archivo configuracion.php | $expira por defecto una hora 
 
+function nombreCookieRecordarmeLogin(): string
+{
+    return 'admintech_recordarme';
+}
+
+function duracionCookieRecordarmeLogin(): int
+{
+    return defined('REMEMBER_LOGIN_TIME') ? (int)REMEMBER_LOGIN_TIME : 2592000;
+}
+
+function opcionesCookieRecordarmeLogin(int $expira): array
+{
+    return [
+        'expires' => $expira,
+        'path' => '/',
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ];
+}
+
+function limpiarCookieRecordarmeLogin(): void
+{
+    setcookie(nombreCookieRecordarmeLogin(), '', opcionesCookieRecordarmeLogin(time() - 3600));
+    unset($_COOKIE[nombreCookieRecordarmeLogin()]);
+}
+
+function tablaRecordarmeLoginExiste($db): bool
+{
+    $tabla = mysqli_real_escape_string($db, 'usuario_remember_tokens');
+    $sql = "SHOW TABLES LIKE '{$tabla}'";
+    $resultado = mysqli_query($db, $sql);
+    $existe = $resultado && mysqli_num_rows($resultado) > 0;
+    if ($resultado) {
+        mysqli_free_result($resultado);
+    }
+    return $existe;
+}
+
+function crearCookieRecordarmeLogin(array $usuario): void
+{
+    $idUsuario = (int)($usuario['id_usuario'] ?? 0);
+    if ($idUsuario <= 0 || !function_exists('random_bytes')) {
+        return;
+    }
+
+    $db = conectaDB();
+    $db->set_charset('utf8mb4');
+    if (!tablaRecordarmeLoginExiste($db)) {
+        mysqli_close($db);
+        return;
+    }
+
+    $selector = bin2hex(random_bytes(12));
+    $validador = bin2hex(random_bytes(32));
+    $hashValidador = hash('sha256', $validador);
+    $expiraTs = time() + duracionCookieRecordarmeLogin();
+    $expiraSql = date('Y-m-d H:i:s', $expiraTs);
+    $userAgentHash = hash('sha256', (string)($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    $ipCreacion = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+
+    $stmt = $db->prepare("
+        INSERT INTO usuario_remember_tokens
+            (id_usuario, selector, token_hash, user_agent_hash, ip_creacion, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, NOW())
+    ");
+
+    if ($stmt) {
+        $stmt->bind_param('isssss', $idUsuario, $selector, $hashValidador, $userAgentHash, $ipCreacion, $expiraSql);
+        if ($stmt->execute()) {
+            setcookie(nombreCookieRecordarmeLogin(), $selector . ':' . $validador, opcionesCookieRecordarmeLogin($expiraTs));
+        }
+        $stmt->close();
+    }
+
+    mysqli_close($db);
+}
+
+function eliminarTokenRecordarmeLoginActual(): void
+{
+    $cookie = (string)($_COOKIE[nombreCookieRecordarmeLogin()] ?? '');
+    if ($cookie === '' || strpos($cookie, ':') === false) {
+        limpiarCookieRecordarmeLogin();
+        return;
+    }
+
+    [$selector] = explode(':', $cookie, 2);
+    if ($selector !== '') {
+        $db = conectaDB();
+        $db->set_charset('utf8mb4');
+        if (tablaRecordarmeLoginExiste($db)) {
+            $stmt = $db->prepare("DELETE FROM usuario_remember_tokens WHERE selector = ?");
+            if ($stmt) {
+                $stmt->bind_param('s', $selector);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+        mysqli_close($db);
+    }
+
+    limpiarCookieRecordarmeLogin();
+}
+
+function restaurarSesionDesdeRecordarmeLogin(): bool
+{
+    $cookie = (string)($_COOKIE[nombreCookieRecordarmeLogin()] ?? '');
+    if ($cookie === '' || strpos($cookie, ':') === false) {
+        return false;
+    }
+
+    [$selector, $validador] = explode(':', $cookie, 2);
+    if ($selector === '' || $validador === '') {
+        limpiarCookieRecordarmeLogin();
+        return false;
+    }
+
+    $db = conectaDB();
+    $db->set_charset('utf8mb4');
+    if (!tablaRecordarmeLoginExiste($db)) {
+        mysqli_close($db);
+        limpiarCookieRecordarmeLogin();
+        return false;
+    }
+
+    $selectorSql = mysqli_real_escape_string($db, $selector);
+    $resultado = mysqli_query($db, "
+        SELECT t.id_token, t.id_usuario, t.token_hash, t.expires_at, u.*
+        FROM usuario_remember_tokens t
+        INNER JOIN usuarios u ON u.id_usuario = t.id_usuario
+        WHERE t.selector = '{$selectorSql}'
+          AND u.estado = 'Activo'
+        LIMIT 1
+    ");
+    $row = $resultado ? mysqli_fetch_assoc($resultado) : null;
+    if ($resultado) {
+        mysqli_free_result($resultado);
+    }
+
+    if (!$row || strtotime((string)$row['expires_at']) < time()) {
+        mysqli_close($db);
+        limpiarCookieRecordarmeLogin();
+        return false;
+    }
+
+    if (!hash_equals((string)$row['token_hash'], hash('sha256', $validador))) {
+        mysqli_close($db);
+        limpiarCookieRecordarmeLogin();
+        return false;
+    }
+
+    $nuevoValidador = bin2hex(random_bytes(32));
+    $nuevoHash = hash('sha256', $nuevoValidador);
+    $expiraTs = time() + duracionCookieRecordarmeLogin();
+    $expiraSql = date('Y-m-d H:i:s', $expiraTs);
+    $idToken = (int)$row['id_token'];
+
+    $stmtUpdate = $db->prepare("
+        UPDATE usuario_remember_tokens
+        SET token_hash = ?, expires_at = ?, last_used_at = NOW()
+        WHERE id_token = ?
+    ");
+    if ($stmtUpdate) {
+        $stmtUpdate->bind_param('ssi', $nuevoHash, $expiraSql, $idToken);
+        $stmtUpdate->execute();
+        $stmtUpdate->close();
+    }
+
+    unset($row['id_token'], $row['token_hash'], $row['expires_at']);
+    $_SESSION['usuario'] = $row;
+    if (!function_exists('base_url')) {
+        include_once __DIR__ . '/base_url.php';
+    }
+    $_SESSION['base_url'] = base_url() . "/adminTech/";
+    $_SESSION['ultima_actividad'] = time();
+
+    setcookie(nombreCookieRecordarmeLogin(), $selector . ':' . $nuevoValidador, opcionesCookieRecordarmeLogin($expiraTs));
+    mysqli_close($db);
+
+    return true;
+}
+
 function sesion($url_destino = URL_LOGIN, $expira = SESION_TIME) {
     // Iniciar sesión si no está ya iniciada
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
+    }
+
+    if ((!isset($_SESSION['usuario']['id_usuario']) || $_SESSION['usuario']['id_usuario'] == '') && restaurarSesionDesdeRecordarmeLogin()) {
+        return;
     }
 
     // Verificar si la sesión está activa
@@ -407,6 +593,9 @@ function sesion($url_destino = URL_LOGIN, $expira = SESION_TIME) {
         if ($inactividad > $expira) {
             // Si ha pasado más de SESION_TIME segundos desde la última actividad, destruir la sesión
             session_unset(); // Destruir todas las variables de sesión
+            if (restaurarSesionDesdeRecordarmeLogin()) {
+                return;
+            }
             session_destroy(); // Destruir la sesión actual
             header('Location: ' . $url_destino); // Redirigir al login
             exit();
