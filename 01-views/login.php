@@ -22,20 +22,21 @@
     }
 
     .password-field-wrap .form-control {
-      padding-right: 5.25rem;
+      padding-right: 4.8rem;
     }
 
     .password-toggle {
       align-items: center;
       background: transparent;
       border: 0;
-      color: #495057;
+      color: #868e96;
       display: flex;
       height: 100%;
       justify-content: center;
       padding: 0;
       position: absolute;
-      right: 2.75rem;
+      font-size: .9rem;
+      right: 2.35rem;
       top: 0;
       width: 2.75rem;
       z-index: 5;
@@ -44,7 +45,7 @@
     .password-toggle:hover,
     .password-toggle:focus,
     .password-toggle:active {
-      color: #495057;
+      color: #868e96;
       outline: 0;
     }
   </style>
