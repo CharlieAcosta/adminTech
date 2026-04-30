@@ -41,8 +41,10 @@
       z-index: 5;
     }
 
-    .password-toggle:focus {
-      color: #007bff;
+    .password-toggle:hover,
+    .password-toggle:focus,
+    .password-toggle:active {
+      color: #495057;
       outline: 0;
     }
   </style>
