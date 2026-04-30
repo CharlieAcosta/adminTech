@@ -24,7 +24,7 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
-$mailPresupuestos = array('Super Administrador');
+$superAdministrador = array('Super Administrador');
 ?>
 
 <!DOCTYPE html>
@@ -228,13 +228,13 @@ $mailPresupuestos = array('Super Administrador');
           <!-- /.info-box -->
           <?php } ?>           
 
-         <?php if (in_array($perfil, $mailPresupuestos)){ ?>
-         <div class="col-12 col-sm-6 col-md-4">
-            <a href="../01-views/configuracion_mail_presupuestos.php">
+         <?php if (in_array($perfil, $superAdministrador)){ ?>
+          <div class="col-12 col-sm-6 col-md-4">
+            <a href="../01-views/auditoria_configuracion.php">
                <div class="info-box">
-                  <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-envelope-open-text"></i></span>
+                  <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-user-shield"></i></span>
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">Mail presupuestos</h3>
+                    <h3 class="info-box-text d-flex align-items-center">Super Administrador</h3>
                   </div>
               </div>
             </a>
@@ -282,4 +282,3 @@ $mailPresupuestos = array('Super Administrador');
 </body>
 </html>
 <script src="../07-funciones_js/usuariosAcciones.js"></script>
-

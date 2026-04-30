@@ -24,6 +24,7 @@ if (isset($_SESSION['usuario'])) {
 }
 
 // Destruir la sesión
+eliminarTokenRecordarmeLoginActual();
 session_unset();
 session_destroy();
 

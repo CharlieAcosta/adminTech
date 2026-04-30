@@ -341,7 +341,7 @@ if (!function_exists('construirCuerpoDocumentoEmitidoPresupuesto')) {
             'Quedamos a disposición por cualquier consulta.',
             '',
             'Saludos,',
-            'Equipo de Presupuestos',
+            'Equipo de Presupuestos Ecotechos S.R.L.',
         ];
 
         return implode("\n", $lineas);
