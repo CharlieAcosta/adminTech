@@ -16,6 +16,36 @@
   <link rel="stylesheet" href="../05-plugins/icheck-bootstrap/icheck-bootstrap.min.css">
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
+  <style>
+    .password-field-wrap {
+      position: relative;
+    }
+
+    .password-field-wrap .form-control {
+      padding-right: 5.25rem;
+    }
+
+    .password-toggle {
+      align-items: center;
+      background: transparent;
+      border: 0;
+      color: #495057;
+      display: flex;
+      height: 100%;
+      justify-content: center;
+      padding: 0;
+      position: absolute;
+      right: 2.75rem;
+      top: 0;
+      width: 2.75rem;
+      z-index: 5;
+    }
+
+    .password-toggle:focus {
+      color: #007bff;
+      outline: 0;
+    }
+  </style>
 </head>
 <body class="hold-transition login-page v-fondo-01" style="background-image: url('../dist/img/fondo_01.jpg');">
 <div class="login-box">
@@ -36,8 +66,11 @@
             </div>
           </div>
         </div>
-        <div class="input-group mb-3">
+        <div class="input-group mb-3 password-field-wrap">
           <input id="password" name="password" type="password" class="form-control" placeholder="Password">
+          <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar contraseña" aria-pressed="false">
+            <span class="fas fa-eye" aria-hidden="true"></span>
+          </button>
           <div class="input-group-append">
             <div class="input-group-text">
               <span class="fas fa-lock"></span>
@@ -81,5 +114,19 @@
 <script src="../05-plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
 <!-- AdminLTE App -->
 <script src="../dist/js/adminlte.min.js"></script>
+<script>
+  $('#togglePassword').on('click', function () {
+    const $password = $('#password');
+    const mostrar = $password.attr('type') === 'password';
+
+    $password.attr('type', mostrar ? 'text' : 'password');
+    $(this)
+      .attr('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña')
+      .attr('aria-pressed', mostrar ? 'true' : 'false')
+      .find('.fas')
+      .toggleClass('fa-eye', !mostrar)
+      .toggleClass('fa-eye-slash', mostrar);
+  });
+</script>
 </body>
 </html>
