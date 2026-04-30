@@ -6,6 +6,11 @@ define('BASE_URL', $_SESSION["base_url"]);
 include_once '../06-funciones_php/funciones.php';
 sesion(); // Verifica si hay usuario sesionado
 
+if (($_SESSION['usuario']['perfil'] ?? '') !== 'Super Administrador') {
+  echo "<script type='text/javascript'>window.location='../01-views/panel.php';</script>";
+  exit;
+}
+
 include_once '../06-funciones_php/auditoria.php';
 registrarNavegacion('AUDITORIA');
 
@@ -251,4 +256,3 @@ function limpiarFiltros() {
 </script>
 </body>
 </html>
-
