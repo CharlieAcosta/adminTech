@@ -336,6 +336,42 @@ function construirHtmlComentariosHistorialPresupuesto(comentarios) {
     return `<div class="text-break small" style="white-space: pre-wrap; min-width: 260px;">${escapeHtmlDocumentoEmitido(texto)}</div>`;
 }
 
+function construirHtmlDocumentoHistorialPresupuesto(item) {
+    const numero = String(item && item.documento_numero ? item.documento_numero : '').trim();
+    const nombre = String(item && item.documento_nombre_archivo ? item.documento_nombre_archivo : '').trim();
+    const documento = numero || nombre;
+
+    if (!documento) {
+        return '';
+    }
+
+    if (item && item.documento_antiguo_enviado) {
+        return `
+            <div class="small text-danger font-weight-bold mt-1">
+                Documento antiguo enviado: ${escapeHtmlDocumentoEmitido(documento)}
+            </div>
+        `;
+    }
+
+    return `
+        <div class="small ${item && item.circuito_anterior ? 'text-muted' : 'text-secondary'} mt-1">
+            Documento: ${escapeHtmlDocumentoEmitido(documento)}
+        </div>
+    `;
+}
+
+function claseFilaHistorialPresupuesto(item) {
+    if (item && item.documento_antiguo_enviado) {
+        return 'table-danger';
+    }
+
+    if (item && item.circuito_anterior) {
+        return 'text-muted historial-presupuesto-circuito-anterior';
+    }
+
+    return '';
+}
+
 function habilitarAccionOrdenCompraHistorialPresupuesto(response) {
     const idPresupuesto = Number(response && response.id_presupuesto ? response.id_presupuesto : 0) || 0;
     const estadoActual = String(
@@ -408,11 +444,14 @@ function construirHtmlHistorialPresupuesto(response) {
                 </thead>
                 <tbody>
                     ${items.map((item) => `
-                        <tr>
+                        <tr class="${claseFilaHistorialPresupuesto(item)}">
                             <td>${escapeHtmlDocumentoEmitido(item.fecha_texto || '-')}</td>
                             <td>${escapeHtmlDocumentoEmitido(item.usuario_nombre || '-')}</td>
                             <td>${escapeHtmlDocumentoEmitido(item.accion_label || item.accion || '-')}</td>
-                            <td>${construirHtmlComentariosHistorialPresupuesto(item.comentarios || '')}</td>
+                            <td>
+                                ${construirHtmlComentariosHistorialPresupuesto(item.comentarios || '')}
+                                ${construirHtmlDocumentoHistorialPresupuesto(item)}
+                            </td>
                         </tr>
                     `).join('')}
                 </tbody>
