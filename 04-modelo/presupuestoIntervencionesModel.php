@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/conectDB.php';
 require_once __DIR__ . '/presupuestoGeneradoModel.php';
+require_once __DIR__ . '/presupuestoDocumentosEmitidosModel.php';
 require_once __DIR__ . '/presupuestoMailConfigModel.php';
 
 if (!function_exists('normalizarAccionIntervencionPresupuesto')) {
@@ -824,6 +825,46 @@ if (!function_exists('obtenerIdUltimoDocumentoEmitidoPresupuestoEnConexion')) {
     }
 }
 
+if (!function_exists('obtenerUltimoDocumentoEmitidoPresupuestoEnConexion')) {
+    function obtenerUltimoDocumentoEmitidoPresupuestoEnConexion(mysqli $db, int $idPresupuesto): ?array
+    {
+        if ($idPresupuesto <= 0 || !tabla_existe($db, 'presupuesto_documentos_emitidos')) {
+            return null;
+        }
+
+        $sql = "
+            SELECT id_documento_emitido, nombre_archivo, created_at
+            FROM presupuesto_documentos_emitidos
+            WHERE id_presupuesto = ?
+            ORDER BY created_at DESC, id_documento_emitido DESC
+            LIMIT 1
+        ";
+        $stmt = mysqli_prepare($db, $sql);
+        if (!$stmt) {
+            return null;
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPresupuesto);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        if (!$row) {
+            return null;
+        }
+
+        $nombreArchivo = repararTextoMojibakePresupuestoProfundo((string)($row['nombre_archivo'] ?? ''));
+
+        return [
+            'id_documento_emitido' => (int)($row['id_documento_emitido'] ?? 0),
+            'nombre_archivo' => $nombreArchivo,
+            'numero_documento' => extraerNumeroDocumentoEmitidoPresupuesto($nombreArchivo),
+            'created_at' => (string)($row['created_at'] ?? ''),
+        ];
+    }
+}
+
 if (!function_exists('actualizarEstadoComercialPresupuestoEnConexion')) {
     function actualizarEstadoComercialPresupuestoEnConexion(mysqli $db, int $idPresupuesto, string $modo, ?string $estadoDestino): bool
     {
@@ -986,6 +1027,9 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
             $selectComentarios = columnaComentariosHistorialComercialPresupuestoExiste($db)
                 ? 'h.comentarios,'
                 : "'' AS comentarios,";
+            $ultimoDocumento = obtenerUltimoDocumentoEmitidoPresupuestoEnConexion($db, $idPresupuesto);
+            $idUltimoDocumento = (int)($ultimoDocumento['id_documento_emitido'] ?? 0);
+            $fechaUltimoDocumento = (string)($ultimoDocumento['created_at'] ?? '');
             $sql = "
                 SELECT
                     h.id_historial_comercial,
@@ -999,11 +1043,15 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
                     h.estado_resultante,
                     {$selectComentarios}
                     h.created_at,
+                    d.nombre_archivo AS documento_nombre_archivo,
+                    d.created_at AS documento_created_at,
                     u.apellidos,
                     u.nombres
                 FROM presupuesto_historial_comercial h
                 LEFT JOIN usuarios u
                     ON u.id_usuario = h.id_usuario
+                LEFT JOIN presupuesto_documentos_emitidos d
+                    ON d.id_documento_emitido = h.id_documento_emitido
                 WHERE h.id_previsita = ?
                   AND h.id_presupuesto = ?
                   AND h.modo_circuito = ?
@@ -1040,12 +1088,43 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
                     ) ?? '';
                 }
 
+                $idDocumentoEmitido = isset($row['id_documento_emitido']) ? (int)$row['id_documento_emitido'] : null;
+                $nombreDocumento = repararTextoMojibakePresupuestoProfundo((string)($row['documento_nombre_archivo'] ?? ''));
+                $numeroDocumento = $nombreDocumento !== ''
+                    ? extraerNumeroDocumentoEmitidoPresupuesto($nombreDocumento)
+                    : '';
+                $documentoEsVigente = $idDocumentoEmitido !== null
+                    && $idDocumentoEmitido > 0
+                    && $idUltimoDocumento > 0
+                    && $idDocumentoEmitido === $idUltimoDocumento;
+                $eventoPosteriorAlDocumentoVigente = true;
+                if ($fechaUltimoDocumento !== '') {
+                    $tsEvento = strtotime((string)($row['created_at'] ?? ''));
+                    $tsUltimoDocumento = strtotime($fechaUltimoDocumento);
+                    $eventoPosteriorAlDocumentoVigente = $tsEvento !== false
+                        && $tsUltimoDocumento !== false
+                        && $tsEvento >= $tsUltimoDocumento;
+                }
+                $documentoAntiguoEnviado = $accion === 'enviado'
+                    && isset($row['id_envio'])
+                    && (int)$row['id_envio'] > 0
+                    && $idDocumentoEmitido !== null
+                    && $idDocumentoEmitido > 0
+                    && $idUltimoDocumento > 0
+                    && $idDocumentoEmitido !== $idUltimoDocumento
+                    && $eventoPosteriorAlDocumentoVigente;
+                $circuitoAnterior = $idDocumentoEmitido !== null
+                    && $idDocumentoEmitido > 0
+                    && $idUltimoDocumento > 0
+                    && $idDocumentoEmitido !== $idUltimoDocumento
+                    && !$documentoAntiguoEnviado;
+
                 $rows[] = [
                     'id_historial_comercial' => (int)($row['id_historial_comercial'] ?? 0),
                     'id_usuario' => (int)($row['id_usuario'] ?? 0),
                     'id_previsita' => (int)($row['id_previsita'] ?? 0),
                     'id_presupuesto' => (int)($row['id_presupuesto'] ?? 0),
-                    'id_documento_emitido' => isset($row['id_documento_emitido']) ? (int)$row['id_documento_emitido'] : null,
+                    'id_documento_emitido' => $idDocumentoEmitido,
                     'id_envio' => isset($row['id_envio']) ? (int)$row['id_envio'] : null,
                     'modo_circuito' => (string)($row['modo_circuito'] ?? $modoCircuito),
                     'accion' => $accion,
@@ -1055,6 +1134,14 @@ if (!function_exists('obtenerHistorialComercialPresupuestoItems')) {
                     'created_at' => (string)($row['created_at'] ?? ''),
                     'fecha_texto' => formatearFechaIntervencionPresupuesto((string)($row['created_at'] ?? '')),
                     'usuario_nombre' => $usuarioNombre,
+                    'documento_nombre_archivo' => $nombreDocumento,
+                    'documento_numero' => $numeroDocumento,
+                    'documento_es_vigente' => $documentoEsVigente,
+                    'documento_antiguo_enviado' => $documentoAntiguoEnviado,
+                    'circuito_anterior' => $circuitoAnterior,
+                    'historial_estilo' => $documentoAntiguoEnviado
+                        ? 'documento_antiguo_enviado'
+                        : ($circuitoAnterior ? 'circuito_anterior' : 'actual'),
                 ];
             }
 
