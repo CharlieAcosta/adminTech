@@ -61,6 +61,81 @@ foreach ($feriados as $feriado) {
       <!-- Theme style -->
       <link rel="stylesheet" href="../dist/css/adminlte.min.css">
       <link rel="stylesheet" href="../dist/css/custom.css">
+      <style>
+        .agente-novedad-acciones .btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem;
+          min-width: 118px;
+          padding: 0.375rem 0.75rem !important;
+          line-height: 1.5;
+          white-space: nowrap;
+        }
+
+        .agente-novedad-calendario .novedad-tooltip-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.35rem;
+          position: relative;
+          overflow: visible;
+        }
+
+        .agente-novedad-calendario .novedad-tooltip-icon {
+          position: absolute;
+          top: 50%;
+          right: 0.65rem;
+          transform: translateY(-50%);
+          color: rgba(235, 238, 242, 0.78);
+          font-size: 0.85rem;
+          line-height: 1;
+          cursor: help;
+        }
+
+        .agente-novedad-calendario .novedad-tooltip-icon::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          left: 50%;
+          bottom: calc(100% + 16px);
+          transform: translateX(-50%);
+          width: max-content;
+          max-width: 320px;
+          padding: 0.4rem 0.65rem;
+          border-radius: 0.25rem;
+          background: #007bff;
+          color: #fff;
+          font-size: 0.875rem;
+          line-height: 1.25;
+          white-space: normal;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease-in-out;
+          z-index: 10000;
+        }
+
+        .agente-novedad-calendario .novedad-tooltip-icon::before {
+          content: "";
+          position: absolute;
+          left: 50%;
+          bottom: calc(100% + 8px);
+          transform: translateX(-50%);
+          border-width: 8px 7px 0 7px;
+          border-style: solid;
+          border-color: #007bff transparent transparent transparent;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease-in-out;
+          z-index: 10001;
+        }
+
+        .agente-novedad-calendario .novedad-tooltip-icon:hover::before,
+        .agente-novedad-calendario .novedad-tooltip-icon:hover::after {
+          opacity: 1;
+        }
+      </style>
 
 
 <!-- start - librerias especificas -->
@@ -122,17 +197,17 @@ foreach ($feriados as $feriado) {
               </div>
               <!-- /.card-body -->
               <!-- Aquí añades los botones centrados -->
-              <div class="row d-flex justify-content-center mt-1">
-                  <button type="button" class="col-2 btn btn-danger m-2" id="btnLimpiar"><i class="fa fa-times-circle"></i> Limpiar</button>
-                  <button type="button" class="col-2 btn btn-light-green m-2" id="btnMensualizar"><i class="fa fa-calendar-alt"></i> Mensualizar</button>
+              <div class="row d-flex justify-content-center mt-1 agente-novedad-calendario">
+                  <button type="button" class="col-2 btn btn-danger m-2 novedad-tooltip-btn" id="btnLimpiar"><i class="fa fa-times-circle"></i> Limpiar <span class="novedad-tooltip-icon" data-tooltip="Quita todas las novedades cargadas en el calendario antes de guardar" aria-hidden="true"><i class="fa fa-question-circle"></i></span></button>
+                  <button type="button" class="col-2 btn btn-light-green m-2 novedad-tooltip-btn" id="btnMensualizar"><i class="fa fa-calendar-alt"></i> Mensualizar <span class="novedad-tooltip-icon" data-tooltip="Completa el mes visible con presentes de lunes a viernes y marca los feriados" aria-hidden="true"><i class="fa fa-question-circle"></i></span></button>
               </div>
             </div>
             <!-- /.card -->
-                <div class="row d-flex text-center justify-content-end pr-1">
-                  <button type="submit" class="col-1 btn btn-primary btn-block m-2 v-accion" data-accion="guardar"><i class="fa fa-plus-circle"></i> Guardar</button>
-                  <button type="button" class="col-1 btn btn-warning btn-block m-2 v-accion-cancelar" data-accion="cancelar"><i class="fa fa-ban"></i> Cancelar</button>
-                  <button type="button" class="col-1 btn btn-success btn-block m-2 v-visual v-accion-link" data-accion="linkNovedades"><i class="fa fa-arrow-circle-left"></i> Volver</button>
-                  <button type="button" class="col-1 btn btn-danger btn-block m-2 v-edit v-accion-eliminar d-none" data-accion="eliminar"><i class="fa fa-trash"></i> Eliminar</button>
+                <div class="row d-flex text-center justify-content-end align-items-center pr-1 agente-novedad-acciones">
+                  <button type="submit" class="col-auto btn btn-primary m-2 v-accion" data-accion="guardar"><i class="fa fa-plus-circle"></i> Guardar</button>
+                  <button type="button" class="col-auto btn btn-warning m-2 v-accion-cancelar" data-accion="cancelar"><i class="fa fa-ban"></i> Cancelar</button>
+                  <button type="button" class="col-auto btn btn-success m-2 v-visual v-accion-link" data-accion="linkNovedades"><i class="fa fa-arrow-circle-left"></i> Volver</button>
+                  <button type="button" class="col-auto btn btn-danger m-2 v-edit v-accion-eliminar d-none" data-accion="eliminar"><i class="fa fa-trash"></i> Eliminar</button>
                 </div>
           </div>
           <!-- /.col -->
@@ -768,6 +843,12 @@ document.getElementById('btnMensualizar').addEventListener('click', function() {
     });
 });
 
+document.querySelectorAll('.novedad-tooltip-icon').forEach(function(iconoAyuda) {
+    iconoAyuda.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+});
 
 ayuda();
 
