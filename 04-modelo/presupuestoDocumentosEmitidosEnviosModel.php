@@ -178,6 +178,27 @@ if (!function_exists('construirComentarioEnvioHistorialComercialPresupuesto')) {
     }
 }
 
+if (!function_exists('agregarDocumentoComentarioEnvioHistorialComercialPresupuesto')) {
+    function agregarDocumentoComentarioEnvioHistorialComercialPresupuesto(string $comentarios, array $detalle, bool $esDocumentoVigente): string
+    {
+        $numero = trim((string)($detalle['numero_documento'] ?? ''));
+        $nombre = trim((string)($detalle['nombre_archivo'] ?? ''));
+        $documento = $numero !== '' ? $numero : $nombre;
+        if ($documento === '') {
+            return $comentarios;
+        }
+
+        $partes = [];
+        if (trim($comentarios) !== '') {
+            $partes[] = trim($comentarios);
+        }
+
+        $partes[] = ($esDocumentoVigente ? 'Documento enviado: ' : 'Documento antiguo enviado: ') . $documento;
+
+        return implode(' | ', $partes);
+    }
+}
+
 if (!function_exists('obtenerDocumentoEmitidoDetallePresupuesto')) {
     function obtenerDocumentoEmitidoDetallePresupuesto(int $idDocumentoEmitido): ?array
     {
@@ -964,9 +985,14 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
             $estadoComercialActivoAntes = $presupuestoActual
                 ? obtenerEstadoComercialActivoDesdePresupuesto($presupuestoActual, $modoEnvio)
                 : '';
+            $esDocumentoVigente = esUltimoDocumentoEmitidoPresupuesto(
+                (int)$detalle['id_documento_emitido'],
+                (int)$detalle['id_presupuesto']
+            );
             $debeImpactarCircuitoComercial = $estadoEnvio !== 'fallido'
-                && esUltimoDocumentoEmitidoPresupuesto((int)$detalle['id_documento_emitido'], (int)$detalle['id_presupuesto'])
+                && $esDocumentoVigente
                 && $estadoComercialActivoAntes === '';
+            $debeRegistrarHistorialEnvio = $estadoEnvio !== 'fallido';
 
             $idEnvio = registrarEnvioDocumentoEmitidoPresupuestoEnConexion($db, [
                 'id_documento_emitido' => (int)$detalle['id_documento_emitido'],
@@ -994,6 +1020,19 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
                     $modoEnvio,
                     'ENVIADO'
                 );
+                $estadoActualizado = true;
+            }
+
+            if ($debeRegistrarHistorialEnvio) {
+                $estadoResultanteHistorial = $debeImpactarCircuitoComercial
+                    ? 'ENVIADO'
+                    : ($estadoComercialActivoAntes !== ''
+                        ? $estadoComercialActivoAntes
+                        : normalizarEstadoPresupuestoIntervencion($presupuestoActual['estado'] ?? 'ENVIADO'));
+                $estadoResultanteHistorial = normalizarEstadoComercialPresupuesto($estadoResultanteHistorial);
+                if ($estadoResultanteHistorial === '') {
+                    $estadoResultanteHistorial = 'ENVIADO';
+                }
 
                 registrarHistorialComercialPresupuestoEnConexion(
                     $db,
@@ -1004,11 +1043,13 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
                     $idUsuario,
                     $modoEnvio,
                     'enviado',
-                    'ENVIADO',
-                    $comentariosHistorialEnvio
+                    $estadoResultanteHistorial,
+                    agregarDocumentoComentarioEnvioHistorialComercialPresupuesto(
+                        $comentariosHistorialEnvio,
+                        $detalle,
+                        $esDocumentoVigente
+                    )
                 );
-
-                $estadoActualizado = true;
             }
 
             mysqli_commit($db);
@@ -1040,7 +1081,7 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
             'modo_envio' => $modoEnvio,
             'estado_presupuesto_actual' => $estadoPresupuestoActual,
             'estado_presupuesto_actualizado' => !empty($estadoActualizado),
-            'impacta_historial_comercial' => !empty($estadoActualizado),
+            'impacta_historial_comercial' => !empty($debeRegistrarHistorialEnvio),
             'msg' => $mensaje,
             'documento' => [
                 'id_documento_emitido' => $detalle['id_documento_emitido'],

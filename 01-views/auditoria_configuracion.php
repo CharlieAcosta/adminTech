@@ -42,7 +42,7 @@ registrarNavegacion('AUDITORIA Y CONFIGURACION');
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-8">
-            <h1><strong>Auditoria &amp; Configuraci&oacute;n</strong></h1>
+            <h1><strong>Auditoria | Seguridad | Configuraci&oacute;n | Utilidades</strong></h1>
           </div>
         </div>
       </div>
@@ -63,11 +63,33 @@ registrarNavegacion('AUDITORIA Y CONFIGURACION');
         </div>
 
         <div class="col-12 col-sm-6 col-md-4">
+          <a href="#">
+            <div class="info-box">
+              <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-shield-alt"></i></span>
+              <div class="info-box-content">
+                <h3 class="info-box-text d-flex align-items-center">Seguridad</h3>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-4">
           <a href="../01-views/configuracion_mail_presupuestos.php">
             <div class="info-box">
               <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-envelope-open-text"></i></span>
               <div class="info-box-content">
                 <h3 class="info-box-text d-flex align-items-center">Mail presupuestos</h3>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-4">
+          <a href="../01-views/dump.php">
+            <div class="info-box">
+              <span class="info-box-icon bg-info elevation-1"><i class="fas fa-database"></i></span>
+              <div class="info-box-content">
+                <h3 class="info-box-text d-flex align-items-center">Dump</h3>
               </div>
             </div>
           </a>
