@@ -352,16 +352,15 @@ if (!function_exists('construirCuerpoDocumentoEmitidoPresupuesto')) {
         $razonSocial = trim((string)($detalle['razon_social'] ?? ''));
 
         $lineas = [
-            'Hola,',
+            'Estimado equipo' . ($razonSocial !== '' ? ' de ' . $razonSocial : '') . ',',
             '',
             'Adjuntamos el presupuesto'
                 . ($numero !== '' ? ' ' . $numero : '')
-                . ($razonSocial !== '' ? ' correspondiente a ' . $razonSocial : '')
                 . '.',
             '',
             'Quedamos a disposición por cualquier consulta.',
             '',
-            'Saludos,',
+            'Saludos cordiales,',
             'Equipo de Presupuestos Ecotechos S.R.L.',
         ];
 
