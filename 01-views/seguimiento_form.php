@@ -13,6 +13,7 @@ include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
+include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
 include_once '../04-modelo/previsitaDocumentosModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
@@ -35,6 +36,13 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
   $mostrarVistaDetallada = true;
 }
 
+$puedeVerSeguimientoCompleto = perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion);
+$puedeEditarOrdenCompra = perfilPuedeEditarOrdenCompra($perfilSesion);
+$ordenCompraSoloLectura = perfilSoloPuedeVerOrdenCompra($perfilSesion) || !$puedeEditarOrdenCompra;
+$estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado(null);
+$accesoSeguimientoPermitido = $puedeVerSeguimientoCompleto;
+$mostrarBloquesTecnicosSeguimiento = $puedeVerSeguimientoCompleto;
+$mostrarBloqueOrdenCompraSeguimiento = false;
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
 $visualizacionSolicitada = false;
@@ -89,6 +97,7 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $visita_card = 'card-danger'; $items_options = "";
     $presupuesto_card = 'card-danger'; 
     $orden_compra_card = 'card-danger';
+    $orden_compra_show = isset($_GET['oc']) && $_GET['oc'] === '1' ? 'show' : '';
     $presupuesto_display = 'd-none';
 
     if (!empty($workflowPrevisita['habilita_visita'])) {$previsita_show = "";} else {$previsita_show = "show";}
@@ -319,6 +328,12 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
               }
               if ($presupuesto_generado['presupuesto']) {
                 //muestra el accordión de presupuesto generado abierto
+                $modoCircuitoOrdenCompra = obtenerModoActivoCircuitoComercialPresupuestos();
+                $estadoComercialOrdenCompra = obtenerEstadoComercialActivoDesdePresupuesto(
+                  $presupuestoGenerado,
+                  $modoCircuitoOrdenCompra
+                );
+                $estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado($estadoComercialOrdenCompra);
                 $presupuestoIntervinoResumen = obtenerResumenIntervencionesPresupuesto(
                   (int)$datos['id_previsita'],
                   isset($presupuestoGenerado['id_presupuesto']) ? (int)$presupuestoGenerado['id_presupuesto'] : null
@@ -333,6 +348,10 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
                 $visita_show = 'show';
                 $presupuesto_show = '';
               }
+              $accesoSeguimientoPermitido = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
+              $mostrarBloquesTecnicosSeguimiento = $accesoSeguimientoPermitido && $puedeVerSeguimientoCompleto;
+              $mostrarBloqueOrdenCompraSeguimiento = $accesoSeguimientoPermitido
+                && ($mostrarBloquesTecnicosSeguimiento || !empty($estadoOrdenCompraSeguimiento['habilitada']));
         // END PRESUPUESTO GENERADO 
 
       }
@@ -951,6 +970,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 <section class="content">
 <div class="container-fluid">
 
+<?php if (!$accesoSeguimientoPermitido): ?>
+  <div class="alert alert-warning">
+    <strong>Acceso no disponible.</strong>
+    El circuito de Orden de Compra se habilita cuando el presupuesto queda aprobado o cuando existe una OC asociada.
+  </div>
+<?php endif; ?>
+
+<?php if ($mostrarBloquesTecnicosSeguimiento): ?>
 <form id="currentForm"  class="form" enctype="multipart/form-data">
 <?php if (!empty($bloqueoEdicionComercial['bloqueado'])): ?>
   <div class="alert alert-warning">
@@ -1359,8 +1386,9 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </div>
 <!-- end accordion -->
 </form>
+<?php endif; ?>
 
-<?php if (isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
+<?php if ($mostrarBloquesTecnicosSeguimiento && isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
   <!-- start accordion visita -->
   <div class="accordion" id="accordionVisita">
     <div class="card <?php echo $visita_card; ?> accordion_2">
@@ -1586,7 +1614,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </select>
 
 <!-- /accordion presupuesto -->
-<?php if (!empty($presupuestoGenerado)): ?>
+<?php if ($mostrarBloquesTecnicosSeguimiento && !empty($presupuestoGenerado)): ?>
   <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
@@ -1631,7 +1659,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
 
 <!-- start accordion 4 - Orden de compra -->
-<div class="accordion d-none" id="accordionExample4">
+<?php if ($mostrarBloqueOrdenCompraSeguimiento): ?>
+<div class="accordion" id="accordionExample4">
   <div class="card <?php echo $orden_compra_card; ?> accordion 4">
     <div class="card-header" id="heading4">
       <h2 class="mb-0">
@@ -1646,15 +1675,34 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
       </h2>
     </div>
 
-    <div id="collapse4_OC" class="collapse <?php echo !isset($cliente_datos['0']['id_cliente']) ? '' : ''; ?>" 
+    <div id="collapse4_OC" class="collapse <?php echo $orden_compra_show; ?>"
          aria-labelledby="heading4" 
          data-parent="#accordionExample4">
       <div class="card-body">
-        EN DESARROLLO
+        <?php if (($estadoOrdenCompraSeguimiento['estado'] ?? '') === 'pendiente'): ?>
+          <div class="alert alert-warning mb-0">
+            <strong>OC pendiente.</strong>
+            El presupuesto esta aprobado y la carga administrativa de Orden de Compra queda habilitada.
+            <?php if (!$puedeEditarOrdenCompra): ?>
+              <span class="d-block mt-1">Tu perfil puede consultar este bloque, pero no cargar ni editar la OC.</span>
+            <?php endif; ?>
+          </div>
+        <?php elseif (($estadoOrdenCompraSeguimiento['estado'] ?? '') === 'no_habilitada'): ?>
+          <div class="alert alert-secondary mb-0">
+            <strong>OC no habilitada.</strong>
+            La carga se habilita cuando el presupuesto queda aprobado.
+          </div>
+        <?php else: ?>
+          <div class="alert alert-info mb-0">
+            <strong>OC <?php echo htmlspecialchars((string)($estadoOrdenCompraSeguimiento['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>.</strong>
+            El detalle de consulta y edicion se implementara en el siguiente paso.
+          </div>
+        <?php endif; ?>
       </div>
     </div>
   </div>
 </div>
+<?php endif; ?>
 <!-- end accordion 4 -->
 
 <!-- start accordion 5 - Pedido de materiales -->

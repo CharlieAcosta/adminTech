@@ -12,6 +12,15 @@ $perfil = $_SESSION['usuario']['perfil'];
 $deleteIcon = array('Super Administrador','Administrador');
 
 include_once '../03-controller/presupuestosController.php'; //conecta a la base de datos
+$esBandejaOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
+$rangoInicialSeguimiento = $esBandejaOrdenCompraAdministrativa
+    ? resolverRangoInicialOrdenCompraPendiente()
+    : '30_dias';
+$estadoOrdenCompraInicialSeguimiento = $esBandejaOrdenCompraAdministrativa ? 'pendientes' : '';
+$rangoInicialJsSeguimiento = strtoupper($rangoInicialSeguimiento);
+$tituloListadoSeguimiento = $esBandejaOrdenCompraAdministrativa
+    ? '&Oacute;rdenes de compra | Listado'
+    : 'Seguimiento de obra | Listado';
 
 // poblarDatableAll(columnas de la tablas, php o ajax, filtro); [reference] 
 $filas = poblarDatableAll(
@@ -20,7 +29,11 @@ $filas = poblarDatableAll(
     'todos',
     $perfil,
     $deleteIcon,
-    '30_dias'
+    $rangoInicialSeguimiento,
+    '',
+    '',
+    '',
+    $estadoOrdenCompraInicialSeguimiento
 );
 
 $estadosVisitaRapidos = array(
@@ -50,6 +63,11 @@ $rangosTiempoRapidos = array(
     'semestre' => 'Semestre',
     'anio' => 'Año'
 );
+$estadosOrdenCompraRapidos = array(
+    'pendientes' => 'Pendientes',
+    'cargadas' => 'Cargadas',
+    'todas_oc' => 'Todas OC'
+);
 ?> 
 
 <!DOCTYPE html>
@@ -59,7 +77,7 @@ $rangosTiempoRapidos = array(
   <meta name="googlebot" content="noindex">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADMINTECH | Seguimiento de obra | Listado</title>
+  <title>ADMINTECH | <?php echo $tituloListadoSeguimiento; ?></title>
 
   <!-- Google Font: Source Sans Pro -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
@@ -95,7 +113,7 @@ $rangosTiempoRapidos = array(
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1><strong>Seguimiento de obra | Listado</strong></h1>
+            <h1><strong><?php echo $tituloListadoSeguimiento; ?></strong></h1>
           </div>
         </div>
       </div><!-- /.container-fluid -->
@@ -108,6 +126,7 @@ $rangosTiempoRapidos = array(
               <div class="col-12">
                 <div class="seguimiento-toolbar">
                   <div class="seguimiento-toolbar-filtros">
+                    <?php if (!$esBandejaOrdenCompraAdministrativa): ?>
                     <div class="seguimiento-filtro-columna">
                       <div class="seguimiento-filtro-label">Filtros de visitas</div>
                       <div class="seguimiento-filtro-linea">
@@ -143,6 +162,27 @@ $rangosTiempoRapidos = array(
                     </div>
 
                     <span class="seguimiento-filtro-separador">|</span>
+                    <?php endif; ?>
+
+                    <?php if ($esBandejaOrdenCompraAdministrativa): ?>
+                    <div class="seguimiento-filtro-columna">
+                      <div class="seguimiento-filtro-label">Estado OC</div>
+                      <div class="seguimiento-filtro-linea">
+                        <?php foreach ($estadosOrdenCompraRapidos as $valorFiltro => $labelFiltro): ?>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-primary seguimiento-filtro-btn seguimiento-filtro-oc-btn btn-filtro-rapido<?php echo $valorFiltro === $estadoOrdenCompraInicialSeguimiento ? ' is-active' : ''; ?>"
+                            data-oc-state-filter="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
+                            data-variant="primary"
+                            aria-pressed="<?php echo $valorFiltro === $estadoOrdenCompraInicialSeguimiento ? 'true' : 'false'; ?>">
+                            <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
+                          </button>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+
+                    <span class="seguimiento-filtro-separador">|</span>
+                    <?php endif; ?>
 
                     <div class="seguimiento-filtro-columna">
                       <div class="seguimiento-filtro-label">Filtros de tiempo</div>
@@ -150,10 +190,10 @@ $rangosTiempoRapidos = array(
                         <?php foreach ($rangosTiempoRapidos as $valorTiempo => $labelTiempo): ?>
                           <button
                             type="button"
-                            class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn seguimiento-filtro-tiempo-btn btn-filtro-rapido<?php echo $valorTiempo === '30_dias' ? ' is-active' : ''; ?>"
+                            class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn seguimiento-filtro-tiempo-btn btn-filtro-rapido<?php echo $valorTiempo === $rangoInicialSeguimiento ? ' is-active' : ''; ?>"
                             data-time-range="<?php echo htmlspecialchars($valorTiempo, ENT_QUOTES, 'UTF-8'); ?>"
                             data-variant="success"
-                            aria-pressed="<?php echo $valorTiempo === '30_dias' ? 'true' : 'false'; ?>">
+                            aria-pressed="<?php echo $valorTiempo === $rangoInicialSeguimiento ? 'true' : 'false'; ?>">
                             <?php echo htmlspecialchars($labelTiempo, ENT_QUOTES, 'UTF-8'); ?>
                           </button>
                         <?php endforeach; ?>
@@ -167,21 +207,23 @@ $rangosTiempoRapidos = array(
                       <div class="seguimiento-filtro-linea">
                         <button
                           type="button"
-                          class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn seguimiento-filtro-reset-all-btn btn-filtro-rapido"
+                          class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn seguimiento-filtro-reset-all-btn btn-filtro-rapido<?php echo $rangoInicialSeguimiento === '' ? ' is-active' : ''; ?>"
                           data-filter-reset="all"
                           data-variant="success"
-                          aria-pressed="false">
+                          aria-pressed="<?php echo $rangoInicialSeguimiento === '' ? 'true' : 'false'; ?>">
                           Todos
                         </button>
                       </div>
                     </div>
                   </div>
 
+                  <?php if (!$esBandejaOrdenCompraAdministrativa): ?>
                   <div class="seguimiento-toolbar-accion">
                     <button onclick="window.location.href='seguimiento_form.php'" type="button" class="btn btn-success">
                       <i class="fa fa-plus-circle"></i> Agregar
                     </button>
                   </div>
+                  <?php endif; ?>
                 </div>
               </div>
             </div>
@@ -217,6 +259,11 @@ $rangosTiempoRapidos = array(
               <!-- /.card-body -->
             </div>
             <!-- /.card -->
+            <div class="text-center mb-3">
+              <button type="button" class="btn btn-success" onclick="window.location.href='panel.php'">
+                <i class="fas fa-arrow-left mr-1"></i> Volver
+              </button>
+            </div>
           </div>
           <!-- /.col -->
         </div>
@@ -325,12 +372,16 @@ $rangosTiempoRapidos = array(
   };
 
   const filtroTiempoSeguimiento = {
-    value: '30_DIAS'
+    value: <?php echo json_encode($rangoInicialJsSeguimiento); ?>
   };
+  const filtroOrdenCompraSeguimiento = {
+    value: <?php echo $esBandejaOrdenCompraAdministrativa ? "'PENDIENTES'" : "''"; ?>
+  };
+  const esBandejaOrdenCompraAdministrativa = <?php echo $esBandejaOrdenCompraAdministrativa ? 'true' : 'false'; ?>;
 
   const MINIMO_BUSQUEDA_GLOBAL_TODOS = 3;
-  let resetTodosSeguimientoActivo = false;
-  let ultimoRangoTiempoSeguimiento = '30_DIAS';
+  let resetTodosSeguimientoActivo = filtroTiempoSeguimiento.value === '';
+  let ultimoRangoTiempoSeguimiento = filtroTiempoSeguimiento.value || '30_DIAS';
   let tablaSeguimiento = null;
   let debounceBusquedaSeguimiento = null;
   let xhrRecargaSeguimiento = null;
@@ -350,6 +401,10 @@ $rangosTiempoRapidos = array(
 
   function normalizarRangoTiempoSeguimiento(rango) {
     return String(rango || '').trim().toUpperCase();
+  }
+
+  function normalizarFiltroOrdenCompraSeguimiento(filtro) {
+    return String(filtro || '').trim().toUpperCase();
   }
 
   $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
@@ -403,6 +458,12 @@ $rangosTiempoRapidos = array(
     $('[data-filter-reset="all"]').each(function () {
       aplicarEstadoVisualBotonFiltro($(this), resetTodosSeguimientoActivo);
     });
+
+    $('.seguimiento-filtro-btn[data-oc-state-filter]').each(function () {
+      const $boton = $(this);
+      const valor = normalizarFiltroOrdenCompraSeguimiento($boton.data('oc-state-filter'));
+      aplicarEstadoVisualBotonFiltro($boton, valor !== '' && valor === filtroOrdenCompraSeguimiento.value);
+    });
   }
 
   function aplicarFiltrosRapidosSeguimiento(tabla) {
@@ -419,6 +480,10 @@ $rangosTiempoRapidos = array(
   }
 
   function todosUsaBusquedaGlobalSeguimiento() {
+    if (esBandejaOrdenCompraAdministrativa) {
+      return false;
+    }
+
     return todosActivoSeguimiento() && !hayFiltrosRapidosActivosSeguimiento();
   }
 
@@ -480,6 +545,22 @@ $rangosTiempoRapidos = array(
         return 'anio';
       default:
         return '';
+    }
+  }
+
+  function obtenerEstadoOrdenCompraAjaxSeguimiento() {
+    if (!esBandejaOrdenCompraAdministrativa) {
+      return '';
+    }
+
+    switch (filtroOrdenCompraSeguimiento.value) {
+      case 'CARGADAS':
+        return 'cargadas';
+      case 'TODAS_OC':
+        return 'todas_oc';
+      case 'PENDIENTES':
+      default:
+        return 'pendientes';
     }
   }
 
@@ -712,7 +793,8 @@ $rangosTiempoRapidos = array(
         tiempo: obtenerTiempoAjaxSeguimiento(),
         busqueda: usarBusquedaCliente ? '' : busquedaActual,
         estado_visita: estadoVisitaFiltro,
-        estado_presupuesto: estadoPresupuestoFiltro
+        estado_presupuesto: estadoPresupuestoFiltro,
+        estado_oc: obtenerEstadoOrdenCompraAjaxSeguimiento()
       },
       success: function (filasHtml) {
         if (secuenciaSolicitud !== secuenciaRecargaSeguimiento) {
@@ -805,6 +887,15 @@ $rangosTiempoRapidos = array(
 
     filtroTiempoSeguimiento.value = '';
     resetTodosSeguimientoActivo = true;
+
+    if (esBandejaOrdenCompraAdministrativa) {
+      mostrarErrorCargaSeguimiento(false);
+      mostrarAyudaBusquedaGlobalSeguimiento(false);
+      actualizarBotonesFiltrosRapidosSeguimiento();
+      recargarTablaSeguimientoPorTiempo();
+      return;
+    }
+
     sincronizarModoTodosSeguimiento();
   }
 
@@ -872,6 +963,25 @@ $rangosTiempoRapidos = array(
         return;
       }
 
+      recargarTablaSeguimientoPorTiempo();
+    });
+
+    $(document).on('click', '.seguimiento-filtro-btn[data-oc-state-filter]', function () {
+      if (!esBandejaOrdenCompraAdministrativa) {
+        return;
+      }
+
+      const $boton = $(this);
+      const valor = normalizarFiltroOrdenCompraSeguimiento($boton.data('oc-state-filter'));
+
+      if (!valor || filtroOrdenCompraSeguimiento.value === valor) {
+        return;
+      }
+
+      filtroOrdenCompraSeguimiento.value = valor;
+      mostrarErrorCargaSeguimiento(false);
+      mostrarAyudaBusquedaGlobalSeguimiento(false);
+      actualizarBotonesFiltrosRapidosSeguimiento();
       recargarTablaSeguimientoPorTiempo();
     });
 

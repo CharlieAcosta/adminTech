@@ -1,6 +1,7 @@
 <?php  
 session_start();
 define('BASE_URL', $_SESSION["base_url"]);
+include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 sesion(); //Verifica si hay usuario sesionado
 
@@ -14,6 +15,10 @@ $perfil = $_SESSION['usuario']['perfil'];
 $vencidas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Vencida"), false);
 $programadas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Programada"), false);
 $reprogramadas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Reprogramada"), false);
+$ocPendientesSeguimiento = perfilPuedeAccederSoloOrdenCompra($perfil) ? contarOrdenesCompraPendientes() : 0;
+$esPanelOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
+$tituloModuloSeguimiento = $esPanelOrdenCompraAdministrativa ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
+$iconoModuloSeguimiento = $esPanelOrdenCompraAdministrativa ? 'fa-solid fa-file-invoice' : 'fa-solid fa-warehouse';
 
 
 $agentes = array('Super Administrador','Administrador','Administrativo');
@@ -25,6 +30,8 @@ $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
 $superAdministrador = array('Super Administrador');
+$mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
+  && (!$esPanelOrdenCompraAdministrativa || $ocPendientesSeguimiento > 0);
 ?>
 
 <!DOCTYPE html>
@@ -130,26 +137,30 @@ $superAdministrador = array('Super Administrador');
           <!-- /.info-box --> 
           <?php } ?>
 
-         <?php if (in_array($perfil, $presupuestos)){ ?>
+         <?php if ($mostrarModuloSeguimiento){ ?>
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/seguimiento_de_obra_listado.php">
                <div class="info-box">
-                  <span class="info-box-icon bg-success elevation-1"><i class="fa-solid fa-warehouse"></i></span>
+                  <span class="info-box-icon bg-success elevation-1"><i class="<?php echo $iconoModuloSeguimiento; ?>"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">Seguimiento de obra  
+                    <h3 class="info-box-text d-flex align-items-center"><?php echo $tituloModuloSeguimiento; ?>
                       
-                      <?php if ($vencidas !== false && $vencidas['total'] > 0){ ?>
-                      <small><span class="right badge badge-danger ml-3 mt-2"><?php echo $vencidas['total'].'<small><small><br> Venc. </small></small>'; ?></span></small>
-                      <?php } ?>
+                      <?php if ($esPanelOrdenCompraAdministrativa){ ?>
+                      <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> Pendientes </small></small>'; ?></span></small>
+                      <?php } else { ?>
+                        <?php if ($vencidas !== false && $vencidas['total'] > 0){ ?>
+                        <small><span class="right badge badge-danger ml-3 mt-2"><?php echo $vencidas['total'].'<small><small><br> Venc. </small></small>'; ?></span></small>
+                        <?php } ?>
 
-                      <?php if ($programadas !== false && $programadas['total'] > 0){ ?>
-                      <small><span class="right badge badge-info ml-2 mt-2"><?php echo $programadas['total'].'<small><small><br> Prog. </small></small>'; ?></span></small>
-                      <?php } ?>
+                        <?php if ($programadas !== false && $programadas['total'] > 0){ ?>
+                        <small><span class="right badge badge-info ml-2 mt-2"><?php echo $programadas['total'].'<small><small><br> Prog. </small></small>'; ?></span></small>
+                        <?php } ?>
 
-                      <?php if ($reprogramadas !== false && $reprogramadas['total'] > 0){ ?>
-                      <small><span class="right badge badge-primary ml-2 mt-2"><?php echo $reprogramadas['total'].'<small><small><br> Repr. </small></small>'; ?></span></small>
+                        <?php if ($reprogramadas !== false && $reprogramadas['total'] > 0){ ?>
+                        <small><span class="right badge badge-primary ml-2 mt-2"><?php echo $reprogramadas['total'].'<small><small><br> Repr. </small></small>'; ?></span></small>
+                        <?php } ?>
                       <?php } ?>
                   </h3>  
                   </div>

@@ -660,6 +660,12 @@ function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
     }
 }
 
+function recargarListadoSeguimientoDespuesDeCambioComercial() {
+    if (typeof recargarTablaSeguimientoPorTiempo === 'function') {
+        recargarTablaSeguimientoPorTiempo();
+    }
+}
+
 function obtenerFilaListadoPresupuesto(idPrevisita) {
     return $('#current_table').find(`tbody tr[data-id="${idPrevisita}"]`).first();
 }
@@ -1210,6 +1216,7 @@ function presupuestoAcciones(elemento){
                             }
 
                             actualizarEstadoPresupuestoListado(idPrevisitaEstado, response.estado_actual || '');
+                            recargarListadoSeguimientoDespuesDeCambioComercial();
                             cargarHistorialPresupuesto(idPrevisitaEstado);
 
                             if (typeof mostrarMensajeConfirmable === 'function') {
@@ -1475,6 +1482,11 @@ function presupuestoAcciones(elemento){
                 } else {
                     window.alert('El circuito de orden de compra todavia esta en desarrollo.');
                 }
+            break;
+
+            case 'orden_compra_seguimiento':
+                var idOrdenCompraSeguimiento = $(elemento).closest('tr').data('id');
+                window.location.href='seguimiento_form.php?acci=e&id='+idOrdenCompraSeguimiento+'&oc=1#collapse4_OC';
             break;
 
             case 'pdf': // generar pdf del usuario

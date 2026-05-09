@@ -18,36 +18,16 @@ if( isset($_POST['via']) && $_POST['via']=='ajax'){
 
 
 // funcion para traer todos los usuarios activos
-function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){     
+function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = '', $origenFechaRango = 'previsita'){
    $db = conectDB();
    mysqli_set_charset($db, 'utf8mb4');
 
    $rangoTiempoNormalizado = strtoupper(trim((string)$rangoTiempo));
    $busqueda = trim((string)$busqueda);
-   $filtroTiempoSql = '';
-   switch ($rangoTiempoNormalizado) {
-      case '15_DIAS':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 15 DAY)";
-         break;
-      case '30_DIAS':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
-         break;
-      case 'TRIMESTRE':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)";
-         break;
-      case 'SEMESTRE':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)";
-         break;
-      case 'ANIO':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
-         break;
-      default:
-         $filtroTiempoSql = '';
-         break;
-   }
-
    $tieneTablaDocumentosEmitidos = tabla_existe($db, 'presupuesto_documentos_emitidos');
    $tieneTablaHistorialComercial = tabla_existe($db, 'presupuesto_historial_comercial');
+   $tieneCreatedAtHistorialComercial = $tieneTablaHistorialComercial
+      && columna_existe($db, 'presupuesto_historial_comercial', 'created_at');
    $tieneEstadoComercialSimulacion = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion');
    $tieneEstadoComercialSmtp = columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
 
@@ -102,6 +82,35 @@ function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){
       0 AS total_historial_comercial_smtp,
       '' AS ultimo_estado_historial_comercial_simulacion,
       '' AS ultimo_estado_historial_comercial_smtp";
+
+   $modoCircuitoActivo = normalizarModoEnvioMailPresupuestos(obtenerModoActivoCircuitoComercialPresupuestos());
+   $aliasHistorialActivo = $modoCircuitoActivo === 'smtp' ? 'hcm' : 'hcs';
+   $fechaFiltroSql = 'v.log_alta';
+   if ($origenFechaRango === 'aprobacion_oc' && $tieneCreatedAtHistorialComercial) {
+      $fechaFiltroSql = "COALESCE(CASE WHEN UPPER(TRIM({$aliasHistorialActivo}.estado_resultante)) = 'APROBADO' THEN {$aliasHistorialActivo}.created_at ELSE NULL END, v.log_alta)";
+   }
+
+   $filtroTiempoSql = '';
+   switch ($rangoTiempoNormalizado) {
+      case '15_DIAS':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 15 DAY)";
+         break;
+      case '30_DIAS':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+         break;
+      case 'TRIMESTRE':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)";
+         break;
+      case 'SEMESTRE':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)";
+         break;
+      case 'ANIO':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
+         break;
+      default:
+         $filtroTiempoSql = '';
+         break;
+   }
 
    $exprBusquedaEstadoComercialSimulacion = $tieneEstadoComercialSimulacion
       ? "COALESCE(p.estado_comercial_simulacion, '')"

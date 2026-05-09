@@ -1,4 +1,6 @@
 <?php
+include_once __DIR__ . '/../../04-modelo/ordenCompraWorkflowModel.php';
+
 if(!isset($_SESSION["usuario"])){echo "<script type='text/javascript'>  window.location='../01-views/login.php'; </script>";} 
 $usuario = $_SESSION["usuario"];
 $usuarioIdNavbar = (int) ($usuario['id_usuario'] ?? 0);
@@ -51,6 +53,10 @@ $presupuestos = array('Super Administrador','Administrador','Administrativo','TÃ
 $materiales = array('Super Administrador','Administrador', 'TÃ©cnico','Tecnico Administrativo');
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
+$ocPendientesSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? contarOrdenesCompraPendientes() : 0;
+$mostrarSeguimientoNavbar = in_array($perfil, $presupuestos, true)
+    && (!perfilPuedeAccederSoloOrdenCompra($perfil) || $ocPendientesSeguimientoNavbar > 0);
+$tituloSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
 ?>
 <script>
   window.ACTIVE_USER_ID = <?= $usuarioIdNavbar ?>;
@@ -100,9 +106,9 @@ $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Adm
         </li>
         <?php } ?>
 
-        <?php if (in_array($perfil, $presupuestos)){ ?>
+        <?php if ($mostrarSeguimientoNavbar){ ?>
         <li class="nav-item">
-            <a href="../01-views/seguimiento_de_obra_listado.php" class="nav-link custom-button bg-success" data-toggle="tooltip" title="Seguimiento de obra">
+            <a href="../01-views/seguimiento_de_obra_listado.php" class="nav-link custom-button bg-success" data-toggle="tooltip" title="<?php echo $tituloSeguimientoNavbar; ?>">
                 <i class="fa-solid fa-warehouse"></i>
             </a>
         </li>
