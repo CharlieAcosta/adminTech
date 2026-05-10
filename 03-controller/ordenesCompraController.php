@@ -1,0 +1,327 @@
+<?php
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+header('Content-Type: application/json; charset=utf-8');
+
+require_once __DIR__ . '/../04-modelo/ordenCompraWorkflowModel.php';
+
+if (!function_exists('leerEntradaOrdenCompraController')) {
+    function leerEntradaOrdenCompraController(): array
+    {
+        $json = [];
+        $raw = file_get_contents('php://input');
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $json = $decoded;
+            }
+        }
+
+        return array_merge($_GET, $_POST, $json);
+    }
+}
+
+if (!function_exists('responderOrdenCompraJson')) {
+    function responderOrdenCompraJson(bool $success, string $message, array $data = [], array $errors = [], int $status = 200): void
+    {
+        http_response_code($status);
+        echo json_encode([
+            'success' => $success,
+            'message' => $message,
+            'data' => $data,
+            'errors' => $errors,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+if (!function_exists('usuarioOrdenCompraController')) {
+    function usuarioOrdenCompraController(): array
+    {
+        return [
+            'id_usuario' => (int)($_SESSION['usuario']['id_usuario'] ?? 0),
+            'perfil' => trim((string)($_SESSION['usuario']['perfil'] ?? '')),
+            'email' => trim((string)($_SESSION['usuario']['email'] ?? '')),
+        ];
+    }
+}
+
+if (!function_exists('perfilPuedeConsultarOrdenCompraController')) {
+    function perfilPuedeConsultarOrdenCompraController(?string $perfil): bool
+    {
+        return perfilPuedeEditarOrdenCompra($perfil)
+            || perfilSoloPuedeVerOrdenCompra($perfil)
+            || perfilPuedeVerSeguimientoCompletoOrdenCompra($perfil)
+            || perfilPuedeAccederSoloOrdenCompra($perfil);
+    }
+}
+
+if (!function_exists('validarSesionOrdenCompraController')) {
+    function validarSesionOrdenCompraController(): array
+    {
+        $usuario = usuarioOrdenCompraController();
+        if ($usuario['id_usuario'] <= 0 || $usuario['perfil'] === '') {
+            responderOrdenCompraJson(false, 'No hay sesion de usuario activa.', [], [], 401);
+        }
+
+        if (!perfilPuedeConsultarOrdenCompraController($usuario['perfil'])) {
+            responderOrdenCompraJson(false, 'El perfil no tiene permiso para acceder a Ordenes de compra.', [], [], 403);
+        }
+
+        return $usuario;
+    }
+}
+
+if (!function_exists('abrirConexionOrdenCompraController')) {
+    function abrirConexionOrdenCompraController(): mysqli
+    {
+        $db = conectDB();
+        if (!$db) {
+            responderOrdenCompraJson(false, 'No se pudo conectar a la base de datos.', [], [], 500);
+        }
+
+        mysqli_set_charset($db, 'utf8mb4');
+
+        return $db;
+    }
+}
+
+if (!function_exists('validarPresupuestoOrdenCompraController')) {
+    function validarPresupuestoOrdenCompraController(mysqli $db, array $input, bool $requierePrevisita = false): array
+    {
+        $idPresupuesto = isset($input['id_presupuesto']) ? (int)$input['id_presupuesto'] : 0;
+        $idPrevisita = isset($input['id_previsita']) ? (int)$input['id_previsita'] : 0;
+
+        if ($idPresupuesto <= 0) {
+            responderOrdenCompraJson(false, 'El presupuesto es obligatorio.', [], ['id_presupuesto' => 'Dato obligatorio.'], 422);
+        }
+
+        if ($requierePrevisita && $idPrevisita <= 0) {
+            responderOrdenCompraJson(false, 'La previsita es obligatoria.', [], ['id_previsita' => 'Dato obligatorio.'], 422);
+        }
+
+        $presupuesto = obtenerPresupuestoBasicoParaOrdenCompra($db, $idPresupuesto);
+        if (!$presupuesto) {
+            responderOrdenCompraJson(false, 'No se encontro el presupuesto informado.', [], [], 404);
+        }
+
+        if ($idPrevisita > 0 && (int)$presupuesto['id_previsita'] !== $idPrevisita) {
+            responderOrdenCompraJson(false, 'La previsita no corresponde al presupuesto informado.', [], ['id_previsita' => 'No coincide con el presupuesto.'], 422);
+        }
+
+        return $presupuesto;
+    }
+}
+
+if (!function_exists('payloadOrdenCompraController')) {
+    function payloadOrdenCompraController(mysqli $db, array $presupuesto, string $perfil): array
+    {
+        $ordenCompra = obtenerOrdenCompraActivaPorPresupuestoEnConexion($db, (int)$presupuesto['id_presupuesto']);
+        $estadoCalculado = resolverEstadoOrdenCompraCalculado(
+            (string)($presupuesto['estado_comercial_activo'] ?? ''),
+            $ordenCompra
+        );
+
+        $mensaje = '';
+        if ($estadoCalculado['estado'] === 'pendiente') {
+            $mensaje = 'OC pendiente de carga administrativa.';
+        } elseif ($estadoCalculado['estado'] === 'no_habilitada') {
+            $mensaje = 'La OC solo puede cargarse cuando el presupuesto esta Aprobado.';
+        }
+
+        return [
+            'id_presupuesto' => (int)$presupuesto['id_presupuesto'],
+            'id_previsita' => (int)$presupuesto['id_previsita'],
+            'estado_comercial' => (string)($presupuesto['estado_comercial_activo'] ?? ''),
+            'estado_calculado' => $estadoCalculado['estado'],
+            'label_estado' => $estadoCalculado['estado_label'],
+            'badge_class' => $estadoCalculado['badge_class'],
+            'puede_editar' => perfilPuedeEditarOrdenCompra($perfil) && !empty($estadoCalculado['habilitada']),
+            'orden_compra' => $ordenCompra,
+            'mensaje' => $mensaje,
+        ];
+    }
+}
+
+if (!function_exists('validarAccesoLecturaOrdenCompraController')) {
+    function validarAccesoLecturaOrdenCompraController(string $perfil, array $estado): void
+    {
+        if (!perfilPuedeAccederSeguimientoOrdenCompra($perfil, [
+            'habilitada' => $estado['estado_calculado'] !== 'no_habilitada',
+        ])) {
+            responderOrdenCompraJson(false, 'El perfil no tiene acceso a esta Orden de compra.', [], [], 403);
+        }
+    }
+}
+
+if (!function_exists('asegurarTablaOrdenCompraDisponibleController')) {
+    function asegurarTablaOrdenCompraDisponibleController(mysqli $db): void
+    {
+        if (!ordenCompraTablaTieneColumnasMinimas($db)) {
+            responderOrdenCompraJson(false, 'La tabla ordenes_compra no esta disponible. Debe aplicarse la migracion del Paso 2.', [], [], 409);
+        }
+    }
+}
+
+if (!function_exists('prepararDatosOrdenCompraController')) {
+    function prepararDatosOrdenCompraController(array $input, array $presupuesto, int $idUsuario, ?array $base = null): array
+    {
+        $datosBase = $base ?: [];
+        $datos = normalizarDatosOrdenCompra(array_merge($datosBase, $input));
+        $datos['id_presupuesto'] = (int)$presupuesto['id_presupuesto'];
+        $datos['id_previsita'] = (int)$presupuesto['id_previsita'];
+        $datos['cliente_snapshot'] = $datos['cliente_snapshot'] ?: ($presupuesto['cliente_snapshot'] ?? null);
+        $datos['id_usuario_modificacion'] = $idUsuario;
+
+        if ($base === null) {
+            $datos['estado'] = 'cargada';
+            $datos['id_usuario_alta'] = $idUsuario;
+        }
+
+        return $datos;
+    }
+}
+
+$input = leerEntradaOrdenCompraController();
+$accion = (string)($input['accion'] ?? $input['funcion'] ?? '');
+$usuario = validarSesionOrdenCompraController();
+$db = abrirConexionOrdenCompraController();
+
+try {
+    switch ($accion) {
+        case 'obtener_orden_compra':
+            $presupuesto = validarPresupuestoOrdenCompraController($db, $input, false);
+            $data = payloadOrdenCompraController($db, $presupuesto, $usuario['perfil']);
+            validarAccesoLecturaOrdenCompraController($usuario['perfil'], $data);
+
+            responderOrdenCompraJson(true, 'Orden de compra obtenida.', $data);
+            break;
+
+        case 'guardar_orden_compra':
+            asegurarTablaOrdenCompraDisponibleController($db);
+            if (!perfilPuedeEditarOrdenCompra($usuario['perfil'])) {
+                responderOrdenCompraJson(false, 'El perfil no tiene permiso para crear Ordenes de compra.', [], [], 403);
+            }
+
+            $presupuesto = validarPresupuestoOrdenCompraController($db, $input, true);
+            if (!estadoComercialHabilitaOrdenCompra($presupuesto['estado_comercial_activo'] ?? '')) {
+                responderOrdenCompraJson(false, 'La OC solo puede cargarse cuando el presupuesto esta Aprobado.', [], [], 422);
+            }
+
+            if (existeOrdenCompraActivaPorPresupuestoEnConexion($db, (int)$presupuesto['id_presupuesto'])) {
+                responderOrdenCompraJson(false, 'Ya existe una OC activa para este presupuesto. Debe actualizarse la existente.', [], [], 409);
+            }
+
+            $datos = prepararDatosOrdenCompraController($input, $presupuesto, $usuario['id_usuario']);
+            $errores = validarDatosOrdenCompra($datos, true);
+            if (!empty($errores)) {
+                responderOrdenCompraJson(false, 'Hay datos de OC invalidos.', [], $errores, 422);
+            }
+
+            $idOrdenCompra = crearOrdenCompraEnConexion($db, $datos);
+            if (!$idOrdenCompra) {
+                responderOrdenCompraJson(false, 'No se pudo guardar la Orden de compra.', [], [], 500);
+            }
+
+            $ordenCompra = obtenerOrdenCompraPorIdEnConexion($db, (int)$idOrdenCompra);
+            responderOrdenCompraJson(true, 'Orden de compra creada.', [
+                'id_orden_compra' => (int)$idOrdenCompra,
+                'estado' => $ordenCompra['estado'] ?? 'cargada',
+                'numero_oc' => $ordenCompra['numero_oc'] ?? $datos['numero_oc'],
+                'orden_compra' => $ordenCompra,
+            ]);
+            break;
+
+        case 'actualizar_orden_compra':
+            asegurarTablaOrdenCompraDisponibleController($db);
+            if (!perfilPuedeEditarOrdenCompra($usuario['perfil'])) {
+                responderOrdenCompraJson(false, 'El perfil no tiene permiso para actualizar Ordenes de compra.', [], [], 403);
+            }
+
+            $idOrdenCompra = isset($input['id_orden_compra']) ? (int)$input['id_orden_compra'] : 0;
+            if ($idOrdenCompra <= 0) {
+                responderOrdenCompraJson(false, 'La Orden de compra es obligatoria.', [], ['id_orden_compra' => 'Dato obligatorio.'], 422);
+            }
+
+            $ordenCompraActual = obtenerOrdenCompraPorIdEnConexion($db, $idOrdenCompra);
+            if (!$ordenCompraActual) {
+                responderOrdenCompraJson(false, 'No se encontro la Orden de compra.', [], [], 404);
+            }
+
+            if (!esEstadoOrdenCompraActiva($ordenCompraActual['estado'] ?? '')) {
+                responderOrdenCompraJson(false, 'Solo se puede actualizar una OC activa.', [], [], 409);
+            }
+
+            $input['id_presupuesto'] = $input['id_presupuesto'] ?? $ordenCompraActual['id_presupuesto'];
+            $input['id_previsita'] = $input['id_previsita'] ?? $ordenCompraActual['id_previsita'];
+            $presupuesto = validarPresupuestoOrdenCompraController($db, $input, true);
+            if ((int)$ordenCompraActual['id_presupuesto'] !== (int)$presupuesto['id_presupuesto']) {
+                responderOrdenCompraJson(false, 'La OC no corresponde al presupuesto informado.', [], [], 422);
+            }
+
+            $datos = prepararDatosOrdenCompraController($input, $presupuesto, $usuario['id_usuario'], $ordenCompraActual);
+            $datos['estado'] = $ordenCompraActual['estado'];
+            $errores = validarDatosOrdenCompra($datos, false);
+            if (!empty($errores)) {
+                responderOrdenCompraJson(false, 'Hay datos de OC invalidos.', [], $errores, 422);
+            }
+
+            if (!actualizarOrdenCompraEnConexion($db, $idOrdenCompra, $datos)) {
+                responderOrdenCompraJson(false, 'No se pudo actualizar la Orden de compra.', [], [], 500);
+            }
+
+            responderOrdenCompraJson(true, 'Orden de compra actualizada.', [
+                'orden_compra' => obtenerOrdenCompraPorIdEnConexion($db, $idOrdenCompra),
+            ]);
+            break;
+
+        case 'cambiar_estado_orden_compra':
+            asegurarTablaOrdenCompraDisponibleController($db);
+            if (!perfilPuedeEditarOrdenCompra($usuario['perfil'])) {
+                responderOrdenCompraJson(false, 'El perfil no tiene permiso para cambiar el estado de la OC.', [], [], 403);
+            }
+
+            $idOrdenCompra = isset($input['id_orden_compra']) ? (int)$input['id_orden_compra'] : 0;
+            $estado = strtolower(trim((string)($input['estado'] ?? '')));
+            if ($idOrdenCompra <= 0) {
+                responderOrdenCompraJson(false, 'La Orden de compra es obligatoria.', [], ['id_orden_compra' => 'Dato obligatorio.'], 422);
+            }
+            if (!validarEstadoOrdenCompraPersistible($estado)) {
+                responderOrdenCompraJson(false, 'El estado solicitado no es valido para una OC.', [], ['estado' => 'Solo se permite cargada, observada o anulada.'], 422);
+            }
+
+            $ordenCompraActual = obtenerOrdenCompraPorIdEnConexion($db, $idOrdenCompra);
+            if (!$ordenCompraActual) {
+                responderOrdenCompraJson(false, 'No se encontro la Orden de compra.', [], [], 404);
+            }
+
+            if (esEstadoOrdenCompraActiva($estado) && existeOtraOrdenCompraActivaPorPresupuestoEnConexion($db, (int)$ordenCompraActual['id_presupuesto'], $idOrdenCompra)) {
+                responderOrdenCompraJson(false, 'Ya existe otra OC activa para este presupuesto.', [], [], 409);
+            }
+
+            if (!cambiarEstadoOrdenCompraEnConexion($db, $idOrdenCompra, $estado, $usuario['id_usuario'])) {
+                responderOrdenCompraJson(false, 'No se pudo cambiar el estado de la OC.', [], [], 500);
+            }
+
+            $presupuesto = obtenerPresupuestoBasicoParaOrdenCompra($db, (int)$ordenCompraActual['id_presupuesto']);
+            $payload = $presupuesto
+                ? payloadOrdenCompraController($db, $presupuesto, $usuario['perfil'])
+                : ['estado' => $estado];
+
+            responderOrdenCompraJson(true, 'Estado de OC actualizado.', $payload);
+            break;
+
+        default:
+            responderOrdenCompraJson(false, 'La accion solicitada no es valida.', [], ['accion' => 'Accion no reconocida.'], 400);
+            break;
+    }
+} catch (Throwable $e) {
+    responderOrdenCompraJson(false, 'Ocurrio un error al procesar la Orden de compra.', [], [], 500);
+} finally {
+    if ($db instanceof mysqli) {
+        mysqli_close($db);
+    }
+}
