@@ -6,6 +6,7 @@
         }
     },
     "require": {
-        "phpmailer/phpmailer": "^7.0"
+        "phpmailer/phpmailer": "^7.0",
+        "smalot/pdfparser": "^2.12"
     }
 }
