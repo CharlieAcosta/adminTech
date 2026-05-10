@@ -106,6 +106,17 @@ registrarNavegacion('AUDITORIA Y CONFIGURACION');
           </a>
         </div>
 
+        <div class="col-12 col-sm-6 col-md-4">
+          <a href="../01-views/migraciones.php">
+            <div class="info-box">
+              <span class="info-box-icon bg-dark elevation-1"><i class="fas fa-code-branch"></i></span>
+              <div class="info-box-content">
+                <h3 class="info-box-text d-flex align-items-center">Migraciones</h3>
+              </div>
+            </div>
+          </a>
+        </div>
+
       </div>
     </section>
   </div>
