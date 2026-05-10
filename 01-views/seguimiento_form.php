@@ -1767,6 +1767,16 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 </div>
 
                 <small class="form-text text-muted" id="oc_pdf_hint"></small>
+
+                <!-- Botón precarga asistida desde PDF -->
+                <div class="mt-3 pt-2 border-top" id="oc_analizar_pdf_container">
+                  <button type="button" class="btn btn-sm btn-outline-info" id="oc_btn_analizar_pdf">
+                    <i class="fas fa-magic mr-1"></i>Analizar PDF y precargar
+                  </button>
+                  <small class="text-muted d-block mt-1">
+                    Extrae datos del PDF y sugiere campos del formulario. Revisá siempre antes de guardar.
+                  </small>
+                </div>
               </div>
 
             </div>
@@ -3912,7 +3922,110 @@ $(document).ready(function() {
     })();
     // --- Fin Dropzone PDF OC ---
 
+    // --- Análisis PDF y precarga OC ---
+    function analizarPdfYPrecargarOc() {
+      var inputPdf    = $('#oc_pdf_oc')[0];
+      var archivoPdf  = inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
+      var tieneOcPdf  = ordenCompraTienePdfActual() && ordenCompraIdActivo > 0;
+
+      if (!archivoPdf && !tieneOcPdf) {
+        toastr.warning('Seleccioná un PDF primero o abrí una OC que ya tenga PDF guardado.');
+        return;
+      }
+
+      var $btn = $('#oc_btn_analizar_pdf');
+      $btn.prop('disabled', true);
+      toastr.info('Analizando Orden de Compra...');
+      alertaOrdenCompra('alert-info', 'Analizando PDF…', 'Extrayendo y procesando datos del documento.');
+
+      var formData = new FormData();
+      formData.append('accion', 'analizar_pdf_orden_compra');
+      formData.append('id_presupuesto', String(ordenCompraConfig.id_presupuesto || ''));
+      formData.append('id_previsita',   String(ordenCompraConfig.id_previsita   || ''));
+
+      if (archivoPdf) {
+        formData.append('pdf_oc', archivoPdf);
+      } else {
+        formData.append('id_orden_compra', String(ordenCompraIdActivo));
+      }
+
+      requestOrdenCompra(formData, { multipart: true })
+        .done(function(resp) {
+          if (resp && resp.success) {
+            var resultado    = aplicarSugerenciasPdfOc(resp.data || {});
+            var advertencias = (resp.data && Array.isArray(resp.data.advertencias)) ? resp.data.advertencias : [];
+
+            advertencias.forEach(function(adv) {
+              toastr.warning(String(adv), 'Atención', { timeOut: 9000 });
+            });
+
+            var llenados   = resultado.llenados;
+            var conflictos = resultado.conflictos;
+
+            if (llenados > 0) {
+              var msg = llenados + ' campo' + (llenados !== 1 ? 's completados' : ' completado') + '.';
+              if (conflictos > 0) {
+                msg += ' ' + conflictos + ' campo' + (conflictos !== 1 ? 's' : '') +
+                       ' ya tenía' + (conflictos !== 1 ? 'n' : '') + ' valor y no se modificó' +
+                       (conflictos !== 1 ? 'ron' : '') + '.';
+              }
+              toastr.success(msg + ' Revisá antes de guardar.', 'Datos sugeridos', { timeOut: 7000 });
+              alertaOrdenCompra('alert-success', 'Datos sugeridos cargados.', 'Revisá y corregí antes de guardar la OC.');
+            } else if (advertencias.length === 0) {
+              toastr.info('No se detectaron datos adicionales en el PDF. Completá los campos manualmente.');
+            }
+            return;
+          }
+          var msgFail = (resp && resp.message) ? String(resp.message) : 'No se pudo analizar el PDF.';
+          toastr.warning(msgFail);
+          alertaOrdenCompra('alert-warning', 'Análisis sin resultados.', msgFail);
+        })
+        .fail(function() {
+          toastr.error('Error al conectar con el servidor al analizar el PDF.');
+        })
+        .always(function() {
+          $btn.prop('disabled', false);
+        });
+    }
+
+    function aplicarSugerenciasPdfOc(payload) {
+      var camposSugeridos = payload.campos_sugeridos || {};
+      var llenados = 0, conflictos = 0;
+
+      $.each(camposSugeridos, function(nombre, sugerencia) {
+        if (!sugerencia || sugerencia.valor == null) {
+          return;
+        }
+        var valor     = String(sugerencia.valor).trim();
+        var confianza = parseFloat(sugerencia.confianza || 0);
+        if (valor === '' || confianza < 0.50) {
+          return;
+        }
+
+        var $campo = $('#ordenCompraForm [name="' + nombre + '"]');
+        if (!$campo.length) {
+          return;
+        }
+
+        var valorActual = String($campo.attr('type') === 'checkbox'
+          ? ($campo.is(':checked') ? '1' : '0')
+          : ($campo.val() || '')).trim();
+
+        if (valorActual === '') {
+          setCampoOrdenCompra(nombre, valor);
+          llenados++;
+        } else if (valorActual !== valor) {
+          conflictos++;
+        }
+        // Si valorActual === valor → sin cambio, no contabilizar
+      });
+
+      return { llenados: llenados, conflictos: conflictos };
+    }
+    // --- Fin análisis PDF y precarga OC ---
+
     if (existeFormularioOrdenCompra()) {
+      $('#oc_btn_analizar_pdf').on('click', analizarPdfYPrecargarOc);
       $('#oc_btn_guardar').on('click', guardarOrdenCompra);
       $('#oc_btn_observar').on('click', function() {
         cambiarEstadoOrdenCompra('observada');
