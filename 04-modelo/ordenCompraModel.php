@@ -34,6 +34,10 @@ if (!function_exists('ordenCompraTablaTieneColumnasMinimas')) {
             && columna_existe($db, 'ordenes_compra', 'id_orden_compra')
             && columna_existe($db, 'ordenes_compra', 'id_presupuesto')
             && columna_existe($db, 'ordenes_compra', 'estado')
+            && columna_existe($db, 'ordenes_compra', 'pdf_nombre_archivo')
+            && columna_existe($db, 'ordenes_compra', 'pdf_ruta_archivo')
+            && columna_existe($db, 'ordenes_compra', 'pdf_mime_type')
+            && columna_existe($db, 'ordenes_compra', 'pdf_tamano_bytes')
             && columna_existe($db, 'ordenes_compra', 'created_at')
             && columna_existe($db, 'ordenes_compra', 'updated_at');
     }
@@ -240,6 +244,267 @@ if (!function_exists('normalizarFechaOrdenCompra')) {
     }
 }
 
+if (!function_exists('rutaBaseOrdenCompraPdf')) {
+    function rutaBaseOrdenCompraPdf(int $idPresupuesto): string
+    {
+        $root = realpath(__DIR__ . '/..');
+        if ($root === false) {
+            $root = __DIR__ . '/..';
+        }
+
+        return rtrim($root, '/\\') . '/uploads/presupuestos/' . max(0, $idPresupuesto) . '/ordenes_compra/';
+    }
+}
+
+if (!function_exists('rutaRelativaOrdenCompraPdfDesdeAbsoluta')) {
+    function rutaRelativaOrdenCompraPdfDesdeAbsoluta(string $rutaAbsoluta): string
+    {
+        $rutaAbsoluta = str_replace('\\', '/', $rutaAbsoluta);
+        $pos = strpos($rutaAbsoluta, '/uploads/');
+        if ($pos !== false) {
+            return ltrim(substr($rutaAbsoluta, $pos), '/');
+        }
+
+        return basename($rutaAbsoluta);
+    }
+}
+
+if (!function_exists('rutaAbsolutaOrdenCompraPdfDesdeRelativa')) {
+    function rutaAbsolutaOrdenCompraPdfDesdeRelativa(string $rutaRelativa): string
+    {
+        $rutaRelativa = str_replace('\\', '/', trim($rutaRelativa));
+        if ($rutaRelativa === '') {
+            return '';
+        }
+
+        $root = realpath(__DIR__ . '/..');
+        if ($root === false) {
+            $root = __DIR__ . '/..';
+        }
+
+        if (preg_match('~^/?uploads/~', $rutaRelativa)) {
+            return rtrim($root, '/\\') . '/' . ltrim($rutaRelativa, '/');
+        }
+
+        return $rutaRelativa;
+    }
+}
+
+if (!function_exists('rutaOrdenCompraPdfDentroDeBase')) {
+    function rutaOrdenCompraPdfDentroDeBase(string $rutaAbsoluta, int $idPresupuesto): bool
+    {
+        $rutaAbsoluta = str_replace('\\', '/', $rutaAbsoluta);
+        $base = str_replace('\\', '/', rtrim(rutaBaseOrdenCompraPdf($idPresupuesto), '/\\')) . '/';
+
+        return $rutaAbsoluta !== '' && strpos($rutaAbsoluta, $base) === 0;
+    }
+}
+
+if (!function_exists('sanitizarNombreArchivoOrdenCompraPdf')) {
+    function sanitizarNombreArchivoOrdenCompraPdf(string $nombre): string
+    {
+        $base = trim((string)pathinfo($nombre, PATHINFO_FILENAME));
+        $base = preg_replace('/[\\\\\/:*?"<>|]+/', '', $base);
+        $base = preg_replace('/[\r\n\t]+/', ' ', $base);
+        $base = preg_replace('/\s+/', ' ', $base);
+        $base = trim($base, " .");
+        if ($base === '') {
+            $base = 'orden-compra';
+        }
+
+        if (function_exists('slugify')) {
+            $base = slugify($base);
+        } else {
+            $base = preg_replace('/[^A-Za-z0-9_-]+/', '-', strtolower($base));
+            $base = trim((string)$base, '-_');
+        }
+
+        return $base !== '' ? $base : 'orden-compra';
+    }
+}
+
+if (!function_exists('resolverRutaOrdenCompraPdfDisponible')) {
+    function resolverRutaOrdenCompraPdfDisponible(string $directorio, string $nombreOriginal): array
+    {
+        $base = sanitizarNombreArchivoOrdenCompraPdf($nombreOriginal);
+        $nombreArchivo = $base . '.pdf';
+        $rutaAbsoluta = rtrim($directorio, '/\\') . '/' . $nombreArchivo;
+        $contador = 1;
+
+        while (file_exists($rutaAbsoluta)) {
+            $contador++;
+            $nombreArchivo = sprintf('%s_%02d.pdf', $base, $contador);
+            $rutaAbsoluta = rtrim($directorio, '/\\') . '/' . $nombreArchivo;
+        }
+
+        return [
+            'nombre_archivo' => $nombreArchivo,
+            'ruta_absoluta' => $rutaAbsoluta,
+        ];
+    }
+}
+
+if (!function_exists('formatearTamanoOrdenCompraPdf')) {
+    function formatearTamanoOrdenCompraPdf(?int $bytes): string
+    {
+        $bytes = (int)($bytes ?? 0);
+        if ($bytes <= 0) {
+            return '';
+        }
+
+        $unidades = ['B', 'KB', 'MB', 'GB'];
+        $valor = (float)$bytes;
+        $indice = 0;
+
+        while ($valor >= 1024 && $indice < count($unidades) - 1) {
+            $valor /= 1024;
+            $indice++;
+        }
+
+        $decimales = $indice === 0 ? 0 : ($valor >= 10 ? 1 : 2);
+
+        return number_format($valor, $decimales, ',', '.') . ' ' . $unidades[$indice];
+    }
+}
+
+if (!function_exists('ordenCompraTienePdf')) {
+    function ordenCompraTienePdf(?array $ordenCompra): bool
+    {
+        if (!$ordenCompra) {
+            return false;
+        }
+
+        return trim((string)($ordenCompra['pdf_ruta_archivo'] ?? '')) !== ''
+            && trim((string)($ordenCompra['pdf_nombre_archivo'] ?? '')) !== '';
+    }
+}
+
+if (!function_exists('validarArchivoPdfOrdenCompra')) {
+    function validarArchivoPdfOrdenCompra(array $archivo): array
+    {
+        if (empty($archivo) || !isset($archivo['tmp_name'])) {
+            throw new RuntimeException('El PDF de la OC es obligatorio.');
+        }
+
+        $error = (int)($archivo['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_NO_FILE) {
+            throw new RuntimeException('El PDF de la OC es obligatorio.');
+        }
+        if ($error !== UPLOAD_ERR_OK) {
+            throw new RuntimeException('No se pudo recibir el PDF de la OC.');
+        }
+
+        $tmp = (string)($archivo['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            throw new RuntimeException('El PDF de la OC no es valido.');
+        }
+
+        $size = (int)($archivo['size'] ?? 0);
+        if ($size <= 0) {
+            throw new RuntimeException('El PDF de la OC esta vacio.');
+        }
+
+        if ($size > 5 * 1024 * 1024) {
+            throw new RuntimeException('El PDF de la OC debe pesar como maximo 5 MB.');
+        }
+
+        $nombreOriginal = trim((string)($archivo['name'] ?? ''));
+        if (strtolower((string)pathinfo($nombreOriginal, PATHINFO_EXTENSION)) !== 'pdf') {
+            throw new RuntimeException('El archivo de OC debe tener extension .pdf.');
+        }
+
+        $firma = '';
+        $fh = @fopen($tmp, 'rb');
+        if ($fh !== false) {
+            $firma = (string)fread($fh, 4);
+            fclose($fh);
+        }
+
+        if ($firma !== '%PDF') {
+            throw new RuntimeException('El archivo recibido no tiene formato PDF valido.');
+        }
+
+        $mime = 'application/pdf';
+        if (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $mimeDetectado = @finfo_file($finfo, $tmp);
+                if (is_string($mimeDetectado) && $mimeDetectado !== '') {
+                    $mime = $mimeDetectado;
+                }
+                @finfo_close($finfo);
+            }
+        }
+
+        if ($mime !== 'application/pdf') {
+            throw new RuntimeException('El MIME real del archivo de OC no corresponde a PDF.');
+        }
+
+        return [
+            'tmp_name' => $tmp,
+            'size' => $size,
+            'mime_type' => $mime,
+            'original_name' => $nombreOriginal,
+        ];
+    }
+}
+
+if (!function_exists('guardarArchivoPdfOrdenCompra')) {
+    function guardarArchivoPdfOrdenCompra(int $idPresupuesto, array $archivoPdf, string $numeroOc = ''): array
+    {
+        if ($idPresupuesto <= 0) {
+            throw new RuntimeException('Presupuesto invalido para guardar PDF de OC.');
+        }
+
+        $archivoValidado = validarArchivoPdfOrdenCompra($archivoPdf);
+        $directorio = rutaBaseOrdenCompraPdf($idPresupuesto);
+        if (!function_exists('asegurarDir')) {
+            throw new RuntimeException('No esta disponible el helper para crear directorios.');
+        }
+
+        asegurarDir($directorio);
+        $nombrePreferido = trim($numeroOc) !== ''
+            ? 'OC_' . $numeroOc
+            : ($archivoValidado['original_name'] ?: 'orden-compra.pdf');
+        $destino = resolverRutaOrdenCompraPdfDisponible($directorio, $nombrePreferido);
+
+        if (!@move_uploaded_file($archivoValidado['tmp_name'], $destino['ruta_absoluta'])) {
+            throw new RuntimeException('No se pudo guardar el PDF de la OC en el servidor.');
+        }
+
+        $tamanoBytes = filesize($destino['ruta_absoluta']);
+        if ($tamanoBytes === false) {
+            $tamanoBytes = (int)$archivoValidado['size'];
+        }
+
+        return [
+            'pdf_nombre_archivo' => $destino['nombre_archivo'],
+            'pdf_ruta_archivo' => rutaRelativaOrdenCompraPdfDesdeAbsoluta($destino['ruta_absoluta']),
+            'pdf_mime_type' => $archivoValidado['mime_type'],
+            'pdf_tamano_bytes' => (int)$tamanoBytes,
+            'ruta_absoluta' => $destino['ruta_absoluta'],
+        ];
+    }
+}
+
+if (!function_exists('eliminarArchivoPdfOrdenCompraSiCorresponde')) {
+    function eliminarArchivoPdfOrdenCompraSiCorresponde(?array $ordenCompra): void
+    {
+        if (!$ordenCompra || empty($ordenCompra['pdf_ruta_archivo']) || empty($ordenCompra['id_presupuesto'])) {
+            return;
+        }
+
+        $rutaAbsoluta = rutaAbsolutaOrdenCompraPdfDesdeRelativa((string)$ordenCompra['pdf_ruta_archivo']);
+        if (
+            $rutaAbsoluta !== ''
+            && file_exists($rutaAbsoluta)
+            && rutaOrdenCompraPdfDentroDeBase($rutaAbsoluta, (int)$ordenCompra['id_presupuesto'])
+        ) {
+            @unlink($rutaAbsoluta);
+        }
+    }
+}
+
 if (!function_exists('normalizarDatosOrdenCompra')) {
     function normalizarDatosOrdenCompra(array $input): array
     {
@@ -280,6 +545,12 @@ if (!function_exists('normalizarDatosOrdenCompra')) {
             'contactos_ingreso' => normalizarTextoOrdenCompra($input['contactos_ingreso'] ?? null),
             'estado_documentacion_seguridad' => normalizarTextoOrdenCompra($input['estado_documentacion_seguridad'] ?? null, 50),
             'observaciones_seguridad' => normalizarTextoOrdenCompra($input['observaciones_seguridad'] ?? null),
+            'pdf_nombre_archivo' => normalizarTextoOrdenCompra($input['pdf_nombre_archivo'] ?? null, 255),
+            'pdf_ruta_archivo' => normalizarTextoOrdenCompra($input['pdf_ruta_archivo'] ?? null),
+            'pdf_mime_type' => normalizarTextoOrdenCompra($input['pdf_mime_type'] ?? null, 100),
+            'pdf_tamano_bytes' => isset($input['pdf_tamano_bytes']) && $input['pdf_tamano_bytes'] !== ''
+                ? max(0, (int)$input['pdf_tamano_bytes'])
+                : null,
             'id_usuario_alta' => isset($input['id_usuario_alta']) ? (int)$input['id_usuario_alta'] : null,
             'id_usuario_modificacion' => isset($input['id_usuario_modificacion']) ? (int)$input['id_usuario_modificacion'] : null,
         ];
@@ -400,6 +671,10 @@ if (!function_exists('camposInsertOrdenCompra')) {
             'contactos_ingreso' => 's',
             'estado_documentacion_seguridad' => 's',
             'observaciones_seguridad' => 's',
+            'pdf_nombre_archivo' => 's',
+            'pdf_ruta_archivo' => 's',
+            'pdf_mime_type' => 's',
+            'pdf_tamano_bytes' => 'i',
             'id_usuario_alta' => 'i',
             'id_usuario_modificacion' => 'i',
         ];

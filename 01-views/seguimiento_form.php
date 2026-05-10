@@ -1699,11 +1699,80 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           <span class="d-block">Se estan obteniendo los datos administrativos disponibles.</span>
         </div>
 
-        <form id="ordenCompraForm" class="orden-compra-form" novalidate>
+        <form id="ordenCompraForm" class="orden-compra-form" enctype="multipart/form-data" novalidate>
           <input type="hidden" id="oc_id_presupuesto" name="id_presupuesto" value="<?php echo $idPresupuestoOrdenCompra; ?>">
           <input type="hidden" id="oc_id_previsita" name="id_previsita" value="<?php echo $idPrevisitaOrdenCompra; ?>">
           <input type="hidden" id="oc_id_orden_compra" name="id_orden_compra" value="">
 
+          <!-- 1. Documentación OC / PDF respaldatorio -->
+          <div class="card card-info mb-3" id="oc_seccion_pdf">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">
+                <i class="fas fa-file-pdf mr-2"></i>Documentación OC
+              </h5>
+            </div>
+            <div class="card-body">
+
+              <!-- Aviso sin PDF (para perfiles con permiso de carga) -->
+              <div id="oc_pdf_sin_pdf" class="alert alert-warning<?php echo $ordenCompraPuedeEditarInicial ? '' : ' d-none'; ?>">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>PDF obligatorio para guardar la OC.</strong>
+                <span class="d-block mt-1">Cargue primero el PDF de la Orden de Compra. El documento respaldatorio es obligatorio para guardar la OC.</span>
+              </div>
+
+              <!-- Tarjeta PDF existente (visible cuando hay PDF cargado) -->
+              <div id="oc_pdf_existente" class="mb-3 d-none">
+                <div class="d-flex align-items-center p-3 border rounded bg-light">
+                  <i class="fas fa-file-pdf fa-2x text-danger mr-3 flex-shrink-0"></i>
+                  <div class="flex-grow-1" style="min-width:0;">
+                    <strong class="d-block text-truncate" id="oc_pdf_nombre_archivo"></strong>
+                    <small class="text-muted" id="oc_pdf_tamano_archivo"></small>
+                    <span class="badge badge-success ml-2">Guardado</span>
+                  </div>
+                  <a href="#" id="oc_pdf_btn_descargar" class="btn btn-sm btn-outline-primary ml-3 flex-shrink-0" target="_blank" rel="noopener">
+                    <i class="fas fa-download mr-1"></i>Ver / Descargar
+                  </a>
+                </div>
+              </div>
+
+              <!-- Placeholder solo lectura (cuando no hay permiso de carga ni PDF cargado) -->
+              <div id="oc_pdf_info_readonly" class="text-muted small<?php echo $ordenCompraPuedeEditarInicial ? ' d-none' : ''; ?>">
+                <i class="fas fa-info-circle mr-1 text-info"></i>
+                El PDF de la OC se mostrará aquí cuando esté disponible.
+              </div>
+
+              <!-- Zona de carga (solo perfiles con permiso) -->
+              <div id="oc_pdf_upload_group" class="<?php echo $ordenCompraPuedeEditarInicial ? '' : 'd-none'; ?>">
+                <input type="file" class="d-none oc-field" id="oc_pdf_oc" name="pdf_oc" accept="application/pdf,.pdf">
+
+                <div class="border rounded bg-light p-3 text-center text-muted mb-2"
+                     id="ocPdfDropzone" role="button" tabindex="0"
+                     style="border: 2px dashed #c7d2dc !important; cursor: pointer; transition: background .15s, border-color .15s;">
+                  <i class="fas fa-file-pdf fa-2x mb-2 text-danger"></i>
+                  <div><strong>Arrastrá el PDF aquí</strong> o hacé click para seleccionar.</div>
+                  <small class="d-block mt-1">Solo PDF. Máximo 5 MB.</small>
+                </div>
+
+                <!-- Preview del archivo seleccionado antes de guardar -->
+                <div id="oc_pdf_preview" class="d-none mb-2">
+                  <div class="d-flex align-items-center p-2 border rounded bg-white">
+                    <i class="fas fa-file-pdf text-danger mr-2 flex-shrink-0"></i>
+                    <span id="oc_pdf_preview_nombre" class="flex-grow-1 text-truncate small"></span>
+                    <span id="oc_pdf_preview_tamano" class="text-muted small mr-2 flex-shrink-0"></span>
+                    <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" id="oc_pdf_quitar" title="Quitar selección">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                  <small id="oc_pdf_preview_error" class="text-danger d-none d-block mt-1"></small>
+                </div>
+
+                <small class="form-text text-muted" id="oc_pdf_hint"></small>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 2. Datos principales -->
           <div class="card card-info mb-3">
             <div class="card-header py-2">
               <h5 class="card-title mb-0 text-white">Datos principales</h5>
@@ -2011,11 +2080,6 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
           </div>
           </div>
 
-          <div class="alert alert-secondary mb-3">
-            <strong>PDF de OC pendiente de implementacion.</strong>
-            En este paso no se adjunta ni valida archivo PDF desde la interfaz.
-          </div>
-
           <div id="oc_form_errors" class="alert alert-danger d-none"></div>
 
           <div class="d-flex justify-content-end flex-wrap">
@@ -2147,6 +2211,11 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     border: 1px solid #d9e0e7;
     border-radius: 0.6rem;
     background: #ffffff;
+  }
+
+  #ocPdfDropzone:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
   }
 
   .previsita-documentos-dropzone {
@@ -3331,6 +3400,7 @@ $(document).ready(function() {
     var ordenCompraIdActivo = 0;
     var ordenCompraEstadoActual = '';
     var ordenCompraPuedeEditar = false;
+    var ordenCompraPdfActual = null;
     var ordenCompraCampos = [
       'numero_oc',
       'fecha_emision',
@@ -3413,7 +3483,9 @@ $(document).ready(function() {
 
     function limpiarFormularioOrdenCompra() {
       ordenCompraIdActivo = 0;
+      ordenCompraPdfActual = null;
       $('#oc_id_orden_compra').val('');
+      $('#oc_pdf_oc').val('');
       ordenCompraCampos.forEach(function(nombre) {
         if (nombre === 'moneda') {
           setCampoOrdenCompra(nombre, 'ARS');
@@ -3432,10 +3504,80 @@ $(document).ready(function() {
       }
 
       ordenCompraIdActivo = parseInt(ordenCompra.id_orden_compra || 0, 10) || 0;
+      ordenCompraPdfActual = {
+        nombre: ordenCompra.pdf_nombre_archivo || '',
+        ruta: ordenCompra.pdf_ruta_archivo || '',
+        mime: ordenCompra.pdf_mime_type || '',
+        tamano: parseInt(ordenCompra.pdf_tamano_bytes || 0, 10) || 0
+      };
+      $('#oc_pdf_oc').val('');
       $('#oc_id_orden_compra').val(ordenCompraIdActivo || '');
       ordenCompraCampos.forEach(function(nombre) {
         setCampoOrdenCompra(nombre, ordenCompra[nombre]);
       });
+    }
+
+    function ordenCompraTienePdfActual() {
+      return !!(ordenCompraPdfActual && ordenCompraPdfActual.nombre && ordenCompraPdfActual.ruta);
+    }
+
+    function formatearBytesOrdenCompra(bytes) {
+      bytes = parseInt(bytes || 0, 10) || 0;
+      if (bytes <= 0) {
+        return '';
+      }
+
+      var unidades = ['B', 'KB', 'MB', 'GB'];
+      var valor = bytes;
+      var indice = 0;
+      while (valor >= 1024 && indice < unidades.length - 1) {
+        valor = valor / 1024;
+        indice++;
+      }
+
+      var decimales = indice === 0 ? 0 : (valor >= 10 ? 1 : 2);
+      return valor.toFixed(decimales).replace('.', ',') + ' ' + unidades[indice];
+    }
+
+    function urlDescargaPdfOrdenCompra() {
+      if (ordenCompraIdActivo <= 0) {
+        return '#';
+      }
+
+      return ordenCompraConfig.endpoint
+        + '?accion=descargar_pdf_orden_compra&id_orden_compra='
+        + encodeURIComponent(ordenCompraIdActivo);
+    }
+
+    function renderPdfOrdenCompra() {
+      var puedeCargar = ordenCompraPuedeEditar && ['pendiente', 'cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
+      var tienePdf    = ordenCompraTienePdfActual();
+
+      // Tarjeta PDF existente
+      if (tienePdf) {
+        var tamano = formatearBytesOrdenCompra(ordenCompraPdfActual.tamano);
+        $('#oc_pdf_nombre_archivo').text(ordenCompraPdfActual.nombre || 'PDF de OC');
+        $('#oc_pdf_tamano_archivo').text(tamano || '');
+        $('#oc_pdf_btn_descargar').attr('href', urlDescargaPdfOrdenCompra());
+        $('#oc_pdf_existente').removeClass('d-none');
+        $('#oc_pdf_sin_pdf').addClass('d-none');
+      } else {
+        $('#oc_pdf_existente').addClass('d-none');
+        $('#oc_pdf_sin_pdf').toggleClass('d-none', !puedeCargar);
+      }
+
+      // Zona de carga: visible solo a perfiles con permiso
+      $('#oc_pdf_upload_group').toggleClass('d-none', !puedeCargar);
+
+      // Placeholder readonly: visible cuando no hay permiso ni PDF cargado
+      $('#oc_pdf_info_readonly').toggleClass('d-none', puedeCargar || tienePdf);
+
+      // Hint: reemplazar vs cargar nuevo
+      if (puedeCargar) {
+        $('#oc_pdf_hint').text(tienePdf
+          ? 'Seleccioná un nuevo PDF para reemplazar el actual.'
+          : '');
+      }
     }
 
     function setReadonlyOrdenCompra(readonly) {
@@ -3484,6 +3626,7 @@ $(document).ready(function() {
       }
 
       setReadonlyOrdenCompra(!ordenCompraPuedeEditar || ['no_habilitada', 'anulada'].indexOf(estado) !== -1);
+      renderPdfOrdenCompra();
       actualizarBotonesOrdenCompra();
       limpiarErroresOrdenCompra();
     }
@@ -3502,13 +3645,21 @@ $(document).ready(function() {
       });
     }
 
-    function requestOrdenCompra(datos) {
-      return $.ajax({
+    function requestOrdenCompra(datos, opciones) {
+      opciones = opciones || {};
+      var ajaxConfig = {
         type: 'POST',
         url: ordenCompraConfig.endpoint,
         data: datos,
         dataType: 'json'
-      });
+      };
+
+      if (opciones.multipart) {
+        ajaxConfig.processData = false;
+        ajaxConfig.contentType = false;
+      }
+
+      return $.ajax(ajaxConfig);
     }
 
     function obtenerOrdenCompra(force) {
@@ -3575,6 +3726,21 @@ $(document).ready(function() {
       return datos;
     }
 
+    function formDataOrdenCompra(accion) {
+      var datos = datosFormularioOrdenCompra(accion);
+      var formData = new FormData();
+      $.each(datos, function(nombre, valor) {
+        formData.append(nombre, valor == null ? '' : valor);
+      });
+
+      var inputPdf = $('#oc_pdf_oc')[0];
+      if (inputPdf && inputPdf.files && inputPdf.files.length > 0) {
+        formData.append('pdf_oc', inputPdf.files[0]);
+      }
+
+      return formData;
+    }
+
     function validarFormularioOrdenCompra() {
       limpiarErroresOrdenCompra();
       var errores = {};
@@ -3588,6 +3754,22 @@ $(document).ready(function() {
       }
       if (!valorCampoOrdenCompra('moneda')) {
         errores.moneda = 'La moneda es obligatoria.';
+      }
+
+      var inputPdf = $('#oc_pdf_oc')[0];
+      var archivoPdf = inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
+      if (!ordenCompraTienePdfActual() && !archivoPdf) {
+        errores.pdf_oc = 'Debe adjuntar el PDF respaldatorio de la OC.';
+      }
+      if (archivoPdf) {
+        var nombrePdf = String(archivoPdf.name || '').toLowerCase();
+        if (!/\.pdf$/.test(nombrePdf)) {
+          errores.pdf_oc = 'El archivo debe tener extension .pdf.';
+        } else if (archivoPdf.size <= 0) {
+          errores.pdf_oc = 'El PDF no puede estar vacio.';
+        } else if (archivoPdf.size > 5 * 1024 * 1024) {
+          errores.pdf_oc = 'El PDF debe pesar como maximo 5 MB.';
+        }
       }
 
       ['monto_neto', 'total', 'anticipo_valor'].forEach(function(campo) {
@@ -3617,7 +3799,7 @@ $(document).ready(function() {
       var $boton = $('#oc_btn_guardar');
       $boton.prop('disabled', true);
 
-      requestOrdenCompra(datosFormularioOrdenCompra(accion)).done(function(resp) {
+      requestOrdenCompra(formDataOrdenCompra(accion), { multipart: true }).done(function(resp) {
         if (resp && resp.success) {
           toastr.success(resp.message || 'Orden de compra guardada.');
           obtenerOrdenCompra(true);
@@ -3654,6 +3836,81 @@ $(document).ready(function() {
         toastr.error('No se pudo cambiar el estado de la OC.');
       });
     }
+
+    // --- Dropzone PDF OC ---
+    (function() {
+      var $dropzone = $('#ocPdfDropzone');
+      var $input    = $('#oc_pdf_oc');
+      var $preview  = $('#oc_pdf_preview');
+      var $nombre   = $('#oc_pdf_preview_nombre');
+      var $tamano   = $('#oc_pdf_preview_tamano');
+      var $error    = $('#oc_pdf_preview_error');
+      var $quitar   = $('#oc_pdf_quitar');
+
+      function fmtBytes(b) {
+        if (!b || b <= 0) return '';
+        if (b < 1024) return b + ' B';
+        if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+        return (b / 1048576).toFixed(2) + ' MB';
+      }
+
+      function validarPdf(file) {
+        if (!/\.pdf$/i.test(file.name)) return 'El archivo debe tener extensión .pdf.';
+        if (file.size <= 0)            return 'El PDF no puede estar vacío.';
+        if (file.size > 5242880)       return 'El PDF no puede superar 5 MB.';
+        return null;
+      }
+
+      function mostrarPreview(file) {
+        var msg = validarPdf(file);
+        $nombre.text(file.name);
+        $tamano.text(fmtBytes(file.size));
+        $preview.removeClass('d-none');
+        msg ? $error.text(msg).removeClass('d-none') : $error.addClass('d-none').text('');
+      }
+
+      function limpiarPreview() {
+        try { $input.val(''); } catch(e) {}
+        $preview.addClass('d-none');
+        $error.addClass('d-none').text('');
+      }
+
+      $dropzone.on('click', function() { $input.trigger('click'); });
+
+      $dropzone.on('dragover dragenter', function(e) {
+        e.preventDefault();
+        $dropzone.css({ 'border-color': '#007bff', 'background-color': '#e8f4ff' });
+      });
+
+      $dropzone.on('dragleave', function() {
+        $dropzone.css({ 'border-color': '#c7d2dc', 'background-color': '' });
+      });
+
+      $dropzone.on('drop', function(e) {
+        e.preventDefault();
+        $dropzone.css({ 'border-color': '#c7d2dc', 'background-color': '' });
+        var files = e.originalEvent.dataTransfer.files;
+        if (files && files.length > 0) {
+          try {
+            var dt = new DataTransfer();
+            dt.items.add(files[0]);
+            $input[0].files = dt.files;
+          } catch(ex) {}
+          mostrarPreview(files[0]);
+        }
+      });
+
+      $input.on('change', function() {
+        if (this.files && this.files.length > 0) {
+          mostrarPreview(this.files[0]);
+        } else {
+          limpiarPreview();
+        }
+      });
+
+      $quitar.on('click', function() { limpiarPreview(); });
+    })();
+    // --- Fin Dropzone PDF OC ---
 
     if (existeFormularioOrdenCompra()) {
       $('#oc_btn_guardar').on('click', guardarOrdenCompra);

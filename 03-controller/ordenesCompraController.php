@@ -185,6 +185,82 @@ if (!function_exists('prepararDatosOrdenCompraController')) {
     }
 }
 
+if (!function_exists('archivoPdfOrdenCompraController')) {
+    function archivoPdfOrdenCompraController(): ?array
+    {
+        if (!isset($_FILES['pdf_oc']) || !is_array($_FILES['pdf_oc'])) {
+            return null;
+        }
+
+        $archivo = $_FILES['pdf_oc'];
+        if ((int)($archivo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            return null;
+        }
+
+        return $archivo;
+    }
+}
+
+if (!function_exists('adjuntarPdfOrdenCompraController')) {
+    function adjuntarPdfOrdenCompraController(array $datos, ?array $archivoPdf): array
+    {
+        if ($archivoPdf === null) {
+            return $datos;
+        }
+
+        $pdfGuardado = guardarArchivoPdfOrdenCompra(
+            (int)$datos['id_presupuesto'],
+            $archivoPdf,
+            (string)($datos['numero_oc'] ?? '')
+        );
+
+        $datos['pdf_nombre_archivo'] = $pdfGuardado['pdf_nombre_archivo'];
+        $datos['pdf_ruta_archivo'] = $pdfGuardado['pdf_ruta_archivo'];
+        $datos['pdf_mime_type'] = $pdfGuardado['pdf_mime_type'];
+        $datos['pdf_tamano_bytes'] = $pdfGuardado['pdf_tamano_bytes'];
+        $datos['_pdf_ruta_absoluta_nueva'] = $pdfGuardado['ruta_absoluta'];
+
+        return $datos;
+    }
+}
+
+if (!function_exists('responderPdfOrdenCompraController')) {
+    function responderPdfOrdenCompraController(array $ordenCompra): void
+    {
+        if (!ordenCompraTienePdf($ordenCompra)) {
+            responderOrdenCompraJson(false, 'La OC no tiene PDF cargado.', [], [], 404);
+        }
+
+        $rutaAbsoluta = rutaAbsolutaOrdenCompraPdfDesdeRelativa((string)$ordenCompra['pdf_ruta_archivo']);
+        if (
+            $rutaAbsoluta === ''
+            || !file_exists($rutaAbsoluta)
+            || !rutaOrdenCompraPdfDentroDeBase($rutaAbsoluta, (int)$ordenCompra['id_presupuesto'])
+        ) {
+            responderOrdenCompraJson(false, 'El PDF de la OC no esta disponible en el servidor.', [], [], 404);
+        }
+
+        $nombre = trim((string)($ordenCompra['pdf_nombre_archivo'] ?? 'orden-compra.pdf'));
+        if ($nombre === '') {
+            $nombre = 'orden-compra.pdf';
+        }
+        if (!preg_match('/\.pdf$/i', $nombre)) {
+            $nombre .= '.pdf';
+        }
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . str_replace('"', '', $nombre) . '"');
+        header('Content-Length: ' . filesize($rutaAbsoluta));
+        header('X-Content-Type-Options: nosniff');
+        readfile($rutaAbsoluta);
+        exit;
+    }
+}
+
 $input = leerEntradaOrdenCompraController();
 $accion = (string)($input['accion'] ?? $input['funcion'] ?? '');
 $usuario = validarSesionOrdenCompraController();
@@ -198,6 +274,27 @@ try {
             validarAccesoLecturaOrdenCompraController($usuario['perfil'], $data);
 
             responderOrdenCompraJson(true, 'Orden de compra obtenida.', $data);
+            break;
+
+        case 'descargar_pdf_orden_compra':
+            $idOrdenCompra = isset($input['id_orden_compra']) ? (int)$input['id_orden_compra'] : 0;
+            if ($idOrdenCompra <= 0) {
+                responderOrdenCompraJson(false, 'La Orden de compra es obligatoria.', [], ['id_orden_compra' => 'Dato obligatorio.'], 422);
+            }
+
+            $ordenCompra = obtenerOrdenCompraPorIdEnConexion($db, $idOrdenCompra);
+            if (!$ordenCompra) {
+                responderOrdenCompraJson(false, 'No se encontro la Orden de compra.', [], [], 404);
+            }
+
+            $presupuesto = obtenerPresupuestoBasicoParaOrdenCompra($db, (int)$ordenCompra['id_presupuesto']);
+            if (!$presupuesto) {
+                responderOrdenCompraJson(false, 'No se encontro el presupuesto asociado a la OC.', [], [], 404);
+            }
+
+            $data = payloadOrdenCompraController($db, $presupuesto, $usuario['perfil']);
+            validarAccesoLecturaOrdenCompraController($usuario['perfil'], $data);
+            responderPdfOrdenCompraController($ordenCompra);
             break;
 
         case 'guardar_orden_compra':
@@ -221,8 +318,22 @@ try {
                 responderOrdenCompraJson(false, 'Hay datos de OC invalidos.', [], $errores, 422);
             }
 
+            $archivoPdf = archivoPdfOrdenCompraController();
+            if ($archivoPdf === null) {
+                responderOrdenCompraJson(false, 'El PDF de la OC es obligatorio.', [], ['pdf_oc' => 'Debe adjuntar el PDF respaldatorio de la OC.'], 422);
+            }
+
+            try {
+                $datos = adjuntarPdfOrdenCompraController($datos, $archivoPdf);
+            } catch (RuntimeException $e) {
+                responderOrdenCompraJson(false, 'El PDF de la OC no es valido.', [], ['pdf_oc' => $e->getMessage()], 422);
+            }
+
             $idOrdenCompra = crearOrdenCompraEnConexion($db, $datos);
             if (!$idOrdenCompra) {
+                if (!empty($datos['_pdf_ruta_absoluta_nueva']) && file_exists($datos['_pdf_ruta_absoluta_nueva'])) {
+                    @unlink($datos['_pdf_ruta_absoluta_nueva']);
+                }
                 responderOrdenCompraJson(false, 'No se pudo guardar la Orden de compra.', [], [], 500);
             }
 
@@ -269,8 +380,26 @@ try {
                 responderOrdenCompraJson(false, 'Hay datos de OC invalidos.', [], $errores, 422);
             }
 
+            $archivoPdf = archivoPdfOrdenCompraController();
+            if ($archivoPdf === null && !ordenCompraTienePdf($ordenCompraActual)) {
+                responderOrdenCompraJson(false, 'El PDF de la OC es obligatorio.', [], ['pdf_oc' => 'Debe adjuntar el PDF respaldatorio de la OC.'], 422);
+            }
+
+            try {
+                $datos = adjuntarPdfOrdenCompraController($datos, $archivoPdf);
+            } catch (RuntimeException $e) {
+                responderOrdenCompraJson(false, 'El PDF de la OC no es valido.', [], ['pdf_oc' => $e->getMessage()], 422);
+            }
+
             if (!actualizarOrdenCompraEnConexion($db, $idOrdenCompra, $datos)) {
+                if (!empty($datos['_pdf_ruta_absoluta_nueva']) && file_exists($datos['_pdf_ruta_absoluta_nueva'])) {
+                    @unlink($datos['_pdf_ruta_absoluta_nueva']);
+                }
                 responderOrdenCompraJson(false, 'No se pudo actualizar la Orden de compra.', [], [], 500);
+            }
+
+            if (!empty($datos['_pdf_ruta_absoluta_nueva'])) {
+                eliminarArchivoPdfOrdenCompraSiCorresponde($ordenCompraActual);
             }
 
             responderOrdenCompraJson(true, 'Orden de compra actualizada.', [
