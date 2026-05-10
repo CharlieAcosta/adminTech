@@ -28,7 +28,6 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
-$superAdministrador = array('Super Administrador');
 $ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
 $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
   && (!$esPanelOrdenCompraAdministrativa || $ocPendientesSeguimiento > 0);
@@ -242,19 +241,6 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
           </div>
           <!-- /.info-box -->
           <?php } ?>           
-
-         <?php if (in_array($perfil, $superAdministrador)){ ?>
-          <div class="col-12 col-sm-6 col-md-4">
-            <a href="../01-views/auditoria_configuracion.php">
-               <div class="info-box">
-                  <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-user-shield"></i></span>
-                  <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">Super Administrador</h3>
-                  </div>
-              </div>
-            </a>
-          </div>
-          <?php } ?>
 
     </div>
         <!-- /.row -->

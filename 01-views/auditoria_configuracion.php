@@ -89,7 +89,7 @@ registrarNavegacion('AUDITORIA Y CONFIGURACION');
             <div class="info-box">
               <span class="info-box-icon bg-success elevation-1"><i class="fas fa-users-cog"></i></span>
               <div class="info-box-content">
-                <h3 class="info-box-text d-flex align-items-center">Perfiles</h3>
+                <h3 class="info-box-text d-flex align-items-center">Simulador de acceso</h3>
               </div>
             </div>
           </a>

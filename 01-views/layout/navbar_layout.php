@@ -155,6 +155,13 @@ $tituloSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? '&Oacute
         </li>
         <?php } ?>
 
+        <?php if ($perfil === 'Super Administrador'): ?>
+        <li class="nav-item">
+            <a href="../01-views/auditoria_configuracion.php" class="nav-link custom-button bg-dark" data-toggle="tooltip" title="Super Administrador">
+                <i class="fas fa-user-shield"></i>
+            </a>
+        </li>
+        <?php endif; ?>
 
     </ul>
 

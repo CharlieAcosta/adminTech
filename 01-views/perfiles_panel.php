@@ -10,7 +10,7 @@ if (($_SESSION['usuario']['perfil'] ?? '') !== 'Super Administrador') {
 }
 
 include_once '../06-funciones_php/auditoria.php';
-registrarNavegacion('PERFILES - PANEL');
+registrarNavegacion('SIMULADOR DE ACCESO');
 
 $disfrazActivo   = isset($_SESSION['disfraz']['activo']) && $_SESSION['disfraz']['activo'];
 $perfilDisfrazActual = $disfrazActivo ? ($_SESSION['disfraz']['perfil_disfraz'] ?? '') : '';
@@ -55,7 +55,7 @@ $perfilesSistema = [
   <meta name="googlebot" content="noindex">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADMINTECH | Perfiles del sistema</title>
+  <title>ADMINTECH | Simulador de acceso</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
   <link rel="stylesheet" href="../05-plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
@@ -84,7 +84,7 @@ $perfilesSistema = [
       <div class="container-fluid">
         <div class="row mb-2 align-items-center">
           <div class="col-sm-8">
-            <h1><strong>Perfiles del sistema</strong></h1>
+            <h1><strong>Simulador de acceso</strong></h1>
             <p class="text-muted mb-0">Seleccioná un perfil para visualizar el sistema como lo vería ese rol.</p>
           </div>
           <div class="col-sm-4 text-right">

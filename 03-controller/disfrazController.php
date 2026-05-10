@@ -36,7 +36,7 @@ if ($accion === 'activar') {
         $_SESSION['usuario']['id_usuario'],
         $_SESSION['usuario']['email'],
         'Super Administrador',
-        'PERFILES - DISFRAZ',
+        'SIMULADOR DE ACCESO',
         $_SERVER['REQUEST_URI'],
         "Super Administrador activó disfraz como: {$perfilDisfraz}",
         "Perfil original: Super Administrador"
@@ -60,7 +60,7 @@ if ($accion === 'quitar') {
             $_SESSION['usuario']['id_usuario'],
             $_SESSION['usuario']['email'],
             $perfilOriginal,
-            'PERFILES - DISFRAZ',
+            'SIMULADOR DE ACCESO',
             $_SERVER['REQUEST_URI'],
             "Super Administrador quitó el disfraz de: {$perfilDisfraz}",
             "Perfil disfraz anterior: {$perfilDisfraz}"
