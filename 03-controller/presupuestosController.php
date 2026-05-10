@@ -43,12 +43,13 @@ if (!function_exists('construirBadgeOrdenCompraSeguimientoListado')) {
         }
 
         if ($estado === 'pendiente' && $numeroOc === '') {
-            return '<span class="badge estado-chip ' . escapeHtmlSeguimientoListado($badgeClass) . ' oc-estado-badge"'
+            return '<span class="badge estado-chip ' . escapeHtmlSeguimientoListado($badgeClass) . ' d-inline-flex flex-column align-items-center oc-estado-badge"'
                 . ' data-oc-estado="' . escapeHtmlSeguimientoListado($estado) . '"'
                 . ' data-oc-habilitada="' . ($habilitada ? '1' : '0') . '"'
                 . ' data-oc-puede-editar="' . ($puedeEditar ? '1' : '0') . '"'
                 . ' data-oc-solo-lectura="' . ($soloLectura ? '1' : '0') . '">'
-                . 'OC ' . escapeHtmlSeguimientoListado($label)
+                . '<span>OC</span>'
+                . '<span>' . escapeHtmlSeguimientoListado($label) . '</span>'
                 . '</span>';
         }
 
