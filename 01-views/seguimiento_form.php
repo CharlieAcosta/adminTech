@@ -39,6 +39,7 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
 $puedeVerSeguimientoCompleto = perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion);
 $puedeEditarOrdenCompra = perfilPuedeEditarOrdenCompra($perfilSesion);
 $ordenCompraSoloLectura = perfilSoloPuedeVerOrdenCompra($perfilSesion) || !$puedeEditarOrdenCompra;
+$aperturaExclusivaOrdenCompra = isset($_GET['oc']) && $_GET['oc'] === '1';
 $estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado(null);
 $accesoSeguimientoPermitido = $puedeVerSeguimientoCompleto;
 $mostrarBloquesTecnicosSeguimiento = $puedeVerSeguimientoCompleto;
@@ -97,16 +98,16 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $visita_card = 'card-danger'; $items_options = "";
     $presupuesto_card = 'card-danger'; 
     $orden_compra_card = 'card-danger';
-    $orden_compra_show = isset($_GET['oc']) && $_GET['oc'] === '1' ? 'show' : '';
+    $orden_compra_show = $aperturaExclusivaOrdenCompra ? 'show' : '';
     $presupuesto_display = 'd-none';
 
-    if (!empty($workflowPrevisita['habilita_visita'])) {$previsita_show = "";} else {$previsita_show = "show";}
+    if (!empty($workflowPrevisita['habilita_visita'])) {$previsita_show = "";} else {$previsita_show = $aperturaExclusivaOrdenCompra ? "" : "show";}
     
     if (!empty($workflowPrevisita['habilita_visita'])) {
         $itemNumber = 0;
 
         //$itemNota = SelectAllDB('visita_notas', 'id_visita', '=', arrayPrintValue('', $datos, 'id_previsita', ''), $callType = 'php');
-        $visita_show = "show"; //muestra el accordion de visita abierto
+        $visita_show = $aperturaExclusivaOrdenCompra ? "" : "show"; //muestra el accordion de visita abierto
         $previsita_buttons = 'd-none'; // quita los botones de previsita para evitar guardado o modificación de datos
         $items_db = SelectAllDB('materiales', 'estado_material', '=', "'Activo'", $callType = 'php');
         $items_options = arrayToOptions($items_db, 'Seleccione un ítem', 'id_material', 'id_material', '|', 'producto', 'unidad_venta', 'rendimiento', 'unidad_rendimiento', null, null);
@@ -341,11 +342,11 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
                 $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
                 $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
                 $presupuesto_card = 'card-success';
-                $presupuesto_show = 'show';
+                $presupuesto_show = $aperturaExclusivaOrdenCompra ? '' : 'show';
                 $visita_show = '';
                 $presupuesto_display = '';
               } else {
-                $visita_show = 'show';
+                $visita_show = $aperturaExclusivaOrdenCompra ? '' : 'show';
                 $presupuesto_show = '';
               }
               $accesoSeguimientoPermitido = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
@@ -367,6 +368,13 @@ $previsita_buttons = $permiteEditarPrevisitaCompleta ? 'd-flex' : 'd-none';
 $documentosPrevisitaJson = json_encode($documentosPrevisita, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 if ($documentosPrevisitaJson === false) {
   $documentosPrevisitaJson = '[]';
+}
+
+if ($aperturaExclusivaOrdenCompra) {
+  $previsita_show = '';
+  $visita_show = '';
+  $presupuesto_show = '';
+  $orden_compra_show = 'show';
 }
 
 function intervinientes_names($b_array){
