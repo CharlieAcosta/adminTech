@@ -101,21 +101,45 @@ if (!function_exists('normalizarFiltroEstadoOrdenCompraAdministrativo')) {
     }
 }
 
-if (!function_exists('estadoOrdenCompraCoincideConFiltroAdministrativo')) {
-    function estadoOrdenCompraCoincideConFiltroAdministrativo(array $estadoOrdenCompra, ?string $filtro): bool
+if (!function_exists('normalizarFiltroEstadoOrdenCompraSeguimiento')) {
+    function normalizarFiltroEstadoOrdenCompraSeguimiento(?string $filtro): string
+    {
+        $filtro = strtolower(trim((string)$filtro));
+        $filtro = str_replace(['-', ' '], '_', $filtro);
+        $permitidos = ['pendientes', 'cargadas', 'todas_oc'];
+
+        return in_array($filtro, $permitidos, true) ? $filtro : '';
+    }
+}
+
+if (!function_exists('estadoOrdenCompraCoincideConFiltroSeguimiento')) {
+    function estadoOrdenCompraCoincideConFiltroSeguimiento(array $estadoOrdenCompra, ?string $filtro): bool
     {
         $estado = normalizarEstadoOrdenCompra((string)($estadoOrdenCompra['estado'] ?? 'no_habilitada'));
-        $filtro = normalizarFiltroEstadoOrdenCompraAdministrativo($filtro);
+        $filtro = normalizarFiltroEstadoOrdenCompraSeguimiento($filtro);
+
+        if ($filtro === '') {
+            return true;
+        }
 
         if ($filtro === 'pendientes') {
             return $estado === 'pendiente';
         }
 
         if ($filtro === 'cargadas') {
-            return $estado === 'cargada';
+            return in_array($estado, ['cargada', 'observada'], true);
         }
 
         return $estado !== 'no_habilitada';
+    }
+}
+
+if (!function_exists('estadoOrdenCompraCoincideConFiltroAdministrativo')) {
+    function estadoOrdenCompraCoincideConFiltroAdministrativo(array $estadoOrdenCompra, ?string $filtro): bool
+    {
+        $filtro = normalizarFiltroEstadoOrdenCompraAdministrativo($filtro);
+
+        return estadoOrdenCompraCoincideConFiltroSeguimiento($estadoOrdenCompra, $filtro);
     }
 }
 

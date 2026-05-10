@@ -15,7 +15,6 @@ $perfil = $_SESSION['usuario']['perfil'];
 $vencidas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Vencida"), false);
 $programadas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Programada"), false);
 $reprogramadas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Reprogramada"), false);
-$ocPendientesSeguimiento = perfilPuedeAccederSoloOrdenCompra($perfil) ? contarOrdenesCompraPendientes() : 0;
 $esPanelOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
 $tituloModuloSeguimiento = $esPanelOrdenCompraAdministrativa ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
 $iconoModuloSeguimiento = $esPanelOrdenCompraAdministrativa ? 'fa-solid fa-file-invoice' : 'fa-solid fa-warehouse';
@@ -30,6 +29,7 @@ $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
 $superAdministrador = array('Super Administrador');
+$ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
 $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
   && (!$esPanelOrdenCompraAdministrativa || $ocPendientesSeguimiento > 0);
 ?>
@@ -145,7 +145,7 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                   <span class="info-box-icon bg-success elevation-1"><i class="<?php echo $iconoModuloSeguimiento; ?>"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center"><?php echo $tituloModuloSeguimiento; ?>
+                    <h3 class="info-box-text d-flex align-items-center flex-wrap"><?php echo $tituloModuloSeguimiento; ?>
                       
                       <?php if ($esPanelOrdenCompraAdministrativa){ ?>
                       <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> Pendientes </small></small>'; ?></span></small>
@@ -160,6 +160,10 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
 
                         <?php if ($reprogramadas !== false && $reprogramadas['total'] > 0){ ?>
                         <small><span class="right badge badge-primary ml-2 mt-2"><?php echo $reprogramadas['total'].'<small><small><br> Repr. </small></small>'; ?></span></small>
+                        <?php } ?>
+
+                        <?php if ($ocPendientesSeguimiento > 0){ ?>
+                        <small><span class="right badge badge-warning ml-2 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> OC Pend. </small></small>'; ?></span></small>
                         <?php } ?>
                       <?php } ?>
                   </h3>  

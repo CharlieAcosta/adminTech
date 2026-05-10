@@ -364,10 +364,11 @@ if (!function_exists('resolverDescripcionSeguimientoListado')) {
 function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiempo = '30_dias', $busqueda = '', $estadoVisitaFiltro = '', $estadoPresupuestoFiltro = '', $estadoOrdenCompraFiltro = ''){
 
    $esBandejaOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
+   $estadoOrdenCompraFiltroNormalizado = normalizarFiltroEstadoOrdenCompraSeguimiento($estadoOrdenCompraFiltro);
    if ($esBandejaOrdenCompraAdministrativa) {
       $estadoVisitaFiltro = '';
       $estadoPresupuestoFiltro = '';
-      $estadoOrdenCompraFiltro = normalizarFiltroEstadoOrdenCompraAdministrativo($estadoOrdenCompraFiltro);
+      $estadoOrdenCompraFiltroNormalizado = normalizarFiltroEstadoOrdenCompraAdministrativo($estadoOrdenCompraFiltro);
    }
 
    $origenFechaRango = $esBandejaOrdenCompraAdministrativa ? 'aprobacion_oc' : 'previsita';
@@ -474,7 +475,11 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
                 continue;
             }
 
-            if (!estadoOrdenCompraCoincideConFiltroAdministrativo($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltro)) {
+            if (!estadoOrdenCompraCoincideConFiltroAdministrativo($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
+                continue;
+            }
+          } elseif ($estadoOrdenCompraFiltroNormalizado !== '') {
+            if (!estadoOrdenCompraCoincideConFiltroSeguimiento($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
                 continue;
             }
           }

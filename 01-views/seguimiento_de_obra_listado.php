@@ -164,10 +164,19 @@ $estadosOrdenCompraRapidos = array(
                     <span class="seguimiento-filtro-separador">|</span>
                     <?php endif; ?>
 
-                    <?php if ($esBandejaOrdenCompraAdministrativa): ?>
                     <div class="seguimiento-filtro-columna">
                       <div class="seguimiento-filtro-label">Estado OC</div>
                       <div class="seguimiento-filtro-linea">
+                        <?php if (!$esBandejaOrdenCompraAdministrativa): ?>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-secondary seguimiento-filtro-btn seguimiento-filtro-oc-btn btn-filtro-rapido"
+                            data-oc-state-filter=""
+                            data-variant="secondary"
+                            aria-pressed="false">
+                            Sin filtro OC
+                          </button>
+                        <?php endif; ?>
                         <?php foreach ($estadosOrdenCompraRapidos as $valorFiltro => $labelFiltro): ?>
                           <button
                             type="button"
@@ -182,7 +191,6 @@ $estadosOrdenCompraRapidos = array(
                     </div>
 
                     <span class="seguimiento-filtro-separador">|</span>
-                    <?php endif; ?>
 
                     <div class="seguimiento-filtro-columna">
                       <div class="seguimiento-filtro-label">Filtros de tiempo</div>
@@ -407,6 +415,10 @@ $estadosOrdenCompraRapidos = array(
     return String(filtro || '').trim().toUpperCase();
   }
 
+  function hayFiltroOrdenCompraActivoSeguimiento() {
+    return filtroOrdenCompraSeguimiento.value !== '';
+  }
+
   $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
     if (!settings || !settings.nTable || settings.nTable.id !== 'current_table') {
       return true;
@@ -476,7 +488,9 @@ $estadosOrdenCompraRapidos = array(
   }
 
   function hayFiltrosRapidosActivosSeguimiento() {
-    return filtroRapidoSeguimiento.visita !== '' || filtroRapidoSeguimiento.presupuesto !== '';
+    return filtroRapidoSeguimiento.visita !== ''
+      || filtroRapidoSeguimiento.presupuesto !== ''
+      || hayFiltroOrdenCompraActivoSeguimiento();
   }
 
   function todosUsaBusquedaGlobalSeguimiento() {
@@ -549,18 +563,15 @@ $estadosOrdenCompraRapidos = array(
   }
 
   function obtenerEstadoOrdenCompraAjaxSeguimiento() {
-    if (!esBandejaOrdenCompraAdministrativa) {
-      return '';
-    }
-
     switch (filtroOrdenCompraSeguimiento.value) {
       case 'CARGADAS':
         return 'cargadas';
       case 'TODAS_OC':
         return 'todas_oc';
       case 'PENDIENTES':
-      default:
         return 'pendientes';
+      default:
+        return '';
     }
   }
 
@@ -967,18 +978,30 @@ $estadosOrdenCompraRapidos = array(
     });
 
     $(document).on('click', '.seguimiento-filtro-btn[data-oc-state-filter]', function () {
-      if (!esBandejaOrdenCompraAdministrativa) {
-        return;
-      }
-
       const $boton = $(this);
       const valor = normalizarFiltroOrdenCompraSeguimiento($boton.data('oc-state-filter'));
+      const estabaTodosActivo = todosActivoSeguimiento();
+      const mismoFiltroActivo = filtroOrdenCompraSeguimiento.value === valor;
 
-      if (!valor || filtroOrdenCompraSeguimiento.value === valor) {
+      if (esBandejaOrdenCompraAdministrativa && (!valor || mismoFiltroActivo)) {
         return;
       }
 
-      filtroOrdenCompraSeguimiento.value = valor;
+      if (!esBandejaOrdenCompraAdministrativa) {
+        filtroOrdenCompraSeguimiento.value = (!valor || mismoFiltroActivo) ? '' : valor;
+      } else {
+        filtroOrdenCompraSeguimiento.value = valor;
+      }
+
+      if (!esBandejaOrdenCompraAdministrativa && estabaTodosActivo) {
+        resetTodosSeguimientoActivo = true;
+        mostrarErrorCargaSeguimiento(false);
+        mostrarAyudaBusquedaGlobalSeguimiento(false);
+        actualizarBotonesFiltrosRapidosSeguimiento();
+        sincronizarModoTodosSeguimiento();
+        return;
+      }
+
       mostrarErrorCargaSeguimiento(false);
       mostrarAyudaBusquedaGlobalSeguimiento(false);
       actualizarBotonesFiltrosRapidosSeguimiento();
