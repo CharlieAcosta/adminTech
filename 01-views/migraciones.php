@@ -10,6 +10,7 @@ if (($_SESSION['usuario']['perfil'] ?? '') !== 'Super Administrador') {
 }
 
 include_once '../06-funciones_php/auditoria.php';
+include_once '../04-modelo/migracionesModel.php';
 registrarNavegacion('MIGRACIONES');
 
 // ---------------------------------------------------------------------------
@@ -88,22 +89,8 @@ function detectarEstadoMigracion($sqlContent, $conn) {
 // ---------------------------------------------------------------------------
 $conn = conectaDB();
 
-$conn->query("CREATE TABLE IF NOT EXISTS migraciones (
-    id_migracion        INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    archivo             VARCHAR(255) NOT NULL UNIQUE,
-    estado              ENUM('OK','ERROR') DEFAULT 'OK',
-    ejecutada_por_id    INT,
-    ejecutada_por_email VARCHAR(255),
-    fecha_ejecucion     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    error_mensaje       TEXT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
 // Cargar migraciones ya registradas
-$ejecutadas = [];
-$res = $conn->query("SELECT archivo, estado, ejecutada_por_email, fecha_ejecucion, error_mensaje FROM migraciones ORDER BY fecha_ejecucion DESC");
-while ($fila = $res->fetch_assoc()) {
-    $ejecutadas[$fila['archivo']] = $fila;
-}
+$ejecutadas = obtenerMigracionesRegistradas($conn);
 
 // Escanear archivos
 $dirMigraciones = '../11-migraciones_sql/';
@@ -120,11 +107,7 @@ foreach ($archivos as $ruta) {
     $resultado  = detectarEstadoMigracion($sqlContent, $conn);
 
     if ($resultado === 'ejecutada') {
-        $stmt = $conn->prepare("INSERT IGNORE INTO migraciones (archivo, estado, ejecutada_por_id, ejecutada_por_email)
-                                VALUES (?, 'OK', NULL, 'auto-detectada')");
-        $stmt->bind_param('s', $nombre);
-        $stmt->execute();
-        $stmt->close();
+        registrarMigracionAutoDetectada($conn, $nombre);
 
         $ejecutadas[$nombre] = [
             'estado'              => 'OK',

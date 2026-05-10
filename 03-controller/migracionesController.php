@@ -4,6 +4,7 @@ define('BASE_URL', $_SESSION["base_url"] ?? '');
 include_once '../06-funciones_php/funciones.php';
 sesion();
 include_once '../10-clases/Auditoria.php';
+include_once '../04-modelo/migracionesModel.php';
 
 if (($_SESSION['usuario']['perfil'] ?? '') !== 'Super Administrador') {
     header('Location: ../01-views/panel.php');
@@ -26,17 +27,7 @@ if (!file_exists($rutaArchivo)) {
 }
 
 $conn = conectaDB();
-
-// Crear tabla de migraciones si no existe
-$conn->query("CREATE TABLE IF NOT EXISTS migraciones (
-    id_migracion      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    archivo           VARCHAR(255) NOT NULL UNIQUE,
-    estado            ENUM('OK','ERROR') DEFAULT 'OK',
-    ejecutada_por_id  INT,
-    ejecutada_por_email VARCHAR(255),
-    fecha_ejecucion   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    error_mensaje     TEXT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+asegurarTablaMigraciones($conn);
 
 $idUsuario    = (int) ($_SESSION['usuario']['id_usuario'] ?? 0);
 $emailUsuario = $_SESSION['usuario']['email'] ?? '';
@@ -59,14 +50,7 @@ if ($accion === 'ejecutar') {
         $errorMsg = $conn->error;
     }
 
-    $stmt = $conn->prepare("INSERT INTO migraciones (archivo, estado, ejecutada_por_id, ejecutada_por_email, error_mensaje)
-                            VALUES (?, ?, ?, ?, ?)
-                            ON DUPLICATE KEY UPDATE estado = VALUES(estado), ejecutada_por_id = VALUES(ejecutada_por_id),
-                            ejecutada_por_email = VALUES(ejecutada_por_email), fecha_ejecucion = CURRENT_TIMESTAMP,
-                            error_mensaje = VALUES(error_mensaje)");
-    $stmt->bind_param('ssiss', $archivo, $estado, $idUsuario, $emailUsuario, $errorMsg);
-    $stmt->execute();
-    $stmt->close();
+    registrarMigracionEjecutada($conn, $archivo, $estado, $idUsuario, $emailUsuario, $errorMsg);
 
     $auditoria = new Auditoria($conn);
     $auditoria->registrarModificacion(
@@ -88,13 +72,7 @@ if ($accion === 'ejecutar') {
 
 if ($accion === 'marcar') {
     $estado = 'OK';
-    $stmt = $conn->prepare("INSERT INTO migraciones (archivo, estado, ejecutada_por_id, ejecutada_por_email)
-                            VALUES (?, ?, ?, ?)
-                            ON DUPLICATE KEY UPDATE estado = VALUES(estado), ejecutada_por_id = VALUES(ejecutada_por_id),
-                            ejecutada_por_email = VALUES(ejecutada_por_email), fecha_ejecucion = CURRENT_TIMESTAMP");
-    $stmt->bind_param('ssis', $archivo, $estado, $idUsuario, $emailUsuario);
-    $stmt->execute();
-    $stmt->close();
+    registrarMigracionEjecutada($conn, $archivo, $estado, $idUsuario, $emailUsuario);
 
     $auditoria = new Auditoria($conn);
     $auditoria->registrarModificacion(
