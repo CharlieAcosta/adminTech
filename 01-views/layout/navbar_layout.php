@@ -66,6 +66,7 @@ $ocPendientesSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? co
 $mostrarSeguimientoNavbar = in_array($perfil, $presupuestos, true)
     && (!perfilPuedeAccederSoloOrdenCompra($perfil) || $ocPendientesSeguimientoNavbar > 0);
 $tituloSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
+$iconoSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? 'fa-solid fa-file-invoice' : 'fa-solid fa-warehouse';
 ?>
 <script>
   window.ACTIVE_USER_ID = <?= $usuarioIdNavbar ?>;
@@ -118,7 +119,7 @@ $tituloSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? '&Oacute
         <?php if ($mostrarSeguimientoNavbar){ ?>
         <li class="nav-item">
             <a href="../01-views/seguimiento_de_obra_listado.php" class="nav-link custom-button bg-success" data-toggle="tooltip" title="<?php echo $tituloSeguimientoNavbar; ?>">
-                <i class="fa-solid fa-warehouse"></i>
+                <i class="<?php echo $iconoSeguimientoNavbar; ?>"></i>
             </a>
         </li>
         <?php } ?>
