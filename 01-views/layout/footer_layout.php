@@ -1,6 +1,6 @@
   <footer class="main-footer">
     <div class="float-right d-none d-sm-block">
-    <b>Versión: </b><!--FECHA-AUTO--><span>260118-2003</span><!--/FECHA-AUTO-->
+    <b>Versión: </b><!--FECHA-AUTO--><span>main_v0.9.0-rc.1</span><!--/FECHA-AUTO-->
     </div>
     <strong>Copyright &copy; 2022 <a href="#">ECOTECHOS S.R.L</a>.</strong> Todos los derechos reservados
     <?php
