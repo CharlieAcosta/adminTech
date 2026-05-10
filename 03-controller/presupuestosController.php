@@ -424,6 +424,13 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
             $totalHistorialComercialActivo = $modoCircuitoActivo === 'smtp'
                 ? (int)($value_all_registros['total_historial_comercial_smtp'] ?? 0)
                 : (int)($value_all_registros['total_historial_comercial_simulacion'] ?? 0);
+            $ordenCompraActiva = !empty($value_all_registros['oc_id_orden_compra'])
+                ? [
+                    'id_orden_compra' => (int)$value_all_registros['oc_id_orden_compra'],
+                    'numero_oc' => (string)($value_all_registros['oc_numero_oc'] ?? ''),
+                    'estado' => (string)($value_all_registros['oc_estado'] ?? 'cargada'),
+                ]
+                : null;
 
             $presupuestoActual = [
                 'estado' => $estadoPresupuesto,
@@ -439,7 +446,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
                 $presupuestoActual,
                 $modoCircuitoActivo
             );
-            $estadoOrdenCompraCalculado = resolverEstadoOrdenCompraCalculado($estadoComercialActivo);
+            $estadoOrdenCompraCalculado = resolverEstadoOrdenCompraCalculado($estadoComercialActivo, $ordenCompraActiva);
             $ordenCompraHtml = construirBadgeOrdenCompraSeguimientoListado($estadoOrdenCompraCalculado, $perfil);
 
             if ($estadoPresupuesto === null || $estadoPresupuesto === '') {

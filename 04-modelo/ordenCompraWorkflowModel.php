@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/schemaIntrospectionModel.php';
+require_once __DIR__ . '/ordenCompraModel.php';
 require_once __DIR__ . '/presupuestoIntervencionesModel.php';
 
 if (!function_exists('normalizarPerfilOrdenCompraSeguimiento')) {
@@ -148,46 +149,6 @@ if (!function_exists('badgeClassEstadoOrdenCompra')) {
     }
 }
 
-if (!function_exists('tablaOrdenesCompraExiste')) {
-    function tablaOrdenesCompraExiste(mysqli $db): bool
-    {
-        return function_exists('tabla_existe') && tabla_existe($db, 'ordenes_compra');
-    }
-}
-
-if (!function_exists('obtenerOrdenCompraActivaPorPresupuestoEnConexion')) {
-    function obtenerOrdenCompraActivaPorPresupuestoEnConexion(mysqli $db, int $idPresupuesto): ?array
-    {
-        if ($idPresupuesto <= 0 || !tablaOrdenesCompraExiste($db)) {
-            return null;
-        }
-
-        $sql = "
-            SELECT *
-            FROM ordenes_compra
-            WHERE id_presupuesto = ?
-            ORDER BY
-                CASE WHEN estado <> 'anulada' THEN 0 ELSE 1 END,
-                updated_at DESC,
-                created_at DESC,
-                id_orden_compra DESC
-            LIMIT 1
-        ";
-        $stmt = mysqli_prepare($db, $sql);
-        if (!$stmt) {
-            return null;
-        }
-
-        mysqli_stmt_bind_param($stmt, 'i', $idPresupuesto);
-        mysqli_stmt_execute($stmt);
-        $res = mysqli_stmt_get_result($stmt);
-        $row = $res ? mysqli_fetch_assoc($res) : null;
-        mysqli_stmt_close($stmt);
-
-        return $row ?: null;
-    }
-}
-
 if (!function_exists('resolverEstadoOrdenCompraCalculado')) {
     function resolverEstadoOrdenCompraCalculado(?string $estadoComercialPresupuesto, ?array $ordenCompra = null): array
     {
@@ -195,7 +156,9 @@ if (!function_exists('resolverEstadoOrdenCompraCalculado')) {
         $tieneOrdenCompra = is_array($ordenCompra) && !empty($ordenCompra);
 
         if ($tieneOrdenCompra) {
-            $estado = normalizarEstadoOrdenCompra((string)($ordenCompra['estado'] ?? 'cargada'));
+            $estado = function_exists('normalizarEstadoOrdenCompraPersistida')
+                ? normalizarEstadoOrdenCompraPersistida((string)($ordenCompra['estado'] ?? 'cargada'))
+                : normalizarEstadoOrdenCompra((string)($ordenCompra['estado'] ?? 'cargada'));
         } elseif (estadoComercialHabilitaOrdenCompra($estadoComercialPresupuesto)) {
             $estado = 'pendiente';
         } else {
@@ -285,7 +248,7 @@ if (!function_exists('contarOrdenesCompraPendientesEnConexion')) {
             $joinOrdenCompra = "
                 LEFT JOIN ordenes_compra oc
                     ON oc.id_presupuesto = p.id_presupuesto
-                   AND COALESCE(LOWER(TRIM(oc.estado)), '') <> 'anulada'
+                   AND COALESCE(LOWER(TRIM(oc.estado)), '') IN ('cargada', 'observada')
             ";
             $whereSinOrdenCompraActiva = "AND oc.id_presupuesto IS NULL";
         }
@@ -418,7 +381,7 @@ if (!function_exists('resolverRangoInicialOrdenCompraPendienteEnConexion')) {
             $joinOrdenCompra = "
                 LEFT JOIN ordenes_compra oc
                     ON oc.id_presupuesto = p.id_presupuesto
-                   AND COALESCE(LOWER(TRIM(oc.estado)), '') <> 'anulada'
+                   AND COALESCE(LOWER(TRIM(oc.estado)), '') IN ('cargada', 'observada')
             ";
             $whereSinOrdenCompraActiva = "AND oc.id_presupuesto IS NULL";
         }
