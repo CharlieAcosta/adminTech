@@ -20,6 +20,25 @@ include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indi
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 
+if (!function_exists('jsonParaJsSeguro')) {
+  function jsonParaJsSeguro($valor, string $fallback = '""'): string
+  {
+    $json = json_encode(
+      $valor,
+      JSON_UNESCAPED_UNICODE
+      | JSON_UNESCAPED_SLASHES
+      | JSON_INVALID_UTF8_SUBSTITUTE
+      | JSON_HEX_TAG
+      | JSON_HEX_APOS
+      | JSON_HEX_AMP
+      | JSON_HEX_QUOT
+    );
+
+    return $json !== false ? $json : $fallback;
+  }
+}
+
+
 // =========================
 // Permisos por perfil (UI)
 // =========================
@@ -365,10 +384,7 @@ $permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visual
 $permiteEditarDocumentosPrevisita = ($visualizacionSolicitada === false && $pdf === '');
 $mostrarGuardarSoloDocumentosPrevisita = ($permiteEditarDocumentosPrevisita && !$permiteEditarPrevisitaCompleta && !empty($datos['id_previsita']));
 $previsita_buttons = $permiteEditarPrevisitaCompleta ? 'd-flex' : 'd-none';
-$documentosPrevisitaJson = json_encode($documentosPrevisita, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-if ($documentosPrevisitaJson === false) {
-  $documentosPrevisitaJson = '[]';
-}
+$documentosPrevisitaJson = jsonParaJsSeguro($documentosPrevisita, '[]');
 
 if ($aperturaExclusivaOrdenCompra) {
   $previsita_show = '';
@@ -831,7 +847,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
 ?>
 <script>
-  const presupuestoGenerado = <?php echo json_encode((bool)($presupuestoGenerado ?? false)); ?>;
+  const presupuestoGenerado = <?php echo jsonParaJsSeguro((bool)($presupuestoGenerado ?? false), 'false'); ?>;
 </script>
 
 <!DOCTYPE html>
@@ -1768,15 +1784,6 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
                 <small class="form-text text-muted" id="oc_pdf_hint"></small>
 
-                <!-- Botón precarga asistida desde PDF -->
-                <div class="mt-3 pt-2 border-top" id="oc_analizar_pdf_container">
-                  <button type="button" class="btn btn-sm btn-outline-info" id="oc_btn_analizar_pdf">
-                    <i class="fas fa-magic mr-1"></i>Analizar PDF y precargar
-                  </button>
-                  <small class="text-muted d-block mt-1">
-                    Extrae datos del PDF y sugiere campos del formulario. Revisá siempre antes de guardar.
-                  </small>
-                </div>
               </div>
 
             </div>
@@ -2109,7 +2116,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   </div>
 </div>
 <script>
-  window.SEGUIMIENTO_ORDEN_COMPRA = <?php echo json_encode([
+  window.SEGUIMIENTO_ORDEN_COMPRA = <?php echo jsonParaJsSeguro([
     'endpoint' => '../03-controller/ordenesCompraController.php',
     'id_presupuesto' => $idPresupuestoOrdenCompra,
     'id_previsita' => $idPrevisitaOrdenCompra,
@@ -2117,7 +2124,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     'solo_lectura' => $ordenCompraSoloLectura,
     'oc_solicitada' => isset($_GET['oc']) && $_GET['oc'] === '1',
     'estado_inicial' => $estadoOrdenCompraSeguimiento,
-  ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+  ], '{}'); ?>;
 </script>
 <?php endif; ?>
 <!-- end accordion 4 -->
@@ -3922,110 +3929,7 @@ $(document).ready(function() {
     })();
     // --- Fin Dropzone PDF OC ---
 
-    // --- Análisis PDF y precarga OC ---
-    function analizarPdfYPrecargarOc() {
-      var inputPdf    = $('#oc_pdf_oc')[0];
-      var archivoPdf  = inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
-      var tieneOcPdf  = ordenCompraTienePdfActual() && ordenCompraIdActivo > 0;
-
-      if (!archivoPdf && !tieneOcPdf) {
-        toastr.warning('Seleccioná un PDF primero o abrí una OC que ya tenga PDF guardado.');
-        return;
-      }
-
-      var $btn = $('#oc_btn_analizar_pdf');
-      $btn.prop('disabled', true);
-      toastr.info('Analizando Orden de Compra...');
-      alertaOrdenCompra('alert-info', 'Analizando PDF…', 'Extrayendo y procesando datos del documento.');
-
-      var formData = new FormData();
-      formData.append('accion', 'analizar_pdf_orden_compra');
-      formData.append('id_presupuesto', String(ordenCompraConfig.id_presupuesto || ''));
-      formData.append('id_previsita',   String(ordenCompraConfig.id_previsita   || ''));
-
-      if (archivoPdf) {
-        formData.append('pdf_oc', archivoPdf);
-      } else {
-        formData.append('id_orden_compra', String(ordenCompraIdActivo));
-      }
-
-      requestOrdenCompra(formData, { multipart: true })
-        .done(function(resp) {
-          if (resp && resp.success) {
-            var resultado    = aplicarSugerenciasPdfOc(resp.data || {});
-            var advertencias = (resp.data && Array.isArray(resp.data.advertencias)) ? resp.data.advertencias : [];
-
-            advertencias.forEach(function(adv) {
-              toastr.warning(String(adv), 'Atención', { timeOut: 9000 });
-            });
-
-            var llenados   = resultado.llenados;
-            var conflictos = resultado.conflictos;
-
-            if (llenados > 0) {
-              var msg = llenados + ' campo' + (llenados !== 1 ? 's completados' : ' completado') + '.';
-              if (conflictos > 0) {
-                msg += ' ' + conflictos + ' campo' + (conflictos !== 1 ? 's' : '') +
-                       ' ya tenía' + (conflictos !== 1 ? 'n' : '') + ' valor y no se modificó' +
-                       (conflictos !== 1 ? 'ron' : '') + '.';
-              }
-              toastr.success(msg + ' Revisá antes de guardar.', 'Datos sugeridos', { timeOut: 7000 });
-              alertaOrdenCompra('alert-success', 'Datos sugeridos cargados.', 'Revisá y corregí antes de guardar la OC.');
-            } else if (advertencias.length === 0) {
-              toastr.info('No se detectaron datos adicionales en el PDF. Completá los campos manualmente.');
-            }
-            return;
-          }
-          var msgFail = (resp && resp.message) ? String(resp.message) : 'No se pudo analizar el PDF.';
-          toastr.warning(msgFail);
-          alertaOrdenCompra('alert-warning', 'Análisis sin resultados.', msgFail);
-        })
-        .fail(function() {
-          toastr.error('Error al conectar con el servidor al analizar el PDF.');
-        })
-        .always(function() {
-          $btn.prop('disabled', false);
-        });
-    }
-
-    function aplicarSugerenciasPdfOc(payload) {
-      var camposSugeridos = payload.campos_sugeridos || {};
-      var llenados = 0, conflictos = 0;
-
-      $.each(camposSugeridos, function(nombre, sugerencia) {
-        if (!sugerencia || sugerencia.valor == null) {
-          return;
-        }
-        var valor     = String(sugerencia.valor).trim();
-        var confianza = parseFloat(sugerencia.confianza || 0);
-        if (valor === '' || confianza < 0.50) {
-          return;
-        }
-
-        var $campo = $('#ordenCompraForm [name="' + nombre + '"]');
-        if (!$campo.length) {
-          return;
-        }
-
-        var valorActual = String($campo.attr('type') === 'checkbox'
-          ? ($campo.is(':checked') ? '1' : '0')
-          : ($campo.val() || '')).trim();
-
-        if (valorActual === '') {
-          setCampoOrdenCompra(nombre, valor);
-          llenados++;
-        } else if (valorActual !== valor) {
-          conflictos++;
-        }
-        // Si valorActual === valor → sin cambio, no contabilizar
-      });
-
-      return { llenados: llenados, conflictos: conflictos };
-    }
-    // --- Fin análisis PDF y precarga OC ---
-
     if (existeFormularioOrdenCompra()) {
-      $('#oc_btn_analizar_pdf').on('click', analizarPdfYPrecargarOc);
       $('#oc_btn_guardar').on('click', guardarOrdenCompra);
       $('#oc_btn_observar').on('click', function() {
         cambiarEstadoOrdenCompra('observada');
@@ -4620,11 +4524,11 @@ $("#v-visita-guardar").click(function(){
 // Generar presupuesto
 $("#v-visita-generar-presupuesto").click(function(){
 
-        var htmlPresupuestoBody = <?php echo json_encode($html ?? ''); ?>;
+        var htmlPresupuestoBody = <?php echo jsonParaJsSeguro($html ?? ''); ?>;
         console.log(htmlPresupuestoBody);
         htmlPresupuestoBody = htmlPresupuestoBody.replace(/v-materiales-visita/g, 'v-materiales-presupuesto');
 
-        var itemsSugeridoPresupuesto = <?php echo json_encode($items_options ?? ''); ?>;
+        var itemsSugeridoPresupuesto = <?php echo jsonParaJsSeguro($items_options ?? ''); ?>;
 
 
         var htmlPresupuesto  = '<div class="row" id="items_table_presupuesto">';
@@ -4698,7 +4602,7 @@ var totalTable = `
 
 
 
-    var cloneItems = <?php echo json_encode('<div id="visita_items_sugeridos" class="row justify-content-center align-items-center">
+    var cloneItems = <?php echo jsonParaJsSeguro('<div id="visita_items_sugeridos" class="row justify-content-center align-items-center">
     <div class="col-6 form-group mb-1 mt-1">
         <small class="v-visual-edit d-none"><label class="mb-0">Items sugeridos</label></small>
         <div class="input-group mb-0">
@@ -4915,25 +4819,17 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
 ?>
 <script>
   // JSON limpio y seguro para JS
-  window.tareasVisitadas = <?= json_encode(
-    $tareas_js,
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES |
-    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-  ); ?>;
+  window.tareasVisitadas = <?= jsonParaJsSeguro($tareas_js, '[]'); ?>;
 
   // Copia segura para usar en tu código
-  window.SEGUIMIENTO_BLOQUEO_COMERCIAL = <?= json_encode([
+  window.SEGUIMIENTO_BLOQUEO_COMERCIAL = <?= jsonParaJsSeguro([
     'bloqueado' => !empty($bloqueoEdicionComercial['bloqueado']),
     'estado' => (string)($bloqueoEdicionComercial['estado'] ?? ''),
     'estado_label' => (string)($bloqueoEdicionComercial['estado_label'] ?? ''),
     'mensaje' => (string)($bloqueoEdicionComercial['mensaje'] ?? ''),
-  ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+  ], '{}'); ?>;
 
-  window.SEGUIMIENTO_CLIENTES_SUGERIDOS = <?= json_encode(
-    $clientesSugeridosMap,
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES |
-    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-  ); ?>;
+  window.SEGUIMIENTO_CLIENTES_SUGERIDOS = <?= jsonParaJsSeguro($clientesSugeridosMap, '{}'); ?>;
 
   window.obtenerBloqueoEdicionComercialSeguimiento = function () {
     return window.SEGUIMIENTO_BLOQUEO_COMERCIAL || {};

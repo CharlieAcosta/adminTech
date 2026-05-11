@@ -7,7 +7,6 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../04-modelo/ordenCompraWorkflowModel.php';
-require_once __DIR__ . '/../04-modelo/pdfExtractorModel.php';
 
 if (!function_exists('leerEntradaOrdenCompraController')) {
     function leerEntradaOrdenCompraController(): array
@@ -269,67 +268,6 @@ $db = abrirConexionOrdenCompraController();
 
 try {
     switch ($accion) {
-        case 'analizar_pdf_orden_compra':
-            if (!perfilPuedeEditarOrdenCompra($usuario['perfil'])) {
-                responderOrdenCompraJson(false, 'El perfil no tiene permiso para analizar PDFs de OC.', [], [], 403);
-            }
-
-            $presupuesto = validarPresupuestoOrdenCompraController($db, $input, false);
-
-            // Determinar fuente del PDF: archivo temporal subido o PDF de OC existente
-            $archivoPdf = archivoPdfOrdenCompraController();
-            if ($archivoPdf !== null) {
-                // Archivo temporal: validar y usar tmp_name directamente (no se guarda)
-                try {
-                    $validadoAnalisis = validarArchivoPdfOrdenCompra($archivoPdf);
-                    $rutaPdfAnalisis  = $validadoAnalisis['tmp_name'];
-                } catch (\RuntimeException $e) {
-                    responderOrdenCompraJson(false, 'El PDF enviado no es válido.', [], ['pdf_oc' => $e->getMessage()], 422);
-                }
-            } else {
-                // OC existente con PDF guardado
-                $idOcAnalisis = isset($input['id_orden_compra']) ? (int) $input['id_orden_compra'] : 0;
-                if ($idOcAnalisis <= 0) {
-                    responderOrdenCompraJson(false, 'No hay PDF disponible para analizar. Seleccioná un archivo o usá una OC con PDF guardado.', [], [], 422);
-                }
-                $ocAnalisis = obtenerOrdenCompraPorIdEnConexion($db, $idOcAnalisis);
-                if (!$ocAnalisis || !ordenCompraTienePdf($ocAnalisis)) {
-                    responderOrdenCompraJson(false, 'La OC no tiene PDF guardado para analizar.', [], [], 422);
-                }
-                $rutaPdfAnalisis = rutaAbsolutaOrdenCompraPdfDesdeRelativa((string) $ocAnalisis['pdf_ruta_archivo']);
-                if (
-                    $rutaPdfAnalisis === ''
-                    || !file_exists($rutaPdfAnalisis)
-                    || !rutaOrdenCompraPdfDentroDeBase($rutaPdfAnalisis, (int) $ocAnalisis['id_presupuesto'])
-                ) {
-                    responderOrdenCompraJson(false, 'El PDF de la OC no está disponible en el servidor.', [], [], 404);
-                }
-            }
-
-            // Extraer texto del PDF
-            $extraccion   = extraerTextoPdfOrdenCompra($rutaPdfAnalisis);
-            $desdePdf     = $extraccion['texto'] !== ''
-                ? buscarPatronesOrdenCompraEnTexto($extraccion['texto'])
-                : [];
-            $desdeCircuito = obtenerDatosCircuitoParaOcAnalisis(
-                $db,
-                (int) $presupuesto['id_presupuesto'],
-                (int) ($presupuesto['id_previsita'] ?? 0)
-            );
-            $payloadAnalisis = construirPayloadSugerenciasOc($desdePdf, $desdeCircuito);
-
-            // Agregar advertencias de extracción (texto vacío, error de parser, etc.)
-            $payloadAnalisis['advertencias'] = array_values(array_unique(
-                array_merge($extraccion['advertencias'], $payloadAnalisis['advertencias'])
-            ));
-
-            $mensajeAnalisis = !empty($extraccion['advertencias'])
-                ? 'PDF analizado con advertencias.'
-                : 'PDF analizado. Revisá los datos sugeridos antes de guardar.';
-
-            responderOrdenCompraJson(true, $mensajeAnalisis, $payloadAnalisis);
-            break;
-
         case 'obtener_orden_compra':
             $presupuesto = validarPresupuestoOrdenCompraController($db, $input, false);
             $data = payloadOrdenCompraController($db, $presupuesto, $usuario['perfil']);
