@@ -3,6 +3,7 @@ include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/conectDB.php'; // conecta a la base de datos
 include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../04-modelo/presupuestoMailConfigModel.php';
+require_once __DIR__ . '/ordenCompraModel.php';
 
 
 
@@ -18,36 +19,18 @@ if( isset($_POST['via']) && $_POST['via']=='ajax'){
 
 
 // funcion para traer todos los usuarios activos
-function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){     
+function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = '', $origenFechaRango = 'previsita'){
    $db = conectDB();
    mysqli_set_charset($db, 'utf8mb4');
 
    $rangoTiempoNormalizado = strtoupper(trim((string)$rangoTiempo));
    $busqueda = trim((string)$busqueda);
-   $filtroTiempoSql = '';
-   switch ($rangoTiempoNormalizado) {
-      case '15_DIAS':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 15 DAY)";
-         break;
-      case '30_DIAS':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
-         break;
-      case 'TRIMESTRE':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)";
-         break;
-      case 'SEMESTRE':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)";
-         break;
-      case 'ANIO':
-         $filtroTiempoSql = " AND DATE(v.log_alta) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
-         break;
-      default:
-         $filtroTiempoSql = '';
-         break;
-   }
-
    $tieneTablaDocumentosEmitidos = tabla_existe($db, 'presupuesto_documentos_emitidos');
    $tieneTablaHistorialComercial = tabla_existe($db, 'presupuesto_historial_comercial');
+   $tieneTablaOrdenesCompra = function_exists('ordenCompraTablaTieneColumnasMinimas')
+      && ordenCompraTablaTieneColumnasMinimas($db);
+   $tieneCreatedAtHistorialComercial = $tieneTablaHistorialComercial
+      && columna_existe($db, 'presupuesto_historial_comercial', 'created_at');
    $tieneEstadoComercialSimulacion = columna_existe($db, 'presupuestos', 'estado_comercial_simulacion');
    $tieneEstadoComercialSmtp = columna_existe($db, 'presupuestos', 'estado_comercial_smtp');
 
@@ -72,6 +55,34 @@ function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){
    $selectDocumentosEmitidos = $tieneTablaDocumentosEmitidos
       ? 'COALESCE(pd.total_documentos_emitidos, 0) AS total_documentos_emitidos'
       : '0 AS total_documentos_emitidos';
+
+   $joinOrdenCompraActiva = $tieneTablaOrdenesCompra
+      ? "
+   LEFT JOIN ordenes_compra AS oc
+          ON oc.id_presupuesto = p.id_presupuesto
+         AND LOWER(TRIM(COALESCE(oc.estado, ''))) IN ('cargada', 'observada')
+         AND NOT EXISTS (
+            SELECT 1
+            FROM ordenes_compra AS oc2
+            WHERE oc2.id_presupuesto = oc.id_presupuesto
+              AND LOWER(TRIM(COALESCE(oc2.estado, ''))) IN ('cargada', 'observada')
+              AND (
+                    oc2.updated_at > oc.updated_at
+                 OR (oc2.updated_at = oc.updated_at AND oc2.created_at > oc.created_at)
+                 OR (oc2.updated_at = oc.updated_at AND oc2.created_at = oc.created_at AND oc2.id_orden_compra > oc.id_orden_compra)
+              )
+         )"
+      : '';
+
+   $selectOrdenCompraActiva = $tieneTablaOrdenesCompra
+      ? "
+      oc.id_orden_compra AS oc_id_orden_compra,
+      oc.numero_oc AS oc_numero_oc,
+      oc.estado AS oc_estado"
+      : "
+      NULL AS oc_id_orden_compra,
+      NULL AS oc_numero_oc,
+      NULL AS oc_estado";
 
    $joinHistorialComercial = $tieneTablaHistorialComercial
       ? "
@@ -102,6 +113,35 @@ function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){
       0 AS total_historial_comercial_smtp,
       '' AS ultimo_estado_historial_comercial_simulacion,
       '' AS ultimo_estado_historial_comercial_smtp";
+
+   $modoCircuitoActivo = normalizarModoEnvioMailPresupuestos(obtenerModoActivoCircuitoComercialPresupuestos());
+   $aliasHistorialActivo = $modoCircuitoActivo === 'smtp' ? 'hcm' : 'hcs';
+   $fechaFiltroSql = 'v.log_alta';
+   if ($origenFechaRango === 'aprobacion_oc' && $tieneCreatedAtHistorialComercial) {
+      $fechaFiltroSql = "COALESCE(CASE WHEN UPPER(TRIM({$aliasHistorialActivo}.estado_resultante)) = 'APROBADO' THEN {$aliasHistorialActivo}.created_at ELSE NULL END, v.log_alta)";
+   }
+
+   $filtroTiempoSql = '';
+   switch ($rangoTiempoNormalizado) {
+      case '15_DIAS':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 15 DAY)";
+         break;
+      case '30_DIAS':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+         break;
+      case 'TRIMESTRE':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)";
+         break;
+      case 'SEMESTRE':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)";
+         break;
+      case 'ANIO':
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
+         break;
+      default:
+         $filtroTiempoSql = '';
+         break;
+   }
 
    $exprBusquedaEstadoComercialSimulacion = $tieneEstadoComercialSimulacion
       ? "COALESCE(p.estado_comercial_simulacion, '')"
@@ -167,6 +207,7 @@ function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){
       {$selectEstadoComercialSimulacion},
       {$selectEstadoComercialSmtp},
       {$selectDocumentosEmitidos},
+      {$selectOrdenCompraActiva},
       {$selectHistorialComercial}
    FROM previsitas AS v
    LEFT JOIN (
@@ -179,6 +220,7 @@ function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = ''){
    LEFT JOIN presupuestos AS p ON p.id_presupuesto = up.max_id_presupuesto
    {$joinDocumentosEmitidos}
    {$joinHistorialComercial}
+   {$joinOrdenCompraActiva}
    ".$were."
    ".$orderBy."
    ;";

@@ -1,4 +1,6 @@
 <?php
+include_once __DIR__ . '/../../04-modelo/ordenCompraWorkflowModel.php';
+
 if(!isset($_SESSION["usuario"])){echo "<script type='text/javascript'>  window.location='../01-views/login.php'; </script>";} 
 $usuario = $_SESSION["usuario"];
 $usuarioIdNavbar = (int) ($usuario['id_usuario'] ?? 0);
@@ -17,6 +19,11 @@ if ($usuarioIdNavbar > 0 && function_exists('conectaDB')) {
         if ($resultadoNavbar && $usuarioActualizadoNavbar = mysqli_fetch_assoc($resultadoNavbar)) {
             $usuario = array_merge($usuario, $usuarioActualizadoNavbar);
             $_SESSION["usuario"] = array_merge($_SESSION["usuario"], $usuarioActualizadoNavbar);
+            // Si hay disfraz activo, la BD devuelve el perfil real — restaurar el perfil del disfraz
+            if (isset($_SESSION['disfraz']['activo']) && $_SESSION['disfraz']['activo']) {
+                $usuario['perfil'] = $_SESSION['disfraz']['perfil_disfraz'];
+                $_SESSION['usuario']['perfil'] = $_SESSION['disfraz']['perfil_disfraz'];
+            }
         }
 
         if ($resultadoNavbar) {
@@ -40,7 +47,11 @@ if (!function_exists('navbarTextoSeguro')) {
 }
 
 $nombreCompletoNavbar = trim(($usuario['nombres'] ?? '') . ' ' . ($usuario['apellidos'] ?? ''));
-$perfilNavbar = $usuario['perfil'] ?? '';
+$disfrazNavbarActivo  = isset($_SESSION['disfraz']['activo']) && $_SESSION['disfraz']['activo'];
+$perfilNavbar         = $disfrazNavbarActivo
+    ? ($_SESSION['disfraz']['perfil_original'] ?? ($usuario['perfil'] ?? ''))
+    : ($usuario['perfil'] ?? '');
+$perfilDisfrazNavbar  = $disfrazNavbarActivo ? ($_SESSION['disfraz']['perfil_disfraz'] ?? '') : null;
 $perfil = $usuario['perfil'];
 
 // Arrays de perfiles que se usan en el panel para controlar la visualización
@@ -51,6 +62,11 @@ $presupuestos = array('Super Administrador','Administrador','Administrativo','T�
 $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico Administrativo');
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
+$ocPendientesSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? contarOrdenesCompraPendientes() : 0;
+$mostrarSeguimientoNavbar = in_array($perfil, $presupuestos, true)
+    && (!perfilPuedeAccederSoloOrdenCompra($perfil) || $ocPendientesSeguimientoNavbar > 0);
+$tituloSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
+$iconoSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? 'fa-solid fa-file-invoice' : 'fa-solid fa-warehouse';
 ?>
 <script>
   window.ACTIVE_USER_ID = <?= $usuarioIdNavbar ?>;
@@ -100,10 +116,10 @@ $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Adm
         </li>
         <?php } ?>
 
-        <?php if (in_array($perfil, $presupuestos)){ ?>
+        <?php if ($mostrarSeguimientoNavbar){ ?>
         <li class="nav-item">
-            <a href="../01-views/seguimiento_de_obra_listado.php" class="nav-link custom-button bg-success" data-toggle="tooltip" title="Seguimiento de obra">
-                <i class="fa-solid fa-warehouse"></i>
+            <a href="../01-views/seguimiento_de_obra_listado.php" class="nav-link custom-button bg-success" data-toggle="tooltip" title="<?php echo $tituloSeguimientoNavbar; ?>">
+                <i class="<?php echo $iconoSeguimientoNavbar; ?>"></i>
             </a>
         </li>
         <?php } ?>
@@ -140,6 +156,13 @@ $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Adm
         </li>
         <?php } ?>
 
+        <?php if ($perfil === 'Super Administrador'): ?>
+        <li class="nav-item">
+            <a href="../01-views/auditoria_configuracion.php" class="nav-link custom-button bg-dark" data-toggle="tooltip" title="Super Administrador">
+                <i class="fas fa-user-shield"></i>
+            </a>
+        </li>
+        <?php endif; ?>
 
     </ul>
 
@@ -153,7 +176,22 @@ $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Adm
         <li class="nav-item mr-1 mt-2 mb-1 v-li-he">
             <span class="nombre-completo"><?php echo navbarTextoSeguro($nombreCompletoNavbar); ?></span>
             <small class="perfil-usuario"><?php echo navbarTextoSeguro($perfilNavbar); ?></small>
+            <?php if ($disfrazNavbarActivo && $perfilDisfrazNavbar): ?>
+            <small style="color:#ff6b6b;font-weight:700;display:block;line-height:1.2;">
+                Disfrazado como: <?php echo navbarTextoSeguro($perfilDisfrazNavbar); ?>
+            </small>
+            <?php endif; ?>
         </li>
+        <?php if ($disfrazNavbarActivo): ?>
+        <li class="nav-item">
+            <form method="POST" action="../03-controller/disfrazController.php" style="margin:0;display:inline;">
+                <input type="hidden" name="accion" value="quitar">
+                <button type="submit" class="nav-link btn btn-link p-0" style="color:#ff6b6b;" data-toggle="tooltip" title="Quitar disfraz">
+                    <i class="fas fa-user-slash fa-2x"></i>
+                </button>
+            </form>
+        </li>
+        <?php endif; ?>
         <li class="nav-item">
             <a href="../03-controller/logout.php" class="nav-link" data-toggle="tooltip" title="Cerrar sesión">
                 <i class="fas fa-sign-out-alt fa-2x"></i>
