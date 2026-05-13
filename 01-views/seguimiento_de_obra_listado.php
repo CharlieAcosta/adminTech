@@ -640,6 +640,7 @@ $estadosOrdenCompraRapidos = array(
     const nuevaTabla = inicializarDataTableSeguimiento();
     tablaSeguimiento = nuevaTabla;
     window.tablaSeguimientoObra = nuevaTabla;
+    inicializarTooltipsSeguimientoListado();
     vincularEventosTablaSeguimiento(nuevaTabla);
     vincularBusquedaInputSeguimiento(nuevaTabla);
     mostrarAyudaBusquedaGlobalSeguimiento(todosUsaBusquedaGlobalSeguimiento());
@@ -692,7 +693,32 @@ $estadosOrdenCompraRapidos = array(
 
     $('#current_table_wrapper .dt-buttons').remove();
     tabla.buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+    inicializarTooltipsSeguimientoListado();
+    tabla.on('draw.dt', function () {
+      inicializarTooltipsSeguimientoListado();
+    });
+
     return tabla;
+  }
+
+  function inicializarTooltipsSeguimientoListado() {
+    if (!$.fn.tooltip) {
+      return;
+    }
+
+    const $items = $('#current_table').find('[data-toggle="tooltip"]');
+    if (!$items.length) {
+      return;
+    }
+
+    $items.tooltip('dispose');
+    $items.tooltip({
+      container: 'body',
+      trigger: 'hover',
+      boundary: 'window',
+      animation: false,
+      template: '<div class="tooltip" role="tooltip" style="pointer-events:none;"><div class="arrow"></div><div class="tooltip-inner"></div></div>'
+    });
   }
 
   function vincularEventosTablaSeguimiento(tabla) {
