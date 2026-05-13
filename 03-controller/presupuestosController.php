@@ -1,8 +1,13 @@
 <?php  
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestosModel.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
+include_once '../04-modelo/ordenCompraWorkflowModel.php';
 //////// function poblarDatableAll(columnas de la base, php o ajax, filtro){  
 
 if (!function_exists('escapeHtmlSeguimientoListado')) {
@@ -17,6 +22,44 @@ if (!function_exists('construirBadgeEstadoSeguimientoListado')) {
     {
         return '<span class="badge badge-pill estado-chip ' . escapeHtmlSeguimientoListado($badgeClass) . '">'
             . escapeHtmlSeguimientoListado($label)
+            . '</span>';
+    }
+}
+
+if (!function_exists('construirBadgeOrdenCompraSeguimientoListado')) {
+    function construirBadgeOrdenCompraSeguimientoListado(array $estadoOrdenCompra, ?string $perfil = null): string
+    {
+        $estado = (string)($estadoOrdenCompra['estado'] ?? 'no_habilitada');
+        $label = (string)($estadoOrdenCompra['estado_label'] ?? etiquetaEstadoOrdenCompra($estado));
+        $numeroOc = trim((string)($estadoOrdenCompra['numero_oc'] ?? ''));
+        $badgeClass = (string)($estadoOrdenCompra['badge_class'] ?? badgeClassEstadoOrdenCompra($estado));
+        $lineaPrincipal = $numeroOc !== '' ? ('OC ' . $numeroOc) : 'OC';
+        $habilitada = !empty($estadoOrdenCompra['habilitada']);
+        $puedeEditar = perfilPuedeEditarOrdenCompra($perfil);
+        $soloLectura = perfilSoloPuedeVerOrdenCompra($perfil);
+
+        if ($estado === 'no_habilitada') {
+            return '<span class="text-muted small" data-oc-estado="no_habilitada">No habilitada</span>';
+        }
+
+        if ($estado === 'pendiente' && $numeroOc === '') {
+            return '<span class="badge estado-chip ' . escapeHtmlSeguimientoListado($badgeClass) . ' d-inline-flex flex-column align-items-center oc-estado-badge"'
+                . ' data-oc-estado="' . escapeHtmlSeguimientoListado($estado) . '"'
+                . ' data-oc-habilitada="' . ($habilitada ? '1' : '0') . '"'
+                . ' data-oc-puede-editar="' . ($puedeEditar ? '1' : '0') . '"'
+                . ' data-oc-solo-lectura="' . ($soloLectura ? '1' : '0') . '">'
+                . '<span>OC</span>'
+                . '<span>' . escapeHtmlSeguimientoListado($label) . '</span>'
+                . '</span>';
+        }
+
+        return '<span class="badge estado-chip ' . escapeHtmlSeguimientoListado($badgeClass) . ' d-inline-flex flex-column align-items-center oc-estado-badge"'
+            . ' data-oc-estado="' . escapeHtmlSeguimientoListado($estado) . '"'
+            . ' data-oc-habilitada="' . ($habilitada ? '1' : '0') . '"'
+            . ' data-oc-puede-editar="' . ($puedeEditar ? '1' : '0') . '"'
+            . ' data-oc-solo-lectura="' . ($soloLectura ? '1' : '0') . '">'
+            . '<span>' . escapeHtmlSeguimientoListado($lineaPrincipal) . '</span>'
+            . '<span>' . escapeHtmlSeguimientoListado($label) . '</span>'
             . '</span>';
     }
 }
@@ -319,9 +362,18 @@ if (!function_exists('resolverDescripcionSeguimientoListado')) {
     }
 }
 
-function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiempo = '30_dias', $busqueda = '', $estadoVisitaFiltro = '', $estadoPresupuestoFiltro = ''){     
+function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiempo = '30_dias', $busqueda = '', $estadoVisitaFiltro = '', $estadoPresupuestoFiltro = '', $estadoOrdenCompraFiltro = ''){
 
-   $all_registros = modGetAllRegistros($filtro, $rangoTiempo, $busqueda); 		
+   $esBandejaOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
+   $estadoOrdenCompraFiltroNormalizado = normalizarFiltroEstadoOrdenCompraSeguimiento($estadoOrdenCompraFiltro);
+   if ($esBandejaOrdenCompraAdministrativa) {
+      $estadoVisitaFiltro = '';
+      $estadoPresupuestoFiltro = '';
+      $estadoOrdenCompraFiltroNormalizado = normalizarFiltroEstadoOrdenCompraAdministrativo($estadoOrdenCompraFiltro);
+   }
+
+   $origenFechaRango = $esBandejaOrdenCompraAdministrativa ? 'aprobacion_oc' : 'previsita';
+   $all_registros = modGetAllRegistros($filtro, $rangoTiempo, $busqueda, $origenFechaRango);
    $modoCircuitoActivo = obtenerModoActivoCircuitoComercialPresupuestos();
    $estadoVisitaFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoVisitaFiltro);
    $estadoPresupuestoFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoPresupuestoFiltro);
@@ -349,6 +401,11 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 
 		  $presupuestoHtml = '';
 		  $estadoVisiblePresupuestoNormalizado = '';
+		  $estadoOrdenCompraCalculado = resolverEstadoOrdenCompraCalculado(null);
+		  $ordenCompraHtml = construirBadgeOrdenCompraSeguimientoListado(
+              $estadoOrdenCompraCalculado,
+              $perfil
+          );
 		  $mostrarIconoDocumentosEmitidos = false;
 		  $mostrarIconoHistorialPresupuesto = false;
 		  $editarBloqueadoComercial = false;
@@ -369,6 +426,13 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
             $totalHistorialComercialActivo = $modoCircuitoActivo === 'smtp'
                 ? (int)($value_all_registros['total_historial_comercial_smtp'] ?? 0)
                 : (int)($value_all_registros['total_historial_comercial_simulacion'] ?? 0);
+            $ordenCompraActiva = !empty($value_all_registros['oc_id_orden_compra'])
+                ? [
+                    'id_orden_compra' => (int)$value_all_registros['oc_id_orden_compra'],
+                    'numero_oc' => (string)($value_all_registros['oc_numero_oc'] ?? ''),
+                    'estado' => (string)($value_all_registros['oc_estado'] ?? 'cargada'),
+                ]
+                : null;
 
             $presupuestoActual = [
                 'estado' => $estadoPresupuesto,
@@ -384,6 +448,8 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
                 $presupuestoActual,
                 $modoCircuitoActivo
             );
+            $estadoOrdenCompraCalculado = resolverEstadoOrdenCompraCalculado($estadoComercialActivo, $ordenCompraActiva);
+            $ordenCompraHtml = construirBadgeOrdenCompraSeguimientoListado($estadoOrdenCompraCalculado, $perfil);
 
             if ($estadoPresupuesto === null || $estadoPresupuesto === '') {
                 $presupuestoVisual = resolverBadgeEstadoPresupuestoSeguimientoListado('PENDIENTE');
@@ -404,6 +470,20 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
             $presupuestoHtml = $presupuestoVisual['html'];
             $estadoVisiblePresupuestoNormalizado = $presupuestoVisual['normalizado'];
 		  }
+
+          if ($esBandejaOrdenCompraAdministrativa) {
+            if (empty($estadoOrdenCompraCalculado['habilitada'])) {
+                continue;
+            }
+
+            if (!estadoOrdenCompraCoincideConFiltroAdministrativo($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
+                continue;
+            }
+          } elseif ($estadoOrdenCompraFiltroNormalizado !== '') {
+            if (!estadoOrdenCompraCoincideConFiltroSeguimiento($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
+                continue;
+            }
+          }
 
           if ($estadoVisitaFiltro !== '' && $estadoVisitaVisual['normalizado'] !== $estadoVisitaFiltro) {
             continue;
@@ -555,11 +635,23 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 		  	}
 		  }
 
-		  // Presupuesto + Orden de compra (por ahora OC sigue vacía)
-          $filas .= '<td class="text-center align-middle">'.$presupuestoHtml.'</td><td class="text-center align-middle"></td>'; //para relleno en el caso de datos futuros
+		  // Presupuesto + Orden de compra
+          $filas .= '<td class="text-center align-middle">'.$presupuestoHtml.'</td><td class="text-center align-middle">'.$ordenCompraHtml.'</td>';
 
 			// acciones				
 			$filas .= '<td class="text-left pl-3" style="white-space: nowrap;">';
+
+			if (perfilPuedeAccederSoloOrdenCompra($perfil)) {
+				if (perfilPuedeAccederSeguimientoOrdenCompra($perfil, $estadoOrdenCompraCalculado)) {
+					$filas .= '<i class="v-icon-accion p-1 fas fa-file-invoice-dollar"
+								data-accion="orden_compra_seguimiento"
+								data-toggle="tooltip"
+								title="Gestionar orden de compra"></i>';
+				}
+				$filas .= '</td>';
+				$filas .='</tr>';
+				continue;
+			}
 
 			$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye"
 						data-accion="visual"
@@ -568,7 +660,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 						data-toggle="tooltip"
 						title="'.htmlspecialchars($editarBloqueadoComercial ? $editarBloqueadoTooltip : 'Visualizar', ENT_QUOTES, 'UTF-8').'"></i>';
 
-			if (!$editarBloqueadoComercial && !$editarBloqueadoVisita) {
+			if (!$editarBloqueadoComercial && !$editarBloqueadoVisita && perfilPuedeVerSeguimientoCompletoOrdenCompra($perfil)) {
 				$filas .= '<i class="v-icon-accion p-1 fas fa-edit"
 							data-accion="editar"
 							data-bloqueo-comercial="0"
@@ -633,7 +725,8 @@ if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
         $_POST['tiempo'] ?? '30_dias',
         $_POST['busqueda'] ?? '',
         $_POST['estado_visita'] ?? '',
-        $_POST['estado_presupuesto'] ?? ''
+        $_POST['estado_presupuesto'] ?? '',
+        $_POST['estado_oc'] ?? ''
     );
 }
 

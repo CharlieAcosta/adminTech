@@ -381,13 +381,15 @@ function habilitarAccionOrdenCompraHistorialPresupuesto(response) {
     return idPresupuesto > 0 && estadoActual === 'APROBADO';
 }
 
-function construirHtmlAccionOrdenCompraHistorialPresupuesto(conSeparador = false) {
+function construirHtmlAccionOrdenCompraHistorialPresupuesto(idPrevisita, idPresupuesto, conSeparador = false) {
     return `
         <span class="d-inline-flex align-items-center ${conSeparador ? 'ml-3' : ''}">
             ${conSeparador ? '<span class="text-muted mr-3">|</span>' : ''}
             <span
                 class="v-accion-orden-compra font-weight-bold text-success"
                 data-accion="orden_compra_presupuesto"
+                data-id="${escapeHtmlDocumentoEmitido(idPrevisita || '')}"
+                data-id-presupuesto="${escapeHtmlDocumentoEmitido(idPresupuesto || '')}"
                 title="Orden de compra"
                 style="cursor:pointer;"
             >
@@ -395,6 +397,40 @@ function construirHtmlAccionOrdenCompraHistorialPresupuesto(conSeparador = false
             </span>
         </span>
     `;
+}
+
+function abrirAcordeonOrdenCompraSeguimiento(idPrevisita) {
+    const idSeguimiento = Number(idPrevisita || 0) || 0;
+    const hashOrdenCompra = '#collapse4_OC';
+
+    if (!idSeguimiento) {
+        if (window.Swal && typeof Swal.fire === 'function') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Orden de compra',
+                text: 'No se pudo identificar el seguimiento asociado a la OC.',
+                confirmButtonText: 'OK'
+            });
+        } else {
+            window.alert('No se pudo identificar el seguimiento asociado a la OC.');
+        }
+        return;
+    }
+
+    if ($(hashOrdenCompra).length) {
+        $('#modalHistorialPresupuesto').modal('hide');
+        $('.collapse.show').not(hashOrdenCompra).collapse('hide');
+        $(hashOrdenCompra).collapse('show');
+        setTimeout(function() {
+            const $destino = $(hashOrdenCompra);
+            if ($destino.length) {
+                $('html, body').animate({ scrollTop: Math.max($destino.offset().top - 90, 0) }, 300);
+            }
+        }, 250);
+        return;
+    }
+
+    window.location.href = 'seguimiento_form.php?acci=e&id=' + encodeURIComponent(idSeguimiento) + '&oc=1' + hashOrdenCompra;
 }
 
 function construirHtmlHistorialPresupuesto(response) {
@@ -412,7 +448,7 @@ function construirHtmlHistorialPresupuesto(response) {
         idPresupuesto
     );
     const accionOrdenCompraHtml = habilitarAccionOrdenCompraHistorialPresupuesto(response)
-        ? construirHtmlAccionOrdenCompraHistorialPresupuesto(Boolean(accionesContactoHtml))
+        ? construirHtmlAccionOrdenCompraHistorialPresupuesto(idPrevisita, idPresupuesto, Boolean(accionesContactoHtml))
         : '';
     const bloqueAccionesHtml = (accionesEstadoHtml || accionesContactoHtml || accionOrdenCompraHtml) ? `
         <div class="mb-3 pb-2 border-bottom">
@@ -657,6 +693,12 @@ function actualizarEstadoPresupuestoListado(idPrevisita, estado) {
         const tabla = $('#current_table').DataTable();
         tabla.row($fila).invalidate('dom');
         tabla.draw(false);
+    }
+}
+
+function recargarListadoSeguimientoDespuesDeCambioComercial() {
+    if (typeof recargarTablaSeguimientoPorTiempo === 'function') {
+        recargarTablaSeguimientoPorTiempo();
     }
 }
 
@@ -1210,6 +1252,7 @@ function presupuestoAcciones(elemento){
                             }
 
                             actualizarEstadoPresupuestoListado(idPrevisitaEstado, response.estado_actual || '');
+                            recargarListadoSeguimientoDespuesDeCambioComercial();
                             cargarHistorialPresupuesto(idPrevisitaEstado);
 
                             if (typeof mostrarMensajeConfirmable === 'function') {
@@ -1458,23 +1501,15 @@ function presupuestoAcciones(elemento){
             break;
 
             case 'orden_compra_presupuesto':
-                if (typeof mostrarMensajeConfirmable === 'function') {
-                    mostrarMensajeConfirmable(
-                        'El circuito de orden de compra todavia esta en desarrollo.',
-                        'AD',
-                        'ORDEN DE COMPRA',
-                        'OK'
-                    );
-                } else if (window.Swal && typeof Swal.fire === 'function') {
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Orden de compra',
-                        text: 'El circuito de orden de compra todavia esta en desarrollo.',
-                        confirmButtonText: 'OK'
-                    });
-                } else {
-                    window.alert('El circuito de orden de compra todavia esta en desarrollo.');
-                }
+                var idPrevisitaOrdenCompraPresupuesto = Number(
+                    $(elemento).data('id') || $('#modalHistorialPresupuesto').data('id') || 0
+                );
+                abrirAcordeonOrdenCompraSeguimiento(idPrevisitaOrdenCompraPresupuesto);
+            break;
+
+            case 'orden_compra_seguimiento':
+                var idOrdenCompraSeguimiento = $(elemento).closest('tr').data('id');
+                window.location.href='seguimiento_form.php?acci=e&id='+idOrdenCompraSeguimiento+'&oc=1#collapse4_OC';
             break;
 
             case 'pdf': // generar pdf del usuario

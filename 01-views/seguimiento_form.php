@@ -13,11 +13,31 @@ include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
+include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
 include_once '../04-modelo/previsitaDocumentosModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/optionsByIndex.php'; //ordena array por el indice indicado
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
+
+if (!function_exists('jsonParaJsSeguro')) {
+  function jsonParaJsSeguro($valor, string $fallback = '""'): string
+  {
+    $json = json_encode(
+      $valor,
+      JSON_UNESCAPED_UNICODE
+      | JSON_UNESCAPED_SLASHES
+      | JSON_INVALID_UTF8_SUBSTITUTE
+      | JSON_HEX_TAG
+      | JSON_HEX_APOS
+      | JSON_HEX_AMP
+      | JSON_HEX_QUOT
+    );
+
+    return $json !== false ? $json : $fallback;
+  }
+}
+
 
 // =========================
 // Permisos por perfil (UI)
@@ -35,6 +55,14 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
   $mostrarVistaDetallada = true;
 }
 
+$puedeVerSeguimientoCompleto = perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion);
+$puedeEditarOrdenCompra = perfilPuedeEditarOrdenCompra($perfilSesion);
+$ordenCompraSoloLectura = perfilSoloPuedeVerOrdenCompra($perfilSesion) || !$puedeEditarOrdenCompra;
+$aperturaExclusivaOrdenCompra = isset($_GET['oc']) && $_GET['oc'] === '1';
+$estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado(null);
+$accesoSeguimientoPermitido = $puedeVerSeguimientoCompleto;
+$mostrarBloquesTecnicosSeguimiento = $puedeVerSeguimientoCompleto;
+$mostrarBloqueOrdenCompraSeguimiento = false;
 
 $id=""; $visualiza=""; $pdf=""; $visualiza_prevista ="";
 $visualizacionSolicitada = false;
@@ -89,15 +117,16 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
     $visita_card = 'card-danger'; $items_options = "";
     $presupuesto_card = 'card-danger'; 
     $orden_compra_card = 'card-danger';
+    $orden_compra_show = $aperturaExclusivaOrdenCompra ? 'show' : '';
     $presupuesto_display = 'd-none';
 
-    if (!empty($workflowPrevisita['habilita_visita'])) {$previsita_show = "";} else {$previsita_show = "show";}
+    if (!empty($workflowPrevisita['habilita_visita'])) {$previsita_show = "";} else {$previsita_show = $aperturaExclusivaOrdenCompra ? "" : "show";}
     
     if (!empty($workflowPrevisita['habilita_visita'])) {
         $itemNumber = 0;
 
         //$itemNota = SelectAllDB('visita_notas', 'id_visita', '=', arrayPrintValue('', $datos, 'id_previsita', ''), $callType = 'php');
-        $visita_show = "show"; //muestra el accordion de visita abierto
+        $visita_show = $aperturaExclusivaOrdenCompra ? "" : "show"; //muestra el accordion de visita abierto
         $previsita_buttons = 'd-none'; // quita los botones de previsita para evitar guardado o modificación de datos
         $items_db = SelectAllDB('materiales', 'estado_material', '=', "'Activo'", $callType = 'php');
         $items_options = arrayToOptions($items_db, 'Seleccione un ítem', 'id_material', 'id_material', '|', 'producto', 'unidad_venta', 'rendimiento', 'unidad_rendimiento', null, null);
@@ -319,6 +348,12 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
               }
               if ($presupuesto_generado['presupuesto']) {
                 //muestra el accordión de presupuesto generado abierto
+                $modoCircuitoOrdenCompra = obtenerModoActivoCircuitoComercialPresupuestos();
+                $estadoComercialOrdenCompra = obtenerEstadoComercialActivoDesdePresupuesto(
+                  $presupuestoGenerado,
+                  $modoCircuitoOrdenCompra
+                );
+                $estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado($estadoComercialOrdenCompra);
                 $presupuestoIntervinoResumen = obtenerResumenIntervencionesPresupuesto(
                   (int)$datos['id_previsita'],
                   isset($presupuestoGenerado['id_presupuesto']) ? (int)$presupuestoGenerado['id_presupuesto'] : null
@@ -326,13 +361,17 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
                 $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
                 $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
                 $presupuesto_card = 'card-success';
-                $presupuesto_show = 'show';
+                $presupuesto_show = $aperturaExclusivaOrdenCompra ? '' : 'show';
                 $visita_show = '';
                 $presupuesto_display = '';
               } else {
-                $visita_show = 'show';
+                $visita_show = $aperturaExclusivaOrdenCompra ? '' : 'show';
                 $presupuesto_show = '';
               }
+              $accesoSeguimientoPermitido = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
+              $mostrarBloquesTecnicosSeguimiento = $accesoSeguimientoPermitido && $puedeVerSeguimientoCompleto;
+              $mostrarBloqueOrdenCompraSeguimiento = $accesoSeguimientoPermitido
+                && ($mostrarBloquesTecnicosSeguimiento || !empty($estadoOrdenCompraSeguimiento['habilitada']));
         // END PRESUPUESTO GENERADO 
 
       }
@@ -345,9 +384,13 @@ $permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visual
 $permiteEditarDocumentosPrevisita = ($visualizacionSolicitada === false && $pdf === '');
 $mostrarGuardarSoloDocumentosPrevisita = ($permiteEditarDocumentosPrevisita && !$permiteEditarPrevisitaCompleta && !empty($datos['id_previsita']));
 $previsita_buttons = $permiteEditarPrevisitaCompleta ? 'd-flex' : 'd-none';
-$documentosPrevisitaJson = json_encode($documentosPrevisita, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-if ($documentosPrevisitaJson === false) {
-  $documentosPrevisitaJson = '[]';
+$documentosPrevisitaJson = jsonParaJsSeguro($documentosPrevisita, '[]');
+
+if ($aperturaExclusivaOrdenCompra) {
+  $previsita_show = '';
+  $visita_show = '';
+  $presupuesto_show = '';
+  $orden_compra_show = 'show';
 }
 
 function intervinientes_names($b_array){
@@ -804,7 +847,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
 ?>
 <script>
-  const presupuestoGenerado = <?php echo json_encode((bool)($presupuestoGenerado ?? false)); ?>;
+  const presupuestoGenerado = <?php echo jsonParaJsSeguro((bool)($presupuestoGenerado ?? false), 'false'); ?>;
 </script>
 
 <!DOCTYPE html>
@@ -951,6 +994,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 <section class="content">
 <div class="container-fluid">
 
+<?php if (!$accesoSeguimientoPermitido): ?>
+  <div class="alert alert-warning">
+    <strong>Acceso no disponible.</strong>
+    El circuito de Orden de Compra se habilita cuando el presupuesto queda aprobado o cuando existe una OC asociada.
+  </div>
+<?php endif; ?>
+
+<?php if ($mostrarBloquesTecnicosSeguimiento): ?>
 <form id="currentForm"  class="form" enctype="multipart/form-data">
 <?php if (!empty($bloqueoEdicionComercial['bloqueado'])): ?>
   <div class="alert alert-warning">
@@ -1359,8 +1410,9 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </div>
 <!-- end accordion -->
 </form>
+<?php endif; ?>
 
-<?php if (isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
+<?php if ($mostrarBloquesTecnicosSeguimiento && isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
   <!-- start accordion visita -->
   <div class="accordion" id="accordionVisita">
     <div class="card <?php echo $visita_card; ?> accordion_2">
@@ -1586,7 +1638,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 </select>
 
 <!-- /accordion presupuesto -->
-<?php if (!empty($presupuestoGenerado)): ?>
+<?php if ($mostrarBloquesTecnicosSeguimiento && !empty($presupuestoGenerado)): ?>
   <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
     <div class="card <?php echo $presupuesto_card; ?> accordion_3">
       <div class="card-header" id="headingPresupuesto">
@@ -1631,7 +1683,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
 
 <!-- start accordion 4 - Orden de compra -->
-<div class="accordion d-none" id="accordionExample4">
+<?php if ($mostrarBloqueOrdenCompraSeguimiento): ?>
+<?php
+  $idPresupuestoOrdenCompra = (int)($presupuestoGenerado['id_presupuesto'] ?? 0);
+  $idPrevisitaOrdenCompra = (int)($datos['id_previsita'] ?? 0);
+  $ordenCompraPuedeEditarInicial = $puedeEditarOrdenCompra && !empty($estadoOrdenCompraSeguimiento['habilitada']);
+  $ordenCompraCamposDisabledInicial = $ordenCompraPuedeEditarInicial ? '' : ' disabled';
+  $ordenCompraMostrarGuardarInicial = $ordenCompraPuedeEditarInicial && (($estadoOrdenCompraSeguimiento['estado'] ?? '') === 'pendiente');
+?>
+<div class="accordion" id="accordionExample4">
   <div class="card <?php echo $orden_compra_card; ?> accordion 4">
     <div class="card-header" id="heading4">
       <h2 class="mb-0">
@@ -1646,15 +1706,427 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
       </h2>
     </div>
 
-    <div id="collapse4_OC" class="collapse <?php echo !isset($cliente_datos['0']['id_cliente']) ? '' : ''; ?>" 
+    <div id="collapse4_OC" class="collapse <?php echo $orden_compra_show; ?>"
          aria-labelledby="heading4" 
          data-parent="#accordionExample4">
       <div class="card-body">
-        EN DESARROLLO
+        <div id="oc_estado_alert" class="alert alert-info">
+          <strong>Consultando Orden de compra...</strong>
+          <span class="d-block">Se estan obteniendo los datos administrativos disponibles.</span>
+        </div>
+
+        <form id="ordenCompraForm" class="orden-compra-form" enctype="multipart/form-data" novalidate>
+          <input type="hidden" id="oc_id_presupuesto" name="id_presupuesto" value="<?php echo $idPresupuestoOrdenCompra; ?>">
+          <input type="hidden" id="oc_id_previsita" name="id_previsita" value="<?php echo $idPrevisitaOrdenCompra; ?>">
+          <input type="hidden" id="oc_id_orden_compra" name="id_orden_compra" value="">
+
+          <!-- 1. Documentación OC / PDF respaldatorio -->
+          <div class="card card-info mb-3" id="oc_seccion_pdf">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">
+                <i class="fas fa-file-pdf mr-2"></i>Documentación OC
+              </h5>
+            </div>
+            <div class="card-body">
+
+              <!-- Aviso sin PDF (para perfiles con permiso de carga) -->
+              <div id="oc_pdf_sin_pdf" class="alert alert-warning<?php echo $ordenCompraPuedeEditarInicial ? '' : ' d-none'; ?>">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>PDF obligatorio para guardar la OC.</strong>
+                <span class="d-block mt-1">Cargue primero el PDF de la Orden de Compra. El documento respaldatorio es obligatorio para guardar la OC.</span>
+              </div>
+
+              <!-- Tarjeta PDF existente (visible cuando hay PDF cargado) -->
+              <div id="oc_pdf_existente" class="mb-3 d-none">
+                <div class="d-flex align-items-center p-3 border rounded bg-light">
+                  <i class="fas fa-file-pdf fa-2x text-danger mr-3 flex-shrink-0"></i>
+                  <div class="flex-grow-1" style="min-width:0;">
+                    <strong class="d-block text-truncate" id="oc_pdf_nombre_archivo"></strong>
+                    <small class="text-muted" id="oc_pdf_tamano_archivo"></small>
+                    <span class="badge badge-success ml-2">Guardado</span>
+                  </div>
+                  <a href="#" id="oc_pdf_btn_descargar" class="btn btn-sm btn-outline-primary ml-3 flex-shrink-0" target="_blank" rel="noopener">
+                    <i class="fas fa-download mr-1"></i>Ver / Descargar
+                  </a>
+                </div>
+              </div>
+
+              <!-- Placeholder solo lectura (cuando no hay permiso de carga ni PDF cargado) -->
+              <div id="oc_pdf_info_readonly" class="text-muted small<?php echo $ordenCompraPuedeEditarInicial ? ' d-none' : ''; ?>">
+                <i class="fas fa-info-circle mr-1 text-info"></i>
+                El PDF de la OC se mostrará aquí cuando esté disponible.
+              </div>
+
+              <!-- Zona de carga (solo perfiles con permiso) -->
+              <div id="oc_pdf_upload_group" class="<?php echo $ordenCompraPuedeEditarInicial ? '' : 'd-none'; ?>">
+                <input type="file" class="d-none oc-field" id="oc_pdf_oc" name="pdf_oc" accept="application/pdf,.pdf">
+
+                <div class="border rounded bg-light p-3 text-center text-muted mb-2"
+                     id="ocPdfDropzone" role="button" tabindex="0"
+                     style="border: 2px dashed #c7d2dc !important; cursor: pointer; transition: background .15s, border-color .15s;">
+                  <i class="fas fa-file-pdf fa-2x mb-2 text-danger"></i>
+                  <div><strong>Arrastrá el PDF aquí</strong> o hacé click para seleccionar.</div>
+                  <small class="d-block mt-1">Solo PDF. Máximo 5 MB.</small>
+                </div>
+
+                <!-- Preview del archivo seleccionado antes de guardar -->
+                <div id="oc_pdf_preview" class="d-none mb-2">
+                  <div class="d-flex align-items-center p-2 border rounded bg-white">
+                    <i class="fas fa-file-pdf text-danger mr-2 flex-shrink-0"></i>
+                    <span id="oc_pdf_preview_nombre" class="flex-grow-1 text-truncate small"></span>
+                    <span id="oc_pdf_preview_tamano" class="text-muted small mr-2 flex-shrink-0"></span>
+                    <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" id="oc_pdf_quitar" title="Quitar selección">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                  <small id="oc_pdf_preview_error" class="text-danger d-none d-block mt-1"></small>
+                </div>
+
+                <small class="form-text text-muted" id="oc_pdf_hint"></small>
+
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 2. Datos principales -->
+          <div class="card card-info mb-3">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">Datos principales</h5>
+            </div>
+            <div class="card-body">
+            <div class="form-row">
+              <div class="form-group col-md-3">
+                <label for="oc_numero_oc">N&uacute;mero de OC <span class="text-danger">*</span></label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-file-invoice text-success"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_numero_oc" name="numero_oc" maxlength="100" autocomplete="off" placeholder="N&uacute;mero de OC"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_fecha_emision">Fecha de emision <span class="text-danger">*</span></label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-calendar-alt text-success"></i></span>
+                  </div>
+                  <input type="date" class="form-control oc-field" id="oc_fecha_emision" name="fecha_emision"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_proveedor">Proveedor</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-building text-success"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_proveedor" name="proveedor" maxlength="150" autocomplete="off" placeholder="Proveedor"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_moneda">Moneda <span class="text-danger">*</span></label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-dollar-sign text-success"></i></span>
+                  </div>
+                  <select class="form-control oc-field" id="oc_moneda" name="moneda"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                    <option value="ARS">ARS</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="oc_monto_neto">Monto neto sin IVA</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-coins text-success"></i></span>
+                  </div>
+                  <input type="number" step="0.01" min="0" class="form-control oc-field" id="oc_monto_neto" name="monto_neto" placeholder="0.00"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_total">Total</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-calculator text-success"></i></span>
+                  </div>
+                  <input type="number" step="0.01" min="0" class="form-control oc-field" id="oc_total" name="total" placeholder="0.00"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_iva_incluido" name="iva_incluido" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_iva_incluido">IVA incluido</label>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <div class="card card-info mb-3">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">Condiciones comerciales</h5>
+            </div>
+            <div class="card-body">
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label for="oc_condicion_pago">Condicion de pago</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-credit-card text-success"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_condicion_pago" name="condicion_pago" rows="2" placeholder="Condicion de pago"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_anticipo_tipo">Tipo de anticipo</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-hand-holding-usd text-success"></i></span>
+                  </div>
+                  <select class="form-control oc-field" id="oc_anticipo_tipo" name="anticipo_tipo"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                    <option value="">Sin informar</option>
+                    <option value="porcentaje">Porcentaje</option>
+                    <option value="monto">Monto</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_anticipo_valor">Valor anticipo</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-percentage text-success"></i></span>
+                  </div>
+                  <input type="number" step="0.01" min="0" class="form-control oc-field" id="oc_anticipo_valor" name="anticipo_valor" placeholder="0.00"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-3 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_requiere_anticipo" name="requiere_anticipo" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_requiere_anticipo">Requiere anticipo</label>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_condicion_saldo">Condicion del saldo</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-tasks text-success"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_condicion_saldo" name="condicion_saldo" rows="2" placeholder="Condicion del saldo"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+              <div class="form-group col-md-5">
+                <label for="oc_observaciones_comerciales">Observaciones comerciales</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-comment-dollar text-success"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_observaciones_comerciales" name="observaciones_comerciales" rows="2" placeholder="Observaciones comerciales"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <div class="card card-info mb-3">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">Entrega / prestacion</h5>
+            </div>
+            <div class="card-body">
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label for="oc_direccion_entrega">Direccion o destino informado</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-map-marker-alt text-success"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_direccion_entrega" name="direccion_entrega" rows="2" placeholder="Direccion o destino"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_sucursal_planta_sede">Sucursal / planta / sede</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-industry text-success"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_sucursal_planta_sede" name="sucursal_planta_sede" maxlength="255" autocomplete="off" placeholder="Sucursal / planta"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_fecha_entrega_prevista">Fecha prevista</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-calendar-day text-success"></i></span>
+                  </div>
+                  <input type="date" class="form-control oc-field" id="oc_fecha_entrega_prevista" name="fecha_entrega_prevista"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_sitio">Contacto en sitio</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-user text-success"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_contacto_sitio" name="contacto_sitio" maxlength="255" autocomplete="off" placeholder="Contacto en sitio"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_sitio_email">Email de contacto</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-envelope text-success"></i></span>
+                  </div>
+                  <input type="email" class="form-control oc-field" id="oc_contacto_sitio_email" name="contacto_sitio_email" maxlength="255" autocomplete="off" placeholder="email@dominio.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_sitio_telefono">Telefono de contacto</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-phone text-success"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_contacto_sitio_telefono" name="contacto_sitio_telefono" maxlength="100" autocomplete="off" placeholder="Telefono"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <div class="card card-info mb-3">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">Facturacion</h5>
+            </div>
+            <div class="card-body">
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label for="oc_email_facturacion">Email de facturacion</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-at text-success"></i></span>
+                  </div>
+                  <input type="email" class="form-control oc-field" id="oc_email_facturacion" name="email_facturacion" maxlength="255" autocomplete="off" placeholder="facturacion@dominio.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_area_facturacion">Persona o area de facturacion</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-user-tie text-success"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_area_facturacion" name="area_facturacion" maxlength="255" autocomplete="off" placeholder="Area o contacto"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-2 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_factura_menciona_oc" name="factura_menciona_oc" value="1" checked<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_factura_menciona_oc">Menciona OC</label>
+                </div>
+              </div>
+              <div class="form-group col-md-2 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_factura_menciona_destino" name="factura_menciona_destino" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_factura_menciona_destino">Menciona destino</label>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="oc_instrucciones_facturacion">Instrucciones especiales de facturacion</label>
+              <div class="input-group mb-0">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fas fa-file-alt text-success"></i></span>
+                </div>
+                <textarea class="form-control oc-field" id="oc_instrucciones_facturacion" name="instrucciones_facturacion" rows="2" placeholder="Instrucciones para facturar"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <div class="card card-info mb-3">
+            <div class="card-header py-2">
+              <h5 class="card-title mb-0 text-white">Seguridad / ingreso</h5>
+            </div>
+            <div class="card-body">
+            <div class="form-row">
+              <div class="form-group col-md-3 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_requiere_documentacion_seguridad" name="requiere_documentacion_seguridad" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_requiere_documentacion_seguridad">Requiere documentacion</label>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_estado_documentacion_seguridad">Estado documentacion</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-shield-alt text-success"></i></span>
+                  </div>
+                  <select class="form-control oc-field" id="oc_estado_documentacion_seguridad" name="estado_documentacion_seguridad"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                    <option value="">Sin informar</option>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="presentada">Presentada</option>
+                    <option value="aprobada">Aprobada</option>
+                    <option value="observada">Observada</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group col-md-6">
+                <label for="oc_contactos_ingreso">Contactos para coordinar ingreso</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-address-book text-success"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_contactos_ingreso" name="contactos_ingreso" rows="2" placeholder="Contactos de ingreso"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="oc_observaciones_seguridad">Observaciones de seguridad</label>
+              <div class="input-group mb-0">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fas fa-exclamation-triangle text-success"></i></span>
+                </div>
+                <textarea class="form-control oc-field" id="oc_observaciones_seguridad" name="observaciones_seguridad" rows="2" placeholder="Observaciones de seguridad"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <div id="oc_form_errors" class="alert alert-danger d-none"></div>
+
+          <div class="d-flex justify-content-end flex-wrap">
+            <button type="button" id="oc_btn_observar" class="btn btn-warning mr-2 mb-2 d-none">
+              <i class="fa fa-exclamation-triangle mr-1"></i> Marcar observada
+            </button>
+            <button type="button" id="oc_btn_anular" class="btn btn-danger mr-2 mb-2 d-none">
+              <i class="fa fa-ban mr-1"></i> Anular OC
+            </button>
+            <button type="button" id="oc_btn_guardar" class="btn btn-success mb-2 <?php echo $ordenCompraMostrarGuardarInicial ? '' : 'd-none'; ?>">
+              <i class="fa fa-save mr-1"></i> Guardar OC
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
 </div>
+<script>
+  window.SEGUIMIENTO_ORDEN_COMPRA = <?php echo jsonParaJsSeguro([
+    'endpoint' => '../03-controller/ordenesCompraController.php',
+    'id_presupuesto' => $idPresupuestoOrdenCompra,
+    'id_previsita' => $idPrevisitaOrdenCompra,
+    'puede_editar' => $ordenCompraPuedeEditarInicial,
+    'solo_lectura' => $ordenCompraSoloLectura,
+    'oc_solicitada' => isset($_GET['oc']) && $_GET['oc'] === '1',
+    'estado_inicial' => $estadoOrdenCompraSeguimiento,
+  ], '{}'); ?>;
+</script>
+<?php endif; ?>
 <!-- end accordion 4 -->
 
 <!-- start accordion 5 - Pedido de materiales -->
@@ -1756,6 +2228,11 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     border: 1px solid #d9e0e7;
     border-radius: 0.6rem;
     background: #ffffff;
+  }
+
+  #ocPdfDropzone:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
   }
 
   .previsita-documentos-dropzone {
@@ -2502,8 +2979,9 @@ $(document).ready(function() {
   $('#cp_visita').on('blur', function () {
     console.log('Valor desenfocado:', $(this).val());
   });
-
-    navigator.clipboard.writeText('');
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText('').catch(function () {});
+    }
     // current funtions
     abm_detect();
     if( $(".v-id").val() != "" ){ 
@@ -2933,6 +3411,541 @@ $(document).ready(function() {
         toastr.info('La fecha de visita se actualizo a hoy al cambiar el estado.');
       }
     });
+
+    var ordenCompraConfig = window.SEGUIMIENTO_ORDEN_COMPRA || null;
+    var ordenCompraCargaInicialRealizada = false;
+    var ordenCompraIdActivo = 0;
+    var ordenCompraEstadoActual = '';
+    var ordenCompraPuedeEditar = false;
+    var ordenCompraPdfActual = null;
+    var ordenCompraCampos = [
+      'numero_oc',
+      'fecha_emision',
+      'proveedor',
+      'moneda',
+      'monto_neto',
+      'iva_incluido',
+      'total',
+      'condicion_pago',
+      'requiere_anticipo',
+      'anticipo_tipo',
+      'anticipo_valor',
+      'condicion_saldo',
+      'observaciones_comerciales',
+      'direccion_entrega',
+      'sucursal_planta_sede',
+      'fecha_entrega_prevista',
+      'contacto_sitio',
+      'contacto_sitio_email',
+      'contacto_sitio_telefono',
+      'email_facturacion',
+      'area_facturacion',
+      'factura_menciona_oc',
+      'factura_menciona_destino',
+      'instrucciones_facturacion',
+      'requiere_documentacion_seguridad',
+      'contactos_ingreso',
+      'estado_documentacion_seguridad',
+      'observaciones_seguridad'
+    ];
+
+    function existeFormularioOrdenCompra() {
+      return !!(ordenCompraConfig && $('#ordenCompraForm').length);
+    }
+
+    function presupuestoOrdenCompraValido() {
+      return parseInt(ordenCompraConfig.id_presupuesto, 10) > 0;
+    }
+
+    function alertaOrdenCompra(clase, titulo, mensaje) {
+      var $alert = $('#oc_estado_alert');
+      $alert
+        .removeClass('alert-info alert-warning alert-secondary alert-success alert-danger alert-dark')
+        .addClass(clase || 'alert-info')
+        .html('<strong>' + titulo + '</strong>' + (mensaje ? '<span class="d-block">' + mensaje + '</span>' : ''));
+    }
+
+    function limpiarErroresOrdenCompra() {
+      $('#oc_form_errors').addClass('d-none').empty();
+      $('#ordenCompraForm .is-invalid').removeClass('is-invalid');
+    }
+
+    function mostrarErroresOrdenCompra(errores) {
+      var mensajes = [];
+      $.each(errores || {}, function(campo, mensaje) {
+        mensajes.push(String(mensaje || 'Dato invalido.'));
+        $('#ordenCompraForm [name="' + campo + '"]').addClass('is-invalid');
+      });
+
+      if (!mensajes.length) {
+        return;
+      }
+
+      $('#oc_form_errors').removeClass('d-none').html(mensajes.join('<br>'));
+    }
+
+    function setCampoOrdenCompra(nombre, valor) {
+      var $campo = $('#ordenCompraForm [name="' + nombre + '"]');
+      if (!$campo.length) {
+        return;
+      }
+
+      if ($campo.attr('type') === 'checkbox') {
+        $campo.prop('checked', String(valor) === '1' || valor === 1 || valor === true);
+        return;
+      }
+
+      $campo.val(valor == null ? '' : valor);
+    }
+
+    function limpiarFormularioOrdenCompra() {
+      ordenCompraIdActivo = 0;
+      ordenCompraPdfActual = null;
+      $('#oc_id_orden_compra').val('');
+      $('#oc_pdf_oc').val('');
+      ordenCompraCampos.forEach(function(nombre) {
+        if (nombre === 'moneda') {
+          setCampoOrdenCompra(nombre, 'ARS');
+        } else if (nombre === 'factura_menciona_oc') {
+          setCampoOrdenCompra(nombre, 1);
+        } else {
+          setCampoOrdenCompra(nombre, '');
+        }
+      });
+    }
+
+    function cargarDatosFormularioOrdenCompra(ordenCompra) {
+      if (!ordenCompra) {
+        limpiarFormularioOrdenCompra();
+        return;
+      }
+
+      ordenCompraIdActivo = parseInt(ordenCompra.id_orden_compra || 0, 10) || 0;
+      ordenCompraPdfActual = {
+        nombre: ordenCompra.pdf_nombre_archivo || '',
+        ruta: ordenCompra.pdf_ruta_archivo || '',
+        mime: ordenCompra.pdf_mime_type || '',
+        tamano: parseInt(ordenCompra.pdf_tamano_bytes || 0, 10) || 0
+      };
+      $('#oc_pdf_oc').val('');
+      $('#oc_id_orden_compra').val(ordenCompraIdActivo || '');
+      ordenCompraCampos.forEach(function(nombre) {
+        setCampoOrdenCompra(nombre, ordenCompra[nombre]);
+      });
+    }
+
+    function ordenCompraTienePdfActual() {
+      return !!(ordenCompraPdfActual && ordenCompraPdfActual.nombre && ordenCompraPdfActual.ruta);
+    }
+
+    function formatearBytesOrdenCompra(bytes) {
+      bytes = parseInt(bytes || 0, 10) || 0;
+      if (bytes <= 0) {
+        return '';
+      }
+
+      var unidades = ['B', 'KB', 'MB', 'GB'];
+      var valor = bytes;
+      var indice = 0;
+      while (valor >= 1024 && indice < unidades.length - 1) {
+        valor = valor / 1024;
+        indice++;
+      }
+
+      var decimales = indice === 0 ? 0 : (valor >= 10 ? 1 : 2);
+      return valor.toFixed(decimales).replace('.', ',') + ' ' + unidades[indice];
+    }
+
+    function urlDescargaPdfOrdenCompra() {
+      if (ordenCompraIdActivo <= 0) {
+        return '#';
+      }
+
+      return ordenCompraConfig.endpoint
+        + '?accion=descargar_pdf_orden_compra&id_orden_compra='
+        + encodeURIComponent(ordenCompraIdActivo);
+    }
+
+    function renderPdfOrdenCompra() {
+      var puedeCargar = ordenCompraPuedeEditar && ['pendiente', 'cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
+      var tienePdf    = ordenCompraTienePdfActual();
+
+      // Tarjeta PDF existente
+      if (tienePdf) {
+        var tamano = formatearBytesOrdenCompra(ordenCompraPdfActual.tamano);
+        $('#oc_pdf_nombre_archivo').text(ordenCompraPdfActual.nombre || 'PDF de OC');
+        $('#oc_pdf_tamano_archivo').text(tamano || '');
+        $('#oc_pdf_btn_descargar').attr('href', urlDescargaPdfOrdenCompra());
+        $('#oc_pdf_existente').removeClass('d-none');
+        $('#oc_pdf_sin_pdf').addClass('d-none');
+      } else {
+        $('#oc_pdf_existente').addClass('d-none');
+        $('#oc_pdf_sin_pdf').toggleClass('d-none', !puedeCargar);
+      }
+
+      // Zona de carga: visible solo a perfiles con permiso
+      $('#oc_pdf_upload_group').toggleClass('d-none', !puedeCargar);
+
+      // Placeholder readonly: visible cuando no hay permiso ni PDF cargado
+      $('#oc_pdf_info_readonly').toggleClass('d-none', puedeCargar || tienePdf);
+
+      // Hint: reemplazar vs cargar nuevo
+      if (puedeCargar) {
+        $('#oc_pdf_hint').text(tienePdf
+          ? 'Seleccioná un nuevo PDF para reemplazar el actual.'
+          : '');
+      }
+    }
+
+    function setReadonlyOrdenCompra(readonly) {
+      $('#ordenCompraForm .oc-field').prop('disabled', !!readonly);
+    }
+
+    function actualizarBotonesOrdenCompra() {
+      var tieneOcActiva = ordenCompraIdActivo > 0 && ['cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
+      var puedeGuardar = ordenCompraPuedeEditar && ['pendiente', 'cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
+
+      $('#oc_btn_guardar').toggleClass('d-none', !puedeGuardar);
+      $('#oc_btn_observar').toggleClass('d-none', !(ordenCompraPuedeEditar && tieneOcActiva && ordenCompraEstadoActual !== 'observada'));
+      $('#oc_btn_anular').toggleClass('d-none', !(ordenCompraPuedeEditar && tieneOcActiva));
+    }
+
+    function renderOrdenCompraPayload(payload) {
+      payload = payload || {};
+      var estado = String(payload.estado_calculado || 'no_habilitada');
+      var label = String(payload.label_estado || estado);
+      var badgeClass = String(payload.badge_class || 'badge-secondary');
+      var ordenCompra = payload.orden_compra || null;
+
+      ordenCompraEstadoActual = estado;
+      ordenCompraPuedeEditar = payload.puede_editar === true;
+
+      if (ordenCompra) {
+        cargarDatosFormularioOrdenCompra(ordenCompra);
+      } else {
+        limpiarFormularioOrdenCompra();
+      }
+
+      if (estado === 'pendiente') {
+        alertaOrdenCompra('alert-warning', 'OC pendiente de carga.', payload.mensaje || 'El presupuesto esta aprobado y la carga administrativa queda habilitada.');
+      } else if (estado === 'no_habilitada') {
+        alertaOrdenCompra('alert-secondary', 'OC no habilitada.', payload.mensaje || 'La carga se habilita cuando el presupuesto queda aprobado.');
+      } else if (estado === 'anulada') {
+        alertaOrdenCompra('alert-dark', 'OC anulada.', 'La OC queda solo como referencia historica. Si el presupuesto sigue aprobado y no hay otra OC activa, vuelve a quedar pendiente.');
+      } else {
+        alertaOrdenCompra('alert-info', 'OC ' + label + '.', ordenCompra ? 'Numero: ' + (ordenCompra.numero_oc || 'sin informar') : '');
+      }
+
+      $('#oc_estado_alert strong').append(' <span class="badge ' + badgeClass + ' ml-2">' + label + '</span>');
+
+      if (!ordenCompraPuedeEditar && estado !== 'no_habilitada') {
+        $('#oc_estado_alert').append('<span class="d-block mt-1">Tu perfil puede consultar este bloque, pero no cargar ni editar la OC.</span>');
+      }
+
+      setReadonlyOrdenCompra(!ordenCompraPuedeEditar || ['no_habilitada', 'anulada'].indexOf(estado) !== -1);
+      renderPdfOrdenCompra();
+      actualizarBotonesOrdenCompra();
+      limpiarErroresOrdenCompra();
+    }
+
+    function renderEstadoInicialOrdenCompra() {
+      var estadoInicial = ordenCompraConfig.estado_inicial || {};
+      renderOrdenCompraPayload({
+        estado_calculado: estadoInicial.estado || 'no_habilitada',
+        label_estado: estadoInicial.estado_label || 'No habilitada',
+        badge_class: estadoInicial.badge_class || 'badge-secondary',
+        puede_editar: false,
+        orden_compra: null,
+        mensaje: estadoInicial.estado === 'pendiente'
+          ? 'El presupuesto esta aprobado y la carga administrativa queda habilitada.'
+          : 'La carga se habilita cuando el presupuesto queda aprobado.'
+      });
+    }
+
+    function requestOrdenCompra(datos, opciones) {
+      opciones = opciones || {};
+      var ajaxConfig = {
+        type: 'POST',
+        url: ordenCompraConfig.endpoint,
+        data: datos,
+        dataType: 'json'
+      };
+
+      if (opciones.multipart) {
+        ajaxConfig.processData = false;
+        ajaxConfig.contentType = false;
+      }
+
+      return $.ajax(ajaxConfig);
+    }
+
+    function obtenerOrdenCompra(force) {
+      if (!existeFormularioOrdenCompra()) {
+        return;
+      }
+
+      if (!presupuestoOrdenCompraValido()) {
+        renderEstadoInicialOrdenCompra();
+        return;
+      }
+
+      if (ordenCompraCargaInicialRealizada && !force) {
+        return;
+      }
+
+      ordenCompraCargaInicialRealizada = true;
+      alertaOrdenCompra('alert-info', 'Consultando Orden de compra...', 'Se estan obteniendo los datos administrativos disponibles.');
+
+      requestOrdenCompra({
+        accion: 'obtener_orden_compra',
+        id_presupuesto: ordenCompraConfig.id_presupuesto,
+        id_previsita: ordenCompraConfig.id_previsita
+      }).done(function(resp) {
+        if (resp && resp.success) {
+          renderOrdenCompraPayload(resp.data || {});
+          return;
+        }
+
+        alertaOrdenCompra('alert-danger', 'No se pudo consultar la OC.', (resp && resp.message) ? resp.message : 'Intenta nuevamente.');
+      }).fail(function() {
+        alertaOrdenCompra('alert-danger', 'No se pudo consultar la OC.', 'El servidor no respondio correctamente.');
+      });
+    }
+
+    function valorCampoOrdenCompra(nombre) {
+      var $campo = $('#ordenCompraForm [name="' + nombre + '"]');
+      if (!$campo.length) {
+        return '';
+      }
+
+      if ($campo.attr('type') === 'checkbox') {
+        return $campo.is(':checked') ? '1' : '0';
+      }
+
+      return String($campo.val() || '').trim();
+    }
+
+    function datosFormularioOrdenCompra(accion) {
+      var datos = {
+        accion: accion,
+        id_presupuesto: ordenCompraConfig.id_presupuesto,
+        id_previsita: ordenCompraConfig.id_previsita
+      };
+
+      if (accion === 'actualizar_orden_compra') {
+        datos.id_orden_compra = ordenCompraIdActivo;
+      }
+
+      ordenCompraCampos.forEach(function(nombre) {
+        datos[nombre] = valorCampoOrdenCompra(nombre);
+      });
+
+      return datos;
+    }
+
+    function formDataOrdenCompra(accion) {
+      var datos = datosFormularioOrdenCompra(accion);
+      var formData = new FormData();
+      $.each(datos, function(nombre, valor) {
+        formData.append(nombre, valor == null ? '' : valor);
+      });
+
+      var inputPdf = $('#oc_pdf_oc')[0];
+      if (inputPdf && inputPdf.files && inputPdf.files.length > 0) {
+        formData.append('pdf_oc', inputPdf.files[0]);
+      }
+
+      return formData;
+    }
+
+    function validarFormularioOrdenCompra() {
+      limpiarErroresOrdenCompra();
+      var errores = {};
+      var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!valorCampoOrdenCompra('numero_oc')) {
+        errores.numero_oc = 'El numero de OC es obligatorio.';
+      }
+      if (!valorCampoOrdenCompra('fecha_emision')) {
+        errores.fecha_emision = 'La fecha de emision es obligatoria.';
+      }
+      if (!valorCampoOrdenCompra('moneda')) {
+        errores.moneda = 'La moneda es obligatoria.';
+      }
+
+      var inputPdf = $('#oc_pdf_oc')[0];
+      var archivoPdf = inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
+      if (!ordenCompraTienePdfActual() && !archivoPdf) {
+        errores.pdf_oc = 'Debe adjuntar el PDF respaldatorio de la OC.';
+      }
+      if (archivoPdf) {
+        var nombrePdf = String(archivoPdf.name || '').toLowerCase();
+        if (!/\.pdf$/.test(nombrePdf)) {
+          errores.pdf_oc = 'El archivo debe tener extension .pdf.';
+        } else if (archivoPdf.size <= 0) {
+          errores.pdf_oc = 'El PDF no puede estar vacio.';
+        } else if (archivoPdf.size > 5 * 1024 * 1024) {
+          errores.pdf_oc = 'El PDF debe pesar como maximo 5 MB.';
+        }
+      }
+
+      ['monto_neto', 'total', 'anticipo_valor'].forEach(function(campo) {
+        var valor = valorCampoOrdenCompra(campo);
+        if (valor !== '' && (isNaN(Number(valor)) || Number(valor) < 0)) {
+          errores[campo] = 'El valor debe ser numerico y mayor o igual a cero.';
+        }
+      });
+
+      ['contacto_sitio_email', 'email_facturacion'].forEach(function(campo) {
+        var valor = valorCampoOrdenCompra(campo);
+        if (valor !== '' && !emailRegex.test(valor)) {
+          errores[campo] = 'El email informado no es valido.';
+        }
+      });
+
+      mostrarErroresOrdenCompra(errores);
+      return Object.keys(errores).length === 0;
+    }
+
+    function guardarOrdenCompra() {
+      if (!ordenCompraPuedeEditar || !validarFormularioOrdenCompra()) {
+        return;
+      }
+
+      var accion = ordenCompraIdActivo > 0 ? 'actualizar_orden_compra' : 'guardar_orden_compra';
+      var $boton = $('#oc_btn_guardar');
+      $boton.prop('disabled', true);
+
+      requestOrdenCompra(formDataOrdenCompra(accion), { multipart: true }).done(function(resp) {
+        if (resp && resp.success) {
+          toastr.success(resp.message || 'Orden de compra guardada.');
+          obtenerOrdenCompra(true);
+          return;
+        }
+
+        mostrarErroresOrdenCompra((resp && resp.errors) || {});
+        toastr.error((resp && resp.message) || 'No se pudo guardar la Orden de compra.');
+      }).fail(function() {
+        toastr.error('No se pudo guardar la Orden de compra.');
+      }).always(function() {
+        $boton.prop('disabled', false);
+      });
+    }
+
+    function cambiarEstadoOrdenCompra(estado) {
+      if (!ordenCompraPuedeEditar || ordenCompraIdActivo <= 0) {
+        return;
+      }
+
+      requestOrdenCompra({
+        accion: 'cambiar_estado_orden_compra',
+        id_orden_compra: ordenCompraIdActivo,
+        estado: estado
+      }).done(function(resp) {
+        if (resp && resp.success) {
+          toastr.success(resp.message || 'Estado de OC actualizado.');
+          obtenerOrdenCompra(true);
+          return;
+        }
+
+        toastr.error((resp && resp.message) || 'No se pudo cambiar el estado de la OC.');
+      }).fail(function() {
+        toastr.error('No se pudo cambiar el estado de la OC.');
+      });
+    }
+
+    // --- Dropzone PDF OC ---
+    (function() {
+      var $dropzone = $('#ocPdfDropzone');
+      var $input    = $('#oc_pdf_oc');
+      var $preview  = $('#oc_pdf_preview');
+      var $nombre   = $('#oc_pdf_preview_nombre');
+      var $tamano   = $('#oc_pdf_preview_tamano');
+      var $error    = $('#oc_pdf_preview_error');
+      var $quitar   = $('#oc_pdf_quitar');
+
+      function fmtBytes(b) {
+        if (!b || b <= 0) return '';
+        if (b < 1024) return b + ' B';
+        if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+        return (b / 1048576).toFixed(2) + ' MB';
+      }
+
+      function validarPdf(file) {
+        if (!/\.pdf$/i.test(file.name)) return 'El archivo debe tener extensión .pdf.';
+        if (file.size <= 0)            return 'El PDF no puede estar vacío.';
+        if (file.size > 5242880)       return 'El PDF no puede superar 5 MB.';
+        return null;
+      }
+
+      function mostrarPreview(file) {
+        var msg = validarPdf(file);
+        $nombre.text(file.name);
+        $tamano.text(fmtBytes(file.size));
+        $preview.removeClass('d-none');
+        msg ? $error.text(msg).removeClass('d-none') : $error.addClass('d-none').text('');
+      }
+
+      function limpiarPreview() {
+        try { $input.val(''); } catch(e) {}
+        $preview.addClass('d-none');
+        $error.addClass('d-none').text('');
+      }
+
+      $dropzone.on('click', function() { $input.trigger('click'); });
+
+      $dropzone.on('dragover dragenter', function(e) {
+        e.preventDefault();
+        $dropzone.css({ 'border-color': '#007bff', 'background-color': '#e8f4ff' });
+      });
+
+      $dropzone.on('dragleave', function() {
+        $dropzone.css({ 'border-color': '#c7d2dc', 'background-color': '' });
+      });
+
+      $dropzone.on('drop', function(e) {
+        e.preventDefault();
+        $dropzone.css({ 'border-color': '#c7d2dc', 'background-color': '' });
+        var files = e.originalEvent.dataTransfer.files;
+        if (files && files.length > 0) {
+          try {
+            var dt = new DataTransfer();
+            dt.items.add(files[0]);
+            $input[0].files = dt.files;
+          } catch(ex) {}
+          mostrarPreview(files[0]);
+        }
+      });
+
+      $input.on('change', function() {
+        if (this.files && this.files.length > 0) {
+          mostrarPreview(this.files[0]);
+        } else {
+          limpiarPreview();
+        }
+      });
+
+      $quitar.on('click', function() { limpiarPreview(); });
+    })();
+    // --- Fin Dropzone PDF OC ---
+
+    if (existeFormularioOrdenCompra()) {
+      $('#oc_btn_guardar').on('click', guardarOrdenCompra);
+      $('#oc_btn_observar').on('click', function() {
+        cambiarEstadoOrdenCompra('observada');
+      });
+      $('#oc_btn_anular').on('click', function() {
+        cambiarEstadoOrdenCompra('anulada');
+      });
+
+      if ($('#collapse4_OC').hasClass('show') || ordenCompraConfig.oc_solicitada) {
+        obtenerOrdenCompra(true);
+      } else {
+        $('#collapse4_OC').one('shown.bs.collapse', function() {
+          obtenerOrdenCompra(false);
+        });
+      }
+    }
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -3511,11 +4524,11 @@ $("#v-visita-guardar").click(function(){
 // Generar presupuesto
 $("#v-visita-generar-presupuesto").click(function(){
 
-        var htmlPresupuestoBody = <?php echo json_encode($html ?? ''); ?>;
+        var htmlPresupuestoBody = <?php echo jsonParaJsSeguro($html ?? ''); ?>;
         console.log(htmlPresupuestoBody);
         htmlPresupuestoBody = htmlPresupuestoBody.replace(/v-materiales-visita/g, 'v-materiales-presupuesto');
 
-        var itemsSugeridoPresupuesto = <?php echo json_encode($items_options ?? ''); ?>;
+        var itemsSugeridoPresupuesto = <?php echo jsonParaJsSeguro($items_options ?? ''); ?>;
 
 
         var htmlPresupuesto  = '<div class="row" id="items_table_presupuesto">';
@@ -3589,7 +4602,7 @@ var totalTable = `
 
 
 
-    var cloneItems = <?php echo json_encode('<div id="visita_items_sugeridos" class="row justify-content-center align-items-center">
+    var cloneItems = <?php echo jsonParaJsSeguro('<div id="visita_items_sugeridos" class="row justify-content-center align-items-center">
     <div class="col-6 form-group mb-1 mt-1">
         <small class="v-visual-edit d-none"><label class="mb-0">Items sugeridos</label></small>
         <div class="input-group mb-0">
@@ -3806,25 +4819,17 @@ $tareas_js = is_array($tareas_visitadas ?? null) ? array_values($tareas_visitada
 ?>
 <script>
   // JSON limpio y seguro para JS
-  window.tareasVisitadas = <?= json_encode(
-    $tareas_js,
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES |
-    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-  ); ?>;
+  window.tareasVisitadas = <?= jsonParaJsSeguro($tareas_js, '[]'); ?>;
 
   // Copia segura para usar en tu código
-  window.SEGUIMIENTO_BLOQUEO_COMERCIAL = <?= json_encode([
+  window.SEGUIMIENTO_BLOQUEO_COMERCIAL = <?= jsonParaJsSeguro([
     'bloqueado' => !empty($bloqueoEdicionComercial['bloqueado']),
     'estado' => (string)($bloqueoEdicionComercial['estado'] ?? ''),
     'estado_label' => (string)($bloqueoEdicionComercial['estado_label'] ?? ''),
     'mensaje' => (string)($bloqueoEdicionComercial['mensaje'] ?? ''),
-  ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+  ], '{}'); ?>;
 
-  window.SEGUIMIENTO_CLIENTES_SUGERIDOS = <?= json_encode(
-    $clientesSugeridosMap,
-    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES |
-    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-  ); ?>;
+  window.SEGUIMIENTO_CLIENTES_SUGERIDOS = <?= jsonParaJsSeguro($clientesSugeridosMap, '{}'); ?>;
 
   window.obtenerBloqueoEdicionComercialSeguimiento = function () {
     return window.SEGUIMIENTO_BLOQUEO_COMERCIAL || {};
