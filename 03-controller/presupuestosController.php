@@ -669,6 +669,16 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 							title="Editar"></i>';
 			}
 
+			if (
+				in_array(normalizarPerfilOrdenCompraSeguimiento($perfil), ['Super Administrador', 'Administrador'], true)
+				&& !empty($estadoOrdenCompraCalculado['habilitada'])
+			) {
+				$filas .= '<i class="v-icon-accion p-1 fas fa-file-invoice"
+							data-accion="orden_compra_seguimiento"
+							data-toggle="tooltip"
+							title="Ver / gestionar Orden de compra"></i>';
+			}
+
 			$filas .= '<i class="v-icon-accion p-1 fas fa-paperclip" 
 						style="pointer-events:none;opacity:.4;" 
 						data-accion="adjunto" 
