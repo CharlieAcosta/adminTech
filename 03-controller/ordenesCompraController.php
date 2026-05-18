@@ -313,7 +313,7 @@ try {
             }
 
             $datos = prepararDatosOrdenCompraController($input, $presupuesto, $usuario['id_usuario']);
-            $errores = validarDatosOrdenCompra($datos, true);
+            $errores = validarDatosOrdenCompra($datos, true, ordenCompraTablaTieneColumnasAdicionales($db));
             if (!empty($errores)) {
                 responderOrdenCompraJson(false, 'Hay datos de OC invalidos.', [], $errores, 422);
             }
@@ -375,7 +375,7 @@ try {
 
             $datos = prepararDatosOrdenCompraController($input, $presupuesto, $usuario['id_usuario'], $ordenCompraActual);
             $datos['estado'] = $ordenCompraActual['estado'];
-            $errores = validarDatosOrdenCompra($datos, false);
+            $errores = validarDatosOrdenCompra($datos, false, ordenCompraTablaTieneColumnasAdicionales($db));
             if (!empty($errores)) {
                 responderOrdenCompraJson(false, 'Hay datos de OC invalidos.', [], $errores, 422);
             }
