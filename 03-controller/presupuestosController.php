@@ -642,6 +642,20 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 			$filas .= '<td class="text-left pl-3" style="white-space: nowrap;">';
 
 			if (perfilPuedeAccederSoloOrdenCompra($perfil)) {
+				$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye"
+							data-accion="visual"
+							data-bloqueo-comercial="'.($editarBloqueadoComercial ? '1' : '0').'"
+							data-estado-bloqueo="'.htmlspecialchars(etiquetaEstadoComercialPresupuestoLock($editarBloqueadoEstado), ENT_QUOTES, 'UTF-8').'"
+							data-toggle="tooltip"
+							title="'.htmlspecialchars($editarBloqueadoComercial ? $editarBloqueadoTooltip : 'Visualizar', ENT_QUOTES, 'UTF-8').'"></i>';
+
+				$filas .= '<i class="v-icon-accion p-1 fas fa-edit"
+							data-accion="editar"
+							data-bloqueo-comercial="0"
+							data-estado-bloqueo=""
+							data-toggle="tooltip"
+							title="Editar"></i>';
+
 				if (perfilPuedeAccederSeguimientoOrdenCompra($perfil, $estadoOrdenCompraCalculado)) {
 					$filas .= '<i class="v-icon-accion p-1 fas fa-file-invoice-dollar"
 								data-accion="orden_compra_seguimiento"
