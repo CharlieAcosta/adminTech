@@ -53,45 +53,6 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/custom.css">
-  <style>
-    .panel-seguimiento-title {
-      display: flex;
-      align-items: center;
-      flex-wrap: nowrap;
-      min-width: 0;
-      gap: .5rem;
-    }
-
-    .panel-seguimiento-label {
-      flex: 0 1 auto;
-      min-width: 0;
-      white-space: nowrap;
-    }
-
-    .panel-seguimiento-badges {
-      display: inline-flex;
-      align-items: center;
-      flex-wrap: nowrap;
-      gap: .35rem;
-      min-width: 0;
-    }
-
-    .panel-seguimiento-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-      white-space: nowrap;
-      margin: 0 !important;
-      padding: .35em .5em;
-    }
-
-    @media (max-width: 575.98px) {
-      .panel-seguimiento-title {
-        flex-wrap: wrap;
-      }
-    }
-  </style>
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
 </head>
@@ -183,29 +144,26 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                   <span class="info-box-icon bg-success elevation-1"><i class="<?php echo $iconoModuloSeguimiento; ?>"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text panel-seguimiento-title">
-                      <span class="panel-seguimiento-label"><?php echo $tituloModuloSeguimiento; ?></span>
+                    <h3 class="info-box-text d-flex align-items-center flex-wrap"><?php echo $tituloModuloSeguimiento; ?>
                       
                       <?php if ($esPanelOrdenCompraAdministrativa){ ?>
                       <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> '.($ocPendientesSeguimiento === 1 ? 'OC pendiente' : 'OC pendientes').' </small></small>'; ?></span></small>
                       <?php } else { ?>
-                      <span class="panel-seguimiento-badges">
-                        <?php if ($ocPendientesSeguimiento > 0){ ?>
-                        <small><span class="right badge badge-warning panel-seguimiento-badge"><?php echo $ocPendientesSeguimiento.' OC Pend.'; ?></span></small>
-                        <?php } ?>
-
                         <?php if ($vencidas !== false && $vencidas['total'] > 0){ ?>
-                        <small><span class="right badge badge-danger panel-seguimiento-badge"><?php echo $vencidas['total'].' Venc.'; ?></span></small>
+                        <small><span class="right badge badge-danger ml-3 mt-2"><?php echo $vencidas['total'].'<small><small><br> Venc. </small></small>'; ?></span></small>
                         <?php } ?>
 
                         <?php if ($programadas !== false && $programadas['total'] > 0){ ?>
-                        <small><span class="right badge badge-info panel-seguimiento-badge"><?php echo $programadas['total'].' Prog.'; ?></span></small>
+                        <small><span class="right badge badge-info ml-2 mt-2"><?php echo $programadas['total'].'<small><small><br> Prog. </small></small>'; ?></span></small>
                         <?php } ?>
 
                         <?php if ($reprogramadas !== false && $reprogramadas['total'] > 0){ ?>
-                        <small><span class="right badge badge-primary panel-seguimiento-badge"><?php echo $reprogramadas['total'].' Repr.'; ?></span></small>
+                        <small><span class="right badge badge-primary ml-2 mt-2"><?php echo $reprogramadas['total'].'<small><small><br> Repr. </small></small>'; ?></span></small>
                         <?php } ?>
-                      </span>
+
+                        <?php if ($ocPendientesSeguimiento > 0){ ?>
+                        <small><span class="right badge badge-warning ml-2 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> OC Pend. </small></small>'; ?></span></small>
+                        <?php } ?>
                       <?php } ?>
                   </h3>  
                   </div>
