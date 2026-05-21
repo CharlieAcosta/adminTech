@@ -19,7 +19,7 @@ $rangoInicialSeguimiento = $esBandejaOrdenCompraAdministrativa
 $estadoOrdenCompraInicialSeguimiento = $esBandejaOrdenCompraAdministrativa ? 'pendientes' : '';
 $rangoInicialJsSeguimiento = strtoupper($rangoInicialSeguimiento);
 $tituloListadoSeguimiento = $esBandejaOrdenCompraAdministrativa
-    ? '&Oacute;rdenes de compra | Listado'
+    ? 'Previsita &amp; OC | Listado'
     : 'Seguimiento de obra | Listado';
 
 // poblarDatableAll(columnas de la tablas, php o ajax, filtro); [reference] 
@@ -225,13 +225,11 @@ $estadosOrdenCompraRapidos = array(
                     </div>
                   </div>
 
-                  <?php if (!$esBandejaOrdenCompraAdministrativa): ?>
                   <div class="seguimiento-toolbar-accion">
                     <button onclick="window.location.href='seguimiento_form.php'" type="button" class="btn btn-success">
                       <i class="fa fa-plus-circle"></i> Agregar
                     </button>
                   </div>
-                  <?php endif; ?>
                 </div>
               </div>
             </div>

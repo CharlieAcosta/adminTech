@@ -56,11 +56,13 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
 }
 
 $puedeVerSeguimientoCompleto = perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion);
+$esPerfilAdministrativoSeguimiento = perfilPuedeAccederSoloOrdenCompra($perfilSesion);
 $puedeEditarOrdenCompra = perfilPuedeEditarOrdenCompra($perfilSesion);
 $ordenCompraSoloLectura = perfilSoloPuedeVerOrdenCompra($perfilSesion) || !$puedeEditarOrdenCompra;
 $aperturaExclusivaOrdenCompra = isset($_GET['oc']) && $_GET['oc'] === '1';
 $estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado(null);
-$accesoSeguimientoPermitido = $puedeVerSeguimientoCompleto;
+$mostrarBloquePrevisitaSeguimiento = $puedeVerSeguimientoCompleto || $esPerfilAdministrativoSeguimiento;
+$accesoSeguimientoPermitido = $mostrarBloquePrevisitaSeguimiento;
 $mostrarBloquesTecnicosSeguimiento = $puedeVerSeguimientoCompleto;
 $mostrarBloqueOrdenCompraSeguimiento = false;
 
@@ -343,7 +345,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
               $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true);            
               $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
               $bloqueoEdicionComercial = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$datos["id_previsita"]);
-              if (!empty($bloqueoEdicionComercial['bloqueado']) || !empty($workflowPrevisita['bloquea_avance'])) {
+              if ((!empty($bloqueoEdicionComercial['bloqueado']) && !$esPerfilAdministrativoSeguimiento) || !empty($workflowPrevisita['bloquea_avance'])) {
                 $visualiza = "on";
               }
               if ($presupuesto_generado['presupuesto']) {
@@ -368,9 +370,10 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
                 $visita_show = $aperturaExclusivaOrdenCompra ? '' : 'show';
                 $presupuesto_show = '';
               }
-              $accesoSeguimientoPermitido = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
+              $accesoOrdenCompraSeguimiento = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
+              $accesoSeguimientoPermitido = $mostrarBloquePrevisitaSeguimiento || $accesoOrdenCompraSeguimiento;
               $mostrarBloquesTecnicosSeguimiento = $accesoSeguimientoPermitido && $puedeVerSeguimientoCompleto;
-              $mostrarBloqueOrdenCompraSeguimiento = $accesoSeguimientoPermitido
+              $mostrarBloqueOrdenCompraSeguimiento = $accesoOrdenCompraSeguimiento
                 && ($mostrarBloquesTecnicosSeguimiento || !empty($estadoOrdenCompraSeguimiento['habilitada']));
         // END PRESUPUESTO GENERADO 
 
@@ -380,7 +383,7 @@ if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
   $documentosPrevisita = listarDocumentosPrevisita((int)$datos['id_previsita'], $datos);
 }
 
-$permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visualiza === '' && $visualiza_prevista === '' && empty($bloqueoEdicionComercial['bloqueado']) && empty($workflowPrevisita['bloqueado']));
+$permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visualiza === '' && $visualiza_prevista === '' && (empty($bloqueoEdicionComercial['bloqueado']) || $esPerfilAdministrativoSeguimiento) && empty($workflowPrevisita['bloqueado']));
 $permiteEditarDocumentosPrevisita = ($visualizacionSolicitada === false && $pdf === '');
 $mostrarGuardarSoloDocumentosPrevisita = ($permiteEditarDocumentosPrevisita && !$permiteEditarPrevisitaCompleta && !empty($datos['id_previsita']));
 $previsita_buttons = $permiteEditarPrevisitaCompleta ? 'd-flex' : 'd-none';
@@ -1001,9 +1004,9 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   </div>
 <?php endif; ?>
 
-<?php if ($mostrarBloquesTecnicosSeguimiento): ?>
+<?php if ($mostrarBloquePrevisitaSeguimiento): ?>
 <form id="currentForm"  class="form" enctype="multipart/form-data">
-<?php if (!empty($bloqueoEdicionComercial['bloqueado'])): ?>
+<?php if (!empty($bloqueoEdicionComercial['bloqueado']) && !$esPerfilAdministrativoSeguimiento): ?>
   <div class="alert alert-warning">
     <strong>Edicion bloqueada.</strong>
     <?php echo htmlspecialchars($bloqueoEdicionComercial['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicionComercial['estado'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
