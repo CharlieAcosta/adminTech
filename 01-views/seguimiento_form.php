@@ -56,11 +56,13 @@ if (in_array($perfilSesion, $perfilesDetallado, true)) {
 }
 
 $puedeVerSeguimientoCompleto = perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion);
+$esPerfilAdministrativoSeguimiento = perfilPuedeAccederSoloOrdenCompra($perfilSesion);
 $puedeEditarOrdenCompra = perfilPuedeEditarOrdenCompra($perfilSesion);
 $ordenCompraSoloLectura = perfilSoloPuedeVerOrdenCompra($perfilSesion) || !$puedeEditarOrdenCompra;
 $aperturaExclusivaOrdenCompra = isset($_GET['oc']) && $_GET['oc'] === '1';
 $estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado(null);
-$accesoSeguimientoPermitido = $puedeVerSeguimientoCompleto;
+$mostrarBloquePrevisitaSeguimiento = $puedeVerSeguimientoCompleto || $esPerfilAdministrativoSeguimiento;
+$accesoSeguimientoPermitido = $mostrarBloquePrevisitaSeguimiento;
 $mostrarBloquesTecnicosSeguimiento = $puedeVerSeguimientoCompleto;
 $mostrarBloqueOrdenCompraSeguimiento = false;
 
@@ -343,7 +345,7 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
               $presupuesto_generado = obtenerPresupuestoPorPrevisita($datos["id_previsita"], true);            
               $presupuestoGenerado = $presupuesto_generado['presupuesto']; // Cambia a true para probar el otro caso
               $bloqueoEdicionComercial = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$datos["id_previsita"]);
-              if (!empty($bloqueoEdicionComercial['bloqueado']) || !empty($workflowPrevisita['bloquea_avance'])) {
+              if ((!empty($bloqueoEdicionComercial['bloqueado']) && !$esPerfilAdministrativoSeguimiento) || !empty($workflowPrevisita['bloquea_avance'])) {
                 $visualiza = "on";
               }
               if ($presupuesto_generado['presupuesto']) {
@@ -368,9 +370,10 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
                 $visita_show = $aperturaExclusivaOrdenCompra ? '' : 'show';
                 $presupuesto_show = '';
               }
-              $accesoSeguimientoPermitido = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
+              $accesoOrdenCompraSeguimiento = perfilPuedeAccederSeguimientoOrdenCompra($perfilSesion, $estadoOrdenCompraSeguimiento);
+              $accesoSeguimientoPermitido = $mostrarBloquePrevisitaSeguimiento || $accesoOrdenCompraSeguimiento;
               $mostrarBloquesTecnicosSeguimiento = $accesoSeguimientoPermitido && $puedeVerSeguimientoCompleto;
-              $mostrarBloqueOrdenCompraSeguimiento = $accesoSeguimientoPermitido
+              $mostrarBloqueOrdenCompraSeguimiento = $accesoOrdenCompraSeguimiento
                 && ($mostrarBloquesTecnicosSeguimiento || !empty($estadoOrdenCompraSeguimiento['habilitada']));
         // END PRESUPUESTO GENERADO 
 
@@ -380,7 +383,7 @@ if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
   $documentosPrevisita = listarDocumentosPrevisita((int)$datos['id_previsita'], $datos);
 }
 
-$permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visualiza === '' && $visualiza_prevista === '' && empty($bloqueoEdicionComercial['bloqueado']) && empty($workflowPrevisita['bloqueado']));
+$permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visualiza === '' && $visualiza_prevista === '' && (empty($bloqueoEdicionComercial['bloqueado']) || $esPerfilAdministrativoSeguimiento) && empty($workflowPrevisita['bloqueado']));
 $permiteEditarDocumentosPrevisita = ($visualizacionSolicitada === false && $pdf === '');
 $mostrarGuardarSoloDocumentosPrevisita = ($permiteEditarDocumentosPrevisita && !$permiteEditarPrevisitaCompleta && !empty($datos['id_previsita']));
 $previsita_buttons = $permiteEditarPrevisitaCompleta ? 'd-flex' : 'd-none';
@@ -1001,9 +1004,9 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   </div>
 <?php endif; ?>
 
-<?php if ($mostrarBloquesTecnicosSeguimiento): ?>
+<?php if ($mostrarBloquePrevisitaSeguimiento): ?>
 <form id="currentForm"  class="form" enctype="multipart/form-data">
-<?php if (!empty($bloqueoEdicionComercial['bloqueado'])): ?>
+<?php if (!empty($bloqueoEdicionComercial['bloqueado']) && !$esPerfilAdministrativoSeguimiento): ?>
   <div class="alert alert-warning">
     <strong>Edicion bloqueada.</strong>
     <?php echo htmlspecialchars($bloqueoEdicionComercial['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicionComercial['estado'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
@@ -1694,8 +1697,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 <div class="accordion" id="accordionExample4">
   <div class="card <?php echo $orden_compra_card; ?> accordion 4">
     <div class="card-header" id="heading4">
-      <h2 class="mb-0">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title" 
+      <h2 class="mb-0 d-flex align-items-center">
+        <button class="btn btn-link text-left text-white p-0 card-title flex-grow-1"
                 type="button" 
                 data-toggle="collapse" 
                 data-target="#collapse4_OC" 
@@ -1703,6 +1706,26 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 aria-controls="collapse4_OC">
           Orden de compra<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
         </button>
+        <span class="oc-header-actions">
+          <button type="button"
+                  id="oc_btn_guardar"
+                  class="oc-header-action <?php echo $ordenCompraMostrarGuardarInicial ? '' : 'd-none'; ?>"
+                  data-toggle="tooltip"
+                  data-placement="bottom"
+                  title="Guardar OC"
+                  aria-label="Guardar OC">
+            <i class="v-icon-accion fas fa-save" aria-hidden="true"></i>
+          </button>
+          <button type="button"
+                  id="oc_btn_volver"
+                  class="oc-header-action"
+                  data-toggle="tooltip"
+                  data-placement="bottom"
+                  title="Volver"
+                  aria-label="Volver">
+            <i class="v-icon-accion fas fa-arrow-left" aria-hidden="true"></i>
+          </button>
+        </span>
       </h2>
     </div>
 
@@ -1710,18 +1733,16 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
          aria-labelledby="heading4" 
          data-parent="#accordionExample4">
       <div class="card-body">
-        <div id="oc_estado_alert" class="alert alert-info">
-          <strong>Consultando Orden de compra...</strong>
-          <span class="d-block">Se estan obteniendo los datos administrativos disponibles.</span>
-        </div>
-
         <form id="ordenCompraForm" class="orden-compra-form" enctype="multipart/form-data" novalidate>
           <input type="hidden" id="oc_id_presupuesto" name="id_presupuesto" value="<?php echo $idPresupuestoOrdenCompra; ?>">
           <input type="hidden" id="oc_id_previsita" name="id_previsita" value="<?php echo $idPrevisitaOrdenCompra; ?>">
           <input type="hidden" id="oc_id_orden_compra" name="id_orden_compra" value="">
 
+          <div class="row oc-resumen-row">
+            <div class="col-lg-5 d-flex">
+
           <!-- 1. Documentación OC / PDF respaldatorio -->
-          <div class="card card-info mb-3" id="oc_seccion_pdf">
+          <div class="card card-info mb-3 w-100 oc-card-principal" id="oc_seccion_pdf">
             <div class="card-header py-2">
               <h5 class="card-title mb-0 text-white">
                 <i class="fas fa-file-pdf mr-2"></i>Documentación OC
@@ -1729,11 +1750,25 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             </div>
             <div class="card-body">
 
+              <div id="oc_estado_alert" class="alert alert-info oc-alert-card">
+                <div class="d-flex align-items-start">
+                  <span class="oc-alert-icon mr-2"><i class="fas fa-info-circle"></i></span>
+                  <div class="oc-alert-content">
+                    <strong>Consultando Orden de compra...</strong>
+                    <span class="d-block">Se estan obteniendo los datos administrativos disponibles.</span>
+                  </div>
+                </div>
+              </div>
+
               <!-- Aviso sin PDF (para perfiles con permiso de carga) -->
-              <div id="oc_pdf_sin_pdf" class="alert alert-warning<?php echo $ordenCompraPuedeEditarInicial ? '' : ' d-none'; ?>">
-                <i class="fas fa-exclamation-triangle mr-2"></i>
-                <strong>PDF obligatorio para guardar la OC.</strong>
-                <span class="d-block mt-1">Cargue primero el PDF de la Orden de Compra. El documento respaldatorio es obligatorio para guardar la OC.</span>
+              <div id="oc_pdf_sin_pdf" class="oc-alert-card oc-alert-card-warning<?php echo $ordenCompraPuedeEditarInicial ? '' : ' d-none'; ?>">
+                <div class="d-flex align-items-start">
+                  <span class="oc-alert-icon mr-2"><i class="fas fa-exclamation-triangle"></i></span>
+                  <div>
+                    <strong>PDF obligatorio para guardar la OC.</strong>
+                    <span class="d-block small mt-1">Cargue primero el PDF de la Orden de Compra. El documento respaldatorio es obligatorio para guardar la OC.</span>
+                  </div>
+                </div>
               </div>
 
               <!-- Tarjeta PDF existente (visible cuando hay PDF cargado) -->
@@ -1788,46 +1823,39 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
             </div>
           </div>
+            </div>
+            <div class="col-lg-7 d-flex">
 
           <!-- 2. Datos principales -->
-          <div class="card card-info mb-3">
+          <div class="card card-info mb-3 w-100 oc-card-principal oc-datos-principales-card oc-seccion-bloqueable">
             <div class="card-header py-2">
               <h5 class="card-title mb-0 text-white">Datos principales</h5>
             </div>
             <div class="card-body">
             <div class="form-row">
-              <div class="form-group col-md-3">
+              <div class="form-group col-sm-6 col-xl-3">
                 <label for="oc_numero_oc">N&uacute;mero de OC <span class="text-danger">*</span></label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-file-invoice text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-file-invoice oc-icon-requerido"></i></span>
                   </div>
                   <input type="text" class="form-control oc-field" id="oc_numero_oc" name="numero_oc" maxlength="100" autocomplete="off" placeholder="N&uacute;mero de OC"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-sm-6 col-xl-3">
                 <label for="oc_fecha_emision">Fecha de emision <span class="text-danger">*</span></label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-calendar-alt text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-calendar-alt oc-icon-requerido"></i></span>
                   </div>
                   <input type="date" class="form-control oc-field" id="oc_fecha_emision" name="fecha_emision"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-3">
-                <label for="oc_proveedor">Proveedor</label>
-                <div class="input-group mb-0">
-                  <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-building text-success"></i></span>
-                  </div>
-                  <input type="text" class="form-control oc-field" id="oc_proveedor" name="proveedor" maxlength="150" autocomplete="off" placeholder="Proveedor"<?php echo $ordenCompraCamposDisabledInicial; ?>>
-                </div>
-              </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-sm-4 col-xl-2">
                 <label for="oc_moneda">Moneda <span class="text-danger">*</span></label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-dollar-sign text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-dollar-sign oc-icon-requerido"></i></span>
                   </div>
                   <select class="form-control oc-field" id="oc_moneda" name="moneda"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                     <option value="ARS">ARS</option>
@@ -1836,28 +1864,57 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   </select>
                 </div>
               </div>
+              <div class="form-group col-sm-8 col-xl-4">
+                <label for="oc_proveedor">Proveedor</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-building oc-icon-requerido"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_proveedor" name="proveedor" maxlength="150" autocomplete="off" placeholder="Proveedor"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
             </div>
             <div class="form-row">
               <div class="form-group col-md-4">
+                <label for="oc_proveedor_nombre_fantasia">Nombre de fantas&iacute;a</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-store oc-icon-requerido"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_proveedor_nombre_fantasia" name="proveedor_nombre_fantasia" maxlength="150" autocomplete="off" placeholder="Nombre comercial"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-8">
+                <label for="oc_proveedor_direccion_fiscal">Direcci&oacute;n fiscal del proveedor</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-map-marked-alt oc-icon-opcional"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_proveedor_direccion_fiscal" name="proveedor_direccion_fiscal" rows="2" placeholder="Direcci&oacute;n fiscal"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-6">
                 <label for="oc_monto_neto">Monto neto sin IVA</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-coins text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-coins oc-icon-opcional"></i></span>
                   </div>
                   <input type="number" step="0.01" min="0" class="form-control oc-field" id="oc_monto_neto" name="monto_neto" placeholder="0.00"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-4">
+              <div class="form-group col-md-5">
                 <label for="oc_total">Total</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-calculator text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-calculator oc-icon-opcional"></i></span>
                   </div>
                   <input type="number" step="0.01" min="0" class="form-control oc-field" id="oc_total" name="total" placeholder="0.00"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-4 d-flex align-items-end">
-                <div class="custom-control custom-switch mb-2">
+              <div class="form-group col-md-2 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-iva-inline">
                   <input type="checkbox" class="custom-control-input oc-field" id="oc_iva_incluido" name="iva_incluido" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                   <label class="custom-control-label" for="oc_iva_incluido">IVA incluido</label>
                 </div>
@@ -1865,27 +1922,31 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             </div>
           </div>
           </div>
+            </div>
+          </div>
 
-          <div class="card card-info mb-3">
+          <div class="row oc-detalle-grid">
+            <div class="col-lg-6 d-flex">
+          <div class="card card-info mb-3 w-100 oc-card-principal oc-seccion-bloqueable">
             <div class="card-header py-2">
               <h5 class="card-title mb-0 text-white">Condiciones comerciales</h5>
             </div>
             <div class="card-body">
             <div class="form-row">
-              <div class="form-group col-md-6">
+              <div class="form-group col-md-12">
                 <label for="oc_condicion_pago">Condicion de pago</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-credit-card text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-credit-card oc-icon-opcional"></i></span>
                   </div>
                   <textarea class="form-control oc-field" id="oc_condicion_pago" name="condicion_pago" rows="2" placeholder="Condicion de pago"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
                 </div>
               </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-md-6">
                 <label for="oc_anticipo_tipo">Tipo de anticipo</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-hand-holding-usd text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-hand-holding-usd oc-icon-opcional"></i></span>
                   </div>
                   <select class="form-control oc-field" id="oc_anticipo_tipo" name="anticipo_tipo"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                     <option value="">Sin informar</option>
@@ -1894,19 +1955,19 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   </select>
                 </div>
               </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-md-6">
                 <label for="oc_anticipo_valor">Valor anticipo</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-percentage text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-percentage oc-icon-opcional"></i></span>
                   </div>
                   <input type="number" step="0.01" min="0" class="form-control oc-field" id="oc_anticipo_valor" name="anticipo_valor" placeholder="0.00"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group col-md-3 d-flex align-items-end">
-                <div class="custom-control custom-switch mb-2">
+              <div class="form-group col-md-4 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-switch-inline">
                   <input type="checkbox" class="custom-control-input oc-field" id="oc_requiere_anticipo" name="requiere_anticipo" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                   <label class="custom-control-label" for="oc_requiere_anticipo">Requiere anticipo</label>
                 </div>
@@ -1915,16 +1976,16 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 <label for="oc_condicion_saldo">Condicion del saldo</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-tasks text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-tasks oc-icon-opcional"></i></span>
                   </div>
                   <textarea class="form-control oc-field" id="oc_condicion_saldo" name="condicion_saldo" rows="2" placeholder="Condicion del saldo"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
                 </div>
               </div>
-              <div class="form-group col-md-5">
+              <div class="form-group col-md-4">
                 <label for="oc_observaciones_comerciales">Observaciones comerciales</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-comment-dollar text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-comment-dollar oc-icon-opcional"></i></span>
                   </div>
                   <textarea class="form-control oc-field" id="oc_observaciones_comerciales" name="observaciones_comerciales" rows="2" placeholder="Observaciones comerciales"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
                 </div>
@@ -1932,8 +1993,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             </div>
           </div>
           </div>
+            </div>
+            <div class="col-lg-6 d-flex">
 
-          <div class="card card-info mb-3">
+          <div class="card card-info mb-3 w-100 oc-card-principal oc-seccion-bloqueable">
             <div class="card-header py-2">
               <h5 class="card-title mb-0 text-white">Entrega / prestacion</h5>
             </div>
@@ -1943,36 +2006,50 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 <label for="oc_direccion_entrega">Direccion o destino informado</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-map-marker-alt text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-map-marker-alt oc-icon-opcional"></i></span>
                   </div>
                   <textarea class="form-control oc-field" id="oc_direccion_entrega" name="direccion_entrega" rows="2" placeholder="Direccion o destino"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
                 </div>
               </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-md-6">
+                <label for="oc_direccion_obra_alternativa">Otra direcci&oacute;n de obra</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-route oc-icon-opcional"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_direccion_obra_alternativa" name="direccion_obra_alternativa" rows="2" placeholder="Direcci&oacute;n alternativa"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-8">
                 <label for="oc_sucursal_planta_sede">Sucursal / planta / sede</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-industry text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-industry oc-icon-opcional"></i></span>
                   </div>
                   <input type="text" class="form-control oc-field" id="oc_sucursal_planta_sede" name="sucursal_planta_sede" maxlength="255" autocomplete="off" placeholder="Sucursal / planta"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-md-4">
                 <label for="oc_fecha_entrega_prevista">Fecha prevista</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-calendar-day text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-calendar-day oc-icon-opcional"></i></span>
                   </div>
                   <input type="date" class="form-control oc-field" id="oc_fecha_entrega_prevista" name="fecha_entrega_prevista"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group col-md-4">
+              <div class="col-12">
+                <div class="oc-subsection-label">Contacto principal en obra</div>
+              </div>
+              <div class="form-group col-md-5">
                 <label for="oc_contacto_sitio">Contacto en sitio</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-user text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-user oc-icon-opcional"></i></span>
                   </div>
                   <input type="text" class="form-control oc-field" id="oc_contacto_sitio" name="contacto_sitio" maxlength="255" autocomplete="off" placeholder="Contacto en sitio"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
@@ -1981,90 +2058,181 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 <label for="oc_contacto_sitio_email">Email de contacto</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-envelope text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-envelope oc-icon-opcional"></i></span>
                   </div>
                   <input type="email" class="form-control oc-field" id="oc_contacto_sitio_email" name="contacto_sitio_email" maxlength="255" autocomplete="off" placeholder="email@dominio.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-4">
+              <div class="form-group col-md-3">
                 <label for="oc_contacto_sitio_telefono">Telefono de contacto</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-phone text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-phone oc-icon-opcional"></i></span>
                   </div>
                   <input type="text" class="form-control oc-field" id="oc_contacto_sitio_telefono" name="contacto_sitio_telefono" maxlength="100" autocomplete="off" placeholder="Telefono"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
             </div>
+            <div class="form-row">
+              <div class="col-12">
+                <div class="oc-subsection-label">Contacto alternativo / mantenimiento</div>
+              </div>
+              <div class="form-group col-md-5">
+                <label for="oc_contacto_obra_mantenimiento">Otro contacto obra / mantenimiento</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-user-cog oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_contacto_obra_mantenimiento" name="contacto_obra_mantenimiento" maxlength="255" autocomplete="off" placeholder="Contacto adicional"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_obra_mantenimiento_email">Email contacto adicional</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-envelope-open-text oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="email" class="form-control oc-field" id="oc_contacto_obra_mantenimiento_email" name="contacto_obra_mantenimiento_email" maxlength="255" autocomplete="off" placeholder="email@dominio.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-3">
+                <label for="oc_contacto_obra_mantenimiento_telefono">Tel&eacute;fono contacto adicional</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-mobile-alt oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_contacto_obra_mantenimiento_telefono" name="contacto_obra_mantenimiento_telefono" maxlength="100" autocomplete="off" placeholder="Tel&eacute;fono"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+            </div>
           </div>
+          </div>
+            </div>
           </div>
 
-          <div class="card card-info mb-3">
+          <div class="row oc-detalle-grid">
+            <div class="col-lg-6 d-flex">
+          <div class="card card-info mb-3 w-100 oc-card-principal oc-seccion-bloqueable">
             <div class="card-header py-2">
-              <h5 class="card-title mb-0 text-white">Facturacion</h5>
+              <h5 class="card-title mb-0 text-white">Facturacion / compras</h5>
             </div>
             <div class="card-body">
             <div class="form-row">
-              <div class="form-group col-md-4">
+              <div class="form-group col-md-6">
                 <label for="oc_email_facturacion">Email de facturacion</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-at text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-at oc-icon-opcional"></i></span>
                   </div>
                   <input type="email" class="form-control oc-field" id="oc_email_facturacion" name="email_facturacion" maxlength="255" autocomplete="off" placeholder="facturacion@dominio.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-4">
+              <div class="form-group col-md-6">
                 <label for="oc_area_facturacion">Persona o area de facturacion</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-user-tie text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-user-tie oc-icon-opcional"></i></span>
                   </div>
                   <input type="text" class="form-control oc-field" id="oc_area_facturacion" name="area_facturacion" maxlength="255" autocomplete="off" placeholder="Area o contacto"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                 </div>
               </div>
-              <div class="form-group col-md-2 d-flex align-items-end">
-                <div class="custom-control custom-switch mb-2">
+              <div class="form-group col-md-6 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-switch-inline">
                   <input type="checkbox" class="custom-control-input oc-field" id="oc_factura_menciona_oc" name="factura_menciona_oc" value="1" checked<?php echo $ordenCompraCamposDisabledInicial; ?>>
                   <label class="custom-control-label" for="oc_factura_menciona_oc">Menciona OC</label>
                 </div>
               </div>
-              <div class="form-group col-md-2 d-flex align-items-end">
-                <div class="custom-control custom-switch mb-2">
+              <div class="form-group col-md-6 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-switch-inline">
                   <input type="checkbox" class="custom-control-input oc-field" id="oc_factura_menciona_destino" name="factura_menciona_destino" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                   <label class="custom-control-label" for="oc_factura_menciona_destino">Menciona destino</label>
                 </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="col-12">
+                <div class="oc-subsection-label">Compras</div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_compras">Contacto de compras</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-shopping-cart oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_contacto_compras" name="contacto_compras" maxlength="255" autocomplete="off" placeholder="Contacto de compras"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_compras_email">Email compras</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-envelope oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="email" class="form-control oc-field" id="oc_contacto_compras_email" name="contacto_compras_email" maxlength="255" autocomplete="off" placeholder="compras@dominio.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+              <div class="form-group col-md-4">
+                <label for="oc_contacto_compras_telefono">Tel&eacute;fono compras</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-phone-square-alt oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="text" class="form-control oc-field" id="oc_contacto_compras_telefono" name="contacto_compras_telefono" maxlength="100" autocomplete="off" placeholder="Tel&eacute;fono"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="oc_portal_facturacion_url">Portal para carga de FC / OP</label>
+              <div class="input-group mb-0">
+                <div class="input-group-prepend">
+                  <span class="input-group-text"><i class="fas fa-globe oc-icon-opcional"></i></span>
+                </div>
+                <input type="url" class="form-control oc-field" id="oc_portal_facturacion_url" name="portal_facturacion_url" maxlength="255" autocomplete="off" placeholder="https://portal.cliente.com"<?php echo $ordenCompraCamposDisabledInicial; ?>>
               </div>
             </div>
             <div class="form-group">
               <label for="oc_instrucciones_facturacion">Instrucciones especiales de facturacion</label>
               <div class="input-group mb-0">
                 <div class="input-group-prepend">
-                  <span class="input-group-text"><i class="fas fa-file-alt text-success"></i></span>
+                  <span class="input-group-text"><i class="fas fa-file-alt oc-icon-opcional"></i></span>
                 </div>
                 <textarea class="form-control oc-field" id="oc_instrucciones_facturacion" name="instrucciones_facturacion" rows="2" placeholder="Instrucciones para facturar"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
               </div>
             </div>
           </div>
           </div>
+            </div>
+            <div class="col-lg-6 d-flex">
 
-          <div class="card card-info mb-3">
+          <div class="card card-info mb-3 w-100 oc-card-principal oc-seccion-bloqueable">
             <div class="card-header py-2">
               <h5 class="card-title mb-0 text-white">Seguridad / ingreso</h5>
             </div>
             <div class="card-body">
             <div class="form-row">
-              <div class="form-group col-md-3 d-flex align-items-end">
-                <div class="custom-control custom-switch mb-2">
+              <div class="form-group col-md-4 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-switch-inline">
                   <input type="checkbox" class="custom-control-input oc-field" id="oc_requiere_documentacion_seguridad" name="requiere_documentacion_seguridad" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                   <label class="custom-control-label" for="oc_requiere_documentacion_seguridad">Requiere documentacion</label>
                 </div>
               </div>
-              <div class="form-group col-md-3">
+              <div class="form-group col-md-4 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-switch-inline">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_requiere_caucion" name="requiere_caucion" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_requiere_caucion">Requiere cauci&oacute;n</label>
+                </div>
+              </div>
+              <div class="form-group col-md-4 d-flex align-items-end">
+                <div class="custom-control custom-switch mb-2 oc-switch-inline">
+                  <input type="checkbox" class="custom-control-input oc-field" id="oc_requiere_poliza_rc" name="requiere_poliza_rc" value="1"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                  <label class="custom-control-label" for="oc_requiere_poliza_rc">Requiere p&oacute;liza RC</label>
+                </div>
+              </div>
+              <div class="form-group col-md-6">
                 <label for="oc_estado_documentacion_seguridad">Estado documentacion</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-shield-alt text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-shield-alt oc-icon-opcional"></i></span>
                   </div>
                   <select class="form-control oc-field" id="oc_estado_documentacion_seguridad" name="estado_documentacion_seguridad"<?php echo $ordenCompraCamposDisabledInicial; ?>>
                     <option value="">Sin informar</option>
@@ -2075,11 +2243,33 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   </select>
                 </div>
               </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label for="oc_poliza_rc_detalle">Detalle p&oacute;liza RC</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-file-contract oc-icon-opcional"></i></span>
+                  </div>
+                  <textarea class="form-control oc-field" id="oc_poliza_rc_detalle" name="poliza_rc_detalle" rows="2" placeholder="Detalle de p&oacute;liza RC"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
+                </div>
+              </div>
+              <div class="form-group col-md-6">
+                <label for="oc_portal_ingreso_obra_url">Portal documentaci&oacute;n ingreso a obra</label>
+                <div class="input-group mb-0">
+                  <div class="input-group-prepend">
+                    <span class="input-group-text"><i class="fas fa-globe-americas oc-icon-opcional"></i></span>
+                  </div>
+                  <input type="url" class="form-control oc-field" id="oc_portal_ingreso_obra_url" name="portal_ingreso_obra_url" maxlength="255" autocomplete="off" placeholder="https://portal.cliente.com/ingreso"<?php echo $ordenCompraCamposDisabledInicial; ?>>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
               <div class="form-group col-md-6">
                 <label for="oc_contactos_ingreso">Contactos para coordinar ingreso</label>
                 <div class="input-group mb-0">
                   <div class="input-group-prepend">
-                    <span class="input-group-text"><i class="fas fa-address-book text-success"></i></span>
+                    <span class="input-group-text"><i class="fas fa-address-book oc-icon-opcional"></i></span>
                   </div>
                   <textarea class="form-control oc-field" id="oc_contactos_ingreso" name="contactos_ingreso" rows="2" placeholder="Contactos de ingreso"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
                 </div>
@@ -2089,15 +2279,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <label for="oc_observaciones_seguridad">Observaciones de seguridad</label>
               <div class="input-group mb-0">
                 <div class="input-group-prepend">
-                  <span class="input-group-text"><i class="fas fa-exclamation-triangle text-success"></i></span>
+                  <span class="input-group-text"><i class="fas fa-exclamation-triangle oc-icon-opcional"></i></span>
                 </div>
                 <textarea class="form-control oc-field" id="oc_observaciones_seguridad" name="observaciones_seguridad" rows="2" placeholder="Observaciones de seguridad"<?php echo $ordenCompraCamposDisabledInicial; ?>></textarea>
               </div>
             </div>
           </div>
           </div>
-
-          <div id="oc_form_errors" class="alert alert-danger d-none"></div>
+            </div>
+          </div>
 
           <div class="d-flex justify-content-end flex-wrap">
             <button type="button" id="oc_btn_observar" class="btn btn-warning mr-2 mb-2 d-none">
@@ -2105,9 +2295,6 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             </button>
             <button type="button" id="oc_btn_anular" class="btn btn-danger mr-2 mb-2 d-none">
               <i class="fa fa-ban mr-1"></i> Anular OC
-            </button>
-            <button type="button" id="oc_btn_guardar" class="btn btn-success mb-2 <?php echo $ordenCompraMostrarGuardarInicial ? '' : 'd-none'; ?>">
-              <i class="fa fa-save mr-1"></i> Guardar OC
             </button>
           </div>
         </form>
@@ -2186,11 +2373,6 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
 </div>
 
- <div class="row d-flex text-center justify-content-center pr-1">
-      <button onclick="window.location.href='seguimiento_de_obra_listado.php'" type="button" class="col-1 btn btn-success btn-block m-2"><i class="fa fa-arrow-circle-left"></i> Volver</button>
-</div>
-
-
       </div>
       <!-- /.container-fluid -->
     </section>
@@ -2233,6 +2415,178 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   #ocPdfDropzone:focus {
     outline: 2px solid #007bff;
     outline-offset: 2px;
+  }
+
+  .orden-compra-form .card {
+    border: 1px solid #cfd8e3;
+    border-radius: 0.4rem;
+    box-shadow: 0 2px 6px rgba(20, 35, 50, 0.09);
+  }
+
+  .orden-compra-form .card-header {
+    border-bottom: 0;
+  }
+
+  .orden-compra-form .card-title {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .oc-header-actions {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.6rem;
+    margin-left: 0.75rem;
+  }
+
+  .oc-header-action {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: rgba(255, 255, 255, 0.92);
+    display: inline-flex;
+    font-size: 1.28rem;
+    height: 34px;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    text-shadow: 0 2px 4px rgba(20, 20, 20, 0.28);
+    width: 34px;
+  }
+
+  .oc-header-action .v-icon-accion {
+    color: rgba(255, 255, 255, 0.92);
+    filter: drop-shadow(0 2px 2px rgba(20, 20, 20, 0.2));
+    margin-right: 0;
+  }
+
+  .oc-header-action:hover .v-icon-accion,
+  .oc-header-action:focus .v-icon-accion {
+    color: #7bdff2;
+  }
+
+  .orden-compra-form .form-group label {
+    color: #495057;
+    font-size: 0.84rem;
+    font-weight: 600;
+    margin-bottom: 0.28rem;
+  }
+
+  .orden-compra-form .input-group-text {
+    justify-content: center;
+    min-width: 42px;
+  }
+
+  .orden-compra-form .oc-icon-requerido {
+    color: #dc3545;
+  }
+
+  .orden-compra-form .oc-icon-opcional {
+    color: #495057;
+  }
+
+  .orden-compra-form textarea.form-control {
+    min-height: 38px;
+  }
+
+  .orden-compra-form .oc-card-principal {
+    border-color: #b9c7d6;
+    box-shadow: 0 3px 8px rgba(20, 35, 50, 0.1);
+  }
+
+  .orden-compra-form .oc-seccion-bloqueable {
+    overflow: hidden;
+    position: relative;
+  }
+
+  .orden-compra-form .oc-section-lock-overlay {
+    align-items: center;
+    backdrop-filter: blur(2px);
+    background: rgba(18, 32, 48, 0.34);
+    bottom: 0;
+    display: none;
+    justify-content: center;
+    left: 0;
+    padding: 1rem;
+    position: absolute;
+    right: 0;
+    text-align: center;
+    top: 38px;
+    z-index: 8;
+  }
+
+  .orden-compra-form .oc-section-locked .oc-section-lock-overlay {
+    display: flex;
+  }
+
+  .orden-compra-form .oc-section-locked .card-body {
+    filter: saturate(0.78);
+  }
+
+  .orden-compra-form .oc-section-lock-message {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    border-radius: 0.45rem;
+    box-shadow: 0 8px 18px rgba(15, 25, 35, 0.16);
+    color: #243746;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.3;
+    max-width: 340px;
+    padding: 0.8rem 0.95rem;
+  }
+
+  .orden-compra-form .oc-card-principal > .card-header {
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  }
+
+  .orden-compra-form .oc-detalle-grid {
+    align-items: stretch;
+  }
+
+  .oc-alert-card {
+    border-radius: 0.4rem;
+    box-shadow: 0 1px 3px rgba(20, 35, 50, 0.06);
+    margin-bottom: 1rem;
+    padding: 0.72rem 0.85rem;
+  }
+
+  .oc-alert-card .oc-alert-icon {
+    flex: 0 0 1.35rem;
+    font-size: 1rem;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .oc-alert-content {
+    line-height: 1.28;
+  }
+
+  .oc-alert-card-warning {
+    background: #fff8e5;
+    border: 1px solid #ffe08a;
+    color: #7a5b00;
+  }
+
+  .oc-iva-inline,
+  .oc-switch-inline {
+    align-items: center;
+    display: flex;
+    min-height: 38px;
+    padding-left: 2.35rem;
+    white-space: nowrap;
+  }
+
+  .oc-iva-inline .custom-control-label,
+  .oc-switch-inline .custom-control-label {
+    margin-bottom: 0;
+  }
+
+  .oc-subsection-label {
+    color: #667085;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin: 0.15rem 0 0.55rem;
   }
 
   .previsita-documentos-dropzone {
@@ -3422,6 +3776,8 @@ $(document).ready(function() {
       'numero_oc',
       'fecha_emision',
       'proveedor',
+      'proveedor_nombre_fantasia',
+      'proveedor_direccion_fiscal',
       'moneda',
       'monto_neto',
       'iva_incluido',
@@ -3433,20 +3789,32 @@ $(document).ready(function() {
       'condicion_saldo',
       'observaciones_comerciales',
       'direccion_entrega',
+      'direccion_obra_alternativa',
       'sucursal_planta_sede',
       'fecha_entrega_prevista',
       'contacto_sitio',
       'contacto_sitio_email',
       'contacto_sitio_telefono',
+      'contacto_obra_mantenimiento',
+      'contacto_obra_mantenimiento_email',
+      'contacto_obra_mantenimiento_telefono',
       'email_facturacion',
       'area_facturacion',
+      'contacto_compras',
+      'contacto_compras_email',
+      'contacto_compras_telefono',
       'factura_menciona_oc',
       'factura_menciona_destino',
       'instrucciones_facturacion',
+      'portal_facturacion_url',
       'requiere_documentacion_seguridad',
       'contactos_ingreso',
       'estado_documentacion_seguridad',
-      'observaciones_seguridad'
+      'observaciones_seguridad',
+      'requiere_caucion',
+      'requiere_poliza_rc',
+      'poliza_rc_detalle',
+      'portal_ingreso_obra_url'
     ];
 
     function existeFormularioOrdenCompra() {
@@ -3459,29 +3827,77 @@ $(document).ready(function() {
 
     function alertaOrdenCompra(clase, titulo, mensaje) {
       var $alert = $('#oc_estado_alert');
+      var iconos = {
+        'alert-info': 'fas fa-info-circle',
+        'alert-warning': 'fas fa-exclamation-circle',
+        'alert-secondary': 'fas fa-lock',
+        'alert-success': 'fas fa-check-circle',
+        'alert-danger': 'fas fa-times-circle',
+        'alert-dark': 'fas fa-ban'
+      };
+      var claseFinal = clase || 'alert-info';
       $alert
         .removeClass('alert-info alert-warning alert-secondary alert-success alert-danger alert-dark')
-        .addClass(clase || 'alert-info')
-        .html('<strong>' + titulo + '</strong>' + (mensaje ? '<span class="d-block">' + mensaje + '</span>' : ''));
+        .addClass(claseFinal);
+      $alert.find('.oc-alert-icon').html('<i class="' + (iconos[claseFinal] || iconos['alert-info']) + '"></i>');
+      $alert.find('.oc-alert-content').html('<strong>' + titulo + '</strong>' + (mensaje ? '<span class="d-block">' + mensaje + '</span>' : ''));
     }
 
     function limpiarErroresOrdenCompra() {
-      $('#oc_form_errors').addClass('d-none').empty();
       $('#ordenCompraForm .is-invalid').removeClass('is-invalid');
     }
 
-    function mostrarErroresOrdenCompra(errores) {
+    function mensajesErroresOrdenCompra(errores) {
       var mensajes = [];
       $.each(errores || {}, function(campo, mensaje) {
-        mensajes.push(String(mensaje || 'Dato invalido.'));
+        var texto = String(mensaje || 'Dato invalido.');
+        if (mensajes.indexOf(texto) === -1) {
+          mensajes.push(texto);
+        }
         $('#ordenCompraForm [name="' + campo + '"]').addClass('is-invalid');
       });
+
+      return mensajes;
+    }
+
+    function escapeHtmlOrdenCompra(texto) {
+      return String(texto || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function mostrarErroresOrdenCompra(errores, titulo) {
+      var mensajes = mensajesErroresOrdenCompra(errores);
 
       if (!mensajes.length) {
         return;
       }
 
-      $('#oc_form_errors').removeClass('d-none').html(mensajes.join('<br>'));
+      if (window.Swal && typeof Swal.fire === 'function') {
+        var itemsHtml = mensajes.map(function(mensaje) {
+          return '<li>' + escapeHtmlOrdenCompra(mensaje) + '</li>';
+        }).join('');
+        Swal.fire({
+          icon: 'warning',
+          title: '<H2><STRONG style="color: #000000;">' + escapeHtmlOrdenCompra(titulo || 'Datos incompletos') + '</STRONG></H2>',
+          html: '<div class="text-left" style="color: #000000;"><ul class="mb-0 pl-3">' + itemsHtml + '</ul></div>',
+          background: '#ffc107',
+          iconColor: '#000000',
+          confirmButtonText: 'Entendido',
+          confirmButtonColor: '#343a40'
+        });
+        return;
+      }
+
+      if (typeof toastr !== 'undefined') {
+        toastr.warning(mensajes.join('<br>'), titulo || 'Datos incompletos');
+        return;
+      }
+
+      window.alert((titulo || 'Datos incompletos') + '\n' + mensajes.join('\n'));
     }
 
     function setCampoOrdenCompra(nombre, valor) {
@@ -3512,6 +3928,7 @@ $(document).ready(function() {
           setCampoOrdenCompra(nombre, '');
         }
       });
+      actualizarBloqueoSeccionesOrdenCompra();
     }
 
     function cargarDatosFormularioOrdenCompra(ordenCompra) {
@@ -3536,6 +3953,78 @@ $(document).ready(function() {
 
     function ordenCompraTienePdfActual() {
       return !!(ordenCompraPdfActual && ordenCompraPdfActual.nombre && ordenCompraPdfActual.ruta);
+    }
+
+    function validarArchivoPdfOrdenCompra(file) {
+      if (!file) {
+        return 'Debe adjuntar el PDF respaldatorio de la OC.';
+      }
+
+      if (!/\.pdf$/i.test(String(file.name || ''))) {
+        return 'El archivo debe tener extension .pdf.';
+      }
+
+      if (file.size <= 0) {
+        return 'El PDF no puede estar vacio.';
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        return 'El PDF debe pesar como maximo 5 MB.';
+      }
+
+      return null;
+    }
+
+    function obtenerArchivoPdfSeleccionadoOrdenCompra() {
+      var inputPdf = $('#oc_pdf_oc')[0];
+      return inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
+    }
+
+    function ordenCompraTienePdfSeleccionadoValido() {
+      var archivoPdf = obtenerArchivoPdfSeleccionadoOrdenCompra();
+      return !!(archivoPdf && validarArchivoPdfOrdenCompra(archivoPdf) === null);
+    }
+
+    function ordenCompraTienePdfDisponibleParaEditar() {
+      return ordenCompraTienePdfActual() || ordenCompraTienePdfSeleccionadoValido();
+    }
+
+    function ordenCompraEstadoPermiteEdicion() {
+      return ['pendiente', 'cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
+    }
+
+    function asegurarOverlaysBloqueoOrdenCompra() {
+      $('#ordenCompraForm .oc-seccion-bloqueable').each(function() {
+        var $seccion = $(this);
+        if ($seccion.children('.oc-section-lock-overlay').length) {
+          return;
+        }
+
+        $seccion.append(
+          '<div class="oc-section-lock-overlay" aria-hidden="true">' +
+            '<div class="oc-section-lock-message">' +
+              '<i class="fas fa-file-pdf text-danger mr-2"></i>' +
+              'Debe cargar el documento OC para habilitar las secciones de datos' +
+            '</div>' +
+          '</div>'
+        );
+      });
+    }
+
+    function actualizarBloqueoSeccionesOrdenCompra() {
+      asegurarOverlaysBloqueoOrdenCompra();
+
+      var readonlyBase = !ordenCompraPuedeEditar || !ordenCompraEstadoPermiteEdicion();
+      var bloquearPorPdf = ordenCompraPuedeEditar
+        && ordenCompraEstadoPermiteEdicion()
+        && !ordenCompraTienePdfDisponibleParaEditar();
+
+      $('#ordenCompraForm .oc-seccion-bloqueable')
+        .toggleClass('oc-section-locked', bloquearPorPdf)
+        .find('.oc-field')
+        .prop('disabled', readonlyBase || bloquearPorPdf);
+
+      $('#oc_seccion_pdf .oc-field').prop('disabled', readonlyBase);
     }
 
     function formatearBytesOrdenCompra(bytes) {
@@ -3603,7 +4092,9 @@ $(document).ready(function() {
 
     function actualizarBotonesOrdenCompra() {
       var tieneOcActiva = ordenCompraIdActivo > 0 && ['cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
-      var puedeGuardar = ordenCompraPuedeEditar && ['pendiente', 'cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
+      var puedeGuardar = ordenCompraPuedeEditar
+        && ['pendiente', 'cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1
+        && ordenCompraTienePdfDisponibleParaEditar();
 
       $('#oc_btn_guardar').toggleClass('d-none', !puedeGuardar);
       $('#oc_btn_observar').toggleClass('d-none', !(ordenCompraPuedeEditar && tieneOcActiva && ordenCompraEstadoActual !== 'observada'));
@@ -3636,14 +4127,15 @@ $(document).ready(function() {
         alertaOrdenCompra('alert-info', 'OC ' + label + '.', ordenCompra ? 'Numero: ' + (ordenCompra.numero_oc || 'sin informar') : '');
       }
 
-      $('#oc_estado_alert strong').append(' <span class="badge ' + badgeClass + ' ml-2">' + label + '</span>');
+      $('#oc_estado_alert .oc-alert-content strong').append(' <span class="badge ' + badgeClass + ' ml-2">' + label + '</span>');
 
       if (!ordenCompraPuedeEditar && estado !== 'no_habilitada') {
-        $('#oc_estado_alert').append('<span class="d-block mt-1">Tu perfil puede consultar este bloque, pero no cargar ni editar la OC.</span>');
+        $('#oc_estado_alert .oc-alert-content').append('<span class="d-block mt-1">Tu perfil puede consultar este bloque, pero no cargar ni editar la OC.</span>');
       }
 
       setReadonlyOrdenCompra(!ordenCompraPuedeEditar || ['no_habilitada', 'anulada'].indexOf(estado) !== -1);
       renderPdfOrdenCompra();
+      actualizarBloqueoSeccionesOrdenCompra();
       actualizarBotonesOrdenCompra();
       limpiarErroresOrdenCompra();
     }
@@ -3762,6 +4254,7 @@ $(document).ready(function() {
       limpiarErroresOrdenCompra();
       var errores = {};
       var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      var urlRegex = /^https?:\/\/[^\s/$.?#].[^\s]*$/i;
 
       if (!valorCampoOrdenCompra('numero_oc')) {
         errores.numero_oc = 'El numero de OC es obligatorio.';
@@ -3772,20 +4265,19 @@ $(document).ready(function() {
       if (!valorCampoOrdenCompra('moneda')) {
         errores.moneda = 'La moneda es obligatoria.';
       }
+      if (!valorCampoOrdenCompra('proveedor') && !valorCampoOrdenCompra('proveedor_nombre_fantasia')) {
+        errores.proveedor = 'Informe proveedor o nombre de fantasia.';
+        errores.proveedor_nombre_fantasia = 'Informe proveedor o nombre de fantasia.';
+      }
 
-      var inputPdf = $('#oc_pdf_oc')[0];
-      var archivoPdf = inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
-      if (!ordenCompraTienePdfActual() && !archivoPdf) {
+      var archivoPdf = obtenerArchivoPdfSeleccionadoOrdenCompra();
+      if (!ordenCompraTienePdfDisponibleParaEditar()) {
         errores.pdf_oc = 'Debe adjuntar el PDF respaldatorio de la OC.';
       }
       if (archivoPdf) {
-        var nombrePdf = String(archivoPdf.name || '').toLowerCase();
-        if (!/\.pdf$/.test(nombrePdf)) {
-          errores.pdf_oc = 'El archivo debe tener extension .pdf.';
-        } else if (archivoPdf.size <= 0) {
-          errores.pdf_oc = 'El PDF no puede estar vacio.';
-        } else if (archivoPdf.size > 5 * 1024 * 1024) {
-          errores.pdf_oc = 'El PDF debe pesar como maximo 5 MB.';
+        var errorPdf = validarArchivoPdfOrdenCompra(archivoPdf);
+        if (errorPdf) {
+          errores.pdf_oc = errorPdf;
         }
       }
 
@@ -3796,10 +4288,17 @@ $(document).ready(function() {
         }
       });
 
-      ['contacto_sitio_email', 'email_facturacion'].forEach(function(campo) {
+      ['contacto_sitio_email', 'contacto_obra_mantenimiento_email', 'email_facturacion', 'contacto_compras_email'].forEach(function(campo) {
         var valor = valorCampoOrdenCompra(campo);
         if (valor !== '' && !emailRegex.test(valor)) {
           errores[campo] = 'El email informado no es valido.';
+        }
+      });
+
+      ['portal_facturacion_url', 'portal_ingreso_obra_url'].forEach(function(campo) {
+        var valor = valorCampoOrdenCompra(campo);
+        if (valor !== '' && !urlRegex.test(valor)) {
+          errores[campo] = 'La URL informada debe comenzar con http:// o https://.';
         }
       });
 
@@ -3808,7 +4307,11 @@ $(document).ready(function() {
     }
 
     function guardarOrdenCompra() {
-      if (!ordenCompraPuedeEditar || !validarFormularioOrdenCompra()) {
+      if (!ordenCompraPuedeEditar) {
+        return;
+      }
+
+      if (!validarFormularioOrdenCompra()) {
         return;
       }
 
@@ -3854,6 +4357,34 @@ $(document).ready(function() {
       });
     }
 
+    function confirmarAnularOrdenCompra() {
+      if (!ordenCompraPuedeEditar || ordenCompraIdActivo <= 0) {
+        return;
+      }
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Anular Orden de compra',
+          text: 'La OC dejara de contar como activa. Si el presupuesto sigue aprobado, volvera a quedar pendiente.',
+          showCancelButton: true,
+          confirmButtonText: 'Anular OC',
+          cancelButtonText: 'Cancelar',
+          confirmButtonColor: '#dc3545',
+          reverseButtons: true
+        }).then(function(result) {
+          if (result && result.isConfirmed) {
+            cambiarEstadoOrdenCompra('anulada');
+          }
+        });
+        return;
+      }
+
+      if (window.confirm('Anular la Orden de compra?')) {
+        cambiarEstadoOrdenCompra('anulada');
+      }
+    }
+
     // --- Dropzone PDF OC ---
     (function() {
       var $dropzone = $('#ocPdfDropzone');
@@ -3879,17 +4410,21 @@ $(document).ready(function() {
       }
 
       function mostrarPreview(file) {
-        var msg = validarPdf(file);
+        var msg = validarArchivoPdfOrdenCompra(file);
         $nombre.text(file.name);
         $tamano.text(fmtBytes(file.size));
         $preview.removeClass('d-none');
         msg ? $error.text(msg).removeClass('d-none') : $error.addClass('d-none').text('');
+        actualizarBloqueoSeccionesOrdenCompra();
+        actualizarBotonesOrdenCompra();
       }
 
       function limpiarPreview() {
         try { $input.val(''); } catch(e) {}
         $preview.addClass('d-none');
         $error.addClass('d-none').text('');
+        actualizarBloqueoSeccionesOrdenCompra();
+        actualizarBotonesOrdenCompra();
       }
 
       $dropzone.on('click', function() { $input.trigger('click'); });
@@ -3931,12 +4466,16 @@ $(document).ready(function() {
 
     if (existeFormularioOrdenCompra()) {
       $('#oc_btn_guardar').on('click', guardarOrdenCompra);
+      $('#oc_btn_volver').on('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.location.href = 'seguimiento_de_obra_listado.php';
+      });
       $('#oc_btn_observar').on('click', function() {
         cambiarEstadoOrdenCompra('observada');
       });
-      $('#oc_btn_anular').on('click', function() {
-        cambiarEstadoOrdenCompra('anulada');
-      });
+      $('#oc_btn_anular').on('click', confirmarAnularOrdenCompra);
+      actualizarBloqueoSeccionesOrdenCompra();
 
       if ($('#collapse4_OC').hasClass('show') || ordenCompraConfig.oc_solicitada) {
         obtenerOrdenCompra(true);

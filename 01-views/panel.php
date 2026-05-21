@@ -16,8 +16,8 @@ $vencidas = countColWhere('previsitas', array('columna' => 'estado_visita', 'con
 $programadas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Programada"), false);
 $reprogramadas = countColWhere('previsitas', array('columna' => 'estado_visita', 'condicion' => '=', 'valor' => "Reprogramada"), false);
 $esPanelOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
-$tituloModuloSeguimiento = $esPanelOrdenCompraAdministrativa ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
-$iconoModuloSeguimiento = $esPanelOrdenCompraAdministrativa ? 'fa-solid fa-file-invoice' : 'fa-solid fa-warehouse';
+$tituloModuloSeguimiento = 'Seguimiento de obra';
+$iconoModuloSeguimiento = 'fa-solid fa-warehouse';
 
 
 $agentes = array('Super Administrador','Administrador','Administrativo');
@@ -147,7 +147,7 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                     <h3 class="info-box-text d-flex align-items-center flex-wrap"><?php echo $tituloModuloSeguimiento; ?>
                       
                       <?php if ($esPanelOrdenCompraAdministrativa){ ?>
-                      <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> Pendientes </small></small>'; ?></span></small>
+                      <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> '.($ocPendientesSeguimiento === 1 ? 'OC pendiente' : 'OC pendientes').' </small></small>'; ?></span></small>
                       <?php } else { ?>
                         <?php if ($vencidas !== false && $vencidas['total'] > 0){ ?>
                         <small><span class="right badge badge-danger ml-3 mt-2"><?php echo $vencidas['total'].'<small><small><br> Venc. </small></small>'; ?></span></small>

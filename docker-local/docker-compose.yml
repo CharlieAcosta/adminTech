@@ -1,3 +1,5 @@
+name: admintech
+
 services:
   web:
     build:
@@ -24,6 +26,8 @@ services:
 
 volumes:
   admintech-mysql:
+    external: true
+    name: docker-local_admintech-mysql
 
 networks:
   admintech-net:

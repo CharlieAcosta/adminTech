@@ -43,6 +43,45 @@ if (!function_exists('ordenCompraTablaTieneColumnasMinimas')) {
     }
 }
 
+if (!function_exists('columnasAdicionalesOrdenCompra')) {
+    function columnasAdicionalesOrdenCompra(): array
+    {
+        return [
+            'proveedor_nombre_fantasia',
+            'proveedor_direccion_fiscal',
+            'direccion_obra_alternativa',
+            'contacto_compras',
+            'contacto_compras_email',
+            'contacto_compras_telefono',
+            'contacto_obra_mantenimiento',
+            'contacto_obra_mantenimiento_email',
+            'contacto_obra_mantenimiento_telefono',
+            'portal_facturacion_url',
+            'portal_ingreso_obra_url',
+            'requiere_caucion',
+            'requiere_poliza_rc',
+            'poliza_rc_detalle',
+        ];
+    }
+}
+
+if (!function_exists('ordenCompraTablaTieneColumnasAdicionales')) {
+    function ordenCompraTablaTieneColumnasAdicionales(mysqli $db): bool
+    {
+        if (!tablaOrdenesCompraExiste($db)) {
+            return false;
+        }
+
+        foreach (columnasAdicionalesOrdenCompra() as $columna) {
+            if (!columna_existe($db, 'ordenes_compra', $columna)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
 if (!function_exists('obtenerOrdenCompraActivaPorPresupuestoEnConexion')) {
     function obtenerOrdenCompraActivaPorPresupuestoEnConexion(mysqli $db, int $idPresupuesto): ?array
     {
@@ -241,6 +280,23 @@ if (!function_exists('normalizarFechaOrdenCompra')) {
         $valor = normalizarTextoOrdenCompra($valor, 10);
 
         return $valor;
+    }
+}
+
+if (!function_exists('urlOrdenCompraValida')) {
+    function urlOrdenCompraValida(?string $url): bool
+    {
+        if ($url === null || $url === '') {
+            return true;
+        }
+
+        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
+
+        return in_array($scheme, ['http', 'https'], true);
     }
 }
 
@@ -517,6 +573,8 @@ if (!function_exists('normalizarDatosOrdenCompra')) {
             'numero_oc' => normalizarTextoOrdenCompra($input['numero_oc'] ?? null, 100),
             'fecha_emision' => normalizarFechaOrdenCompra($input['fecha_emision'] ?? null),
             'proveedor' => normalizarTextoOrdenCompra($input['proveedor'] ?? null, 150),
+            'proveedor_nombre_fantasia' => normalizarTextoOrdenCompra($input['proveedor_nombre_fantasia'] ?? null, 150),
+            'proveedor_direccion_fiscal' => normalizarTextoOrdenCompra($input['proveedor_direccion_fiscal'] ?? null),
             'moneda' => strtoupper((string)(normalizarTextoOrdenCompra($input['moneda'] ?? 'ARS', 10) ?? 'ARS')),
             'monto_neto' => normalizarDecimalOrdenCompra($input['monto_neto'] ?? null),
             'iva_incluido' => normalizarBooleanoOrdenCompra($input['iva_incluido'] ?? 0),
@@ -531,20 +589,32 @@ if (!function_exists('normalizarDatosOrdenCompra')) {
             'condicion_saldo' => normalizarTextoOrdenCompra($input['condicion_saldo'] ?? null),
             'observaciones_comerciales' => normalizarTextoOrdenCompra($input['observaciones_comerciales'] ?? null),
             'direccion_entrega' => normalizarTextoOrdenCompra($input['direccion_entrega'] ?? null),
+            'direccion_obra_alternativa' => normalizarTextoOrdenCompra($input['direccion_obra_alternativa'] ?? null),
             'sucursal_planta_sede' => normalizarTextoOrdenCompra($input['sucursal_planta_sede'] ?? null, 255),
             'fecha_entrega_prevista' => normalizarFechaOrdenCompra($input['fecha_entrega_prevista'] ?? null),
             'contacto_sitio' => normalizarTextoOrdenCompra($input['contacto_sitio'] ?? null, 255),
             'contacto_sitio_email' => normalizarTextoOrdenCompra($input['contacto_sitio_email'] ?? null, 255),
             'contacto_sitio_telefono' => normalizarTextoOrdenCompra($input['contacto_sitio_telefono'] ?? null, 100),
+            'contacto_obra_mantenimiento' => normalizarTextoOrdenCompra($input['contacto_obra_mantenimiento'] ?? null, 255),
+            'contacto_obra_mantenimiento_email' => normalizarTextoOrdenCompra($input['contacto_obra_mantenimiento_email'] ?? null, 255),
+            'contacto_obra_mantenimiento_telefono' => normalizarTextoOrdenCompra($input['contacto_obra_mantenimiento_telefono'] ?? null, 100),
             'email_facturacion' => normalizarTextoOrdenCompra($input['email_facturacion'] ?? null, 255),
             'area_facturacion' => normalizarTextoOrdenCompra($input['area_facturacion'] ?? null, 255),
+            'contacto_compras' => normalizarTextoOrdenCompra($input['contacto_compras'] ?? null, 255),
+            'contacto_compras_email' => normalizarTextoOrdenCompra($input['contacto_compras_email'] ?? null, 255),
+            'contacto_compras_telefono' => normalizarTextoOrdenCompra($input['contacto_compras_telefono'] ?? null, 100),
             'factura_menciona_oc' => normalizarBooleanoOrdenCompra($input['factura_menciona_oc'] ?? 1),
             'factura_menciona_destino' => normalizarBooleanoOrdenCompra($input['factura_menciona_destino'] ?? 0),
             'instrucciones_facturacion' => normalizarTextoOrdenCompra($input['instrucciones_facturacion'] ?? null),
+            'portal_facturacion_url' => normalizarTextoOrdenCompra($input['portal_facturacion_url'] ?? null, 255),
             'requiere_documentacion_seguridad' => normalizarBooleanoOrdenCompra($input['requiere_documentacion_seguridad'] ?? 0),
             'contactos_ingreso' => normalizarTextoOrdenCompra($input['contactos_ingreso'] ?? null),
             'estado_documentacion_seguridad' => normalizarTextoOrdenCompra($input['estado_documentacion_seguridad'] ?? null, 50),
             'observaciones_seguridad' => normalizarTextoOrdenCompra($input['observaciones_seguridad'] ?? null),
+            'requiere_caucion' => normalizarBooleanoOrdenCompra($input['requiere_caucion'] ?? 0),
+            'requiere_poliza_rc' => normalizarBooleanoOrdenCompra($input['requiere_poliza_rc'] ?? 0),
+            'poliza_rc_detalle' => normalizarTextoOrdenCompra($input['poliza_rc_detalle'] ?? null),
+            'portal_ingreso_obra_url' => normalizarTextoOrdenCompra($input['portal_ingreso_obra_url'] ?? null, 255),
             'pdf_nombre_archivo' => normalizarTextoOrdenCompra($input['pdf_nombre_archivo'] ?? null, 255),
             'pdf_ruta_archivo' => normalizarTextoOrdenCompra($input['pdf_ruta_archivo'] ?? null),
             'pdf_mime_type' => normalizarTextoOrdenCompra($input['pdf_mime_type'] ?? null, 100),
@@ -575,7 +645,7 @@ if (!function_exists('fechaOrdenCompraValida')) {
 }
 
 if (!function_exists('validarDatosOrdenCompra')) {
-    function validarDatosOrdenCompra(array $datos, bool $esCreacion): array
+    function validarDatosOrdenCompra(array $datos, bool $esCreacion, bool $validarCamposAdicionales = true): array
     {
         $errores = [];
 
@@ -621,9 +691,23 @@ if (!function_exists('validarDatosOrdenCompra')) {
             }
         }
 
-        foreach (['contacto_sitio_email', 'email_facturacion'] as $campoEmail) {
+        $camposEmail = ['contacto_sitio_email', 'email_facturacion'];
+        if ($validarCamposAdicionales) {
+            $camposEmail[] = 'contacto_obra_mantenimiento_email';
+            $camposEmail[] = 'contacto_compras_email';
+        }
+
+        foreach ($camposEmail as $campoEmail) {
             if (($datos[$campoEmail] ?? null) !== null && !filter_var($datos[$campoEmail], FILTER_VALIDATE_EMAIL)) {
                 $errores[$campoEmail] = 'El email informado no es valido.';
+            }
+        }
+
+        if ($validarCamposAdicionales) {
+            foreach (['portal_facturacion_url', 'portal_ingreso_obra_url'] as $campoUrl) {
+                if (!urlOrdenCompraValida($datos[$campoUrl] ?? null)) {
+                    $errores[$campoUrl] = 'La URL informada debe ser valida y comenzar con http:// o https://.';
+                }
             }
         }
 
@@ -635,8 +719,30 @@ if (!function_exists('validarDatosOrdenCompra')) {
     }
 }
 
-if (!function_exists('camposInsertOrdenCompra')) {
-    function camposInsertOrdenCompra(): array
+if (!function_exists('camposAdicionalesOrdenCompra')) {
+    function camposAdicionalesOrdenCompra(): array
+    {
+        return [
+            'proveedor_nombre_fantasia' => 's',
+            'proveedor_direccion_fiscal' => 's',
+            'direccion_obra_alternativa' => 's',
+            'contacto_obra_mantenimiento' => 's',
+            'contacto_obra_mantenimiento_email' => 's',
+            'contacto_obra_mantenimiento_telefono' => 's',
+            'contacto_compras' => 's',
+            'contacto_compras_email' => 's',
+            'contacto_compras_telefono' => 's',
+            'portal_facturacion_url' => 's',
+            'requiere_caucion' => 'i',
+            'requiere_poliza_rc' => 'i',
+            'poliza_rc_detalle' => 's',
+            'portal_ingreso_obra_url' => 's',
+        ];
+    }
+}
+
+if (!function_exists('camposBaseInsertOrdenCompra')) {
+    function camposBaseInsertOrdenCompra(): array
     {
         return [
             'id_presupuesto' => 'i',
@@ -681,10 +787,23 @@ if (!function_exists('camposInsertOrdenCompra')) {
     }
 }
 
-if (!function_exists('camposUpdateOrdenCompra')) {
-    function camposUpdateOrdenCompra(): array
+if (!function_exists('camposInsertOrdenCompra')) {
+    function camposInsertOrdenCompra(?mysqli $db = null): array
     {
-        $campos = camposInsertOrdenCompra();
+        $campos = camposBaseInsertOrdenCompra();
+
+        if ($db === null || ordenCompraTablaTieneColumnasAdicionales($db)) {
+            $campos = array_merge($campos, camposAdicionalesOrdenCompra());
+        }
+
+        return $campos;
+    }
+}
+
+if (!function_exists('camposUpdateOrdenCompra')) {
+    function camposUpdateOrdenCompra(?mysqli $db = null): array
+    {
+        $campos = camposInsertOrdenCompra($db);
         unset($campos['id_presupuesto'], $campos['id_previsita'], $campos['estado'], $campos['id_usuario_alta']);
 
         return $campos;
@@ -710,7 +829,7 @@ if (!function_exists('crearOrdenCompraEnConexion')) {
             return false;
         }
 
-        $campos = camposInsertOrdenCompra();
+        $campos = camposInsertOrdenCompra($db);
         $columnas = array_keys($campos);
         $placeholders = implode(', ', array_fill(0, count($columnas), '?'));
         $sql = 'INSERT INTO ordenes_compra (' . implode(', ', $columnas) . ') VALUES (' . $placeholders . ')';
@@ -745,7 +864,7 @@ if (!function_exists('actualizarOrdenCompraEnConexion')) {
             return false;
         }
 
-        $campos = camposUpdateOrdenCompra();
+        $campos = camposUpdateOrdenCompra($db);
         $asignaciones = [];
         foreach (array_keys($campos) as $columna) {
             $asignaciones[] = "{$columna} = ?";
