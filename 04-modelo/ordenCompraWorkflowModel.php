@@ -321,6 +321,86 @@ if (!function_exists('contarOrdenesCompraPendientes')) {
     }
 }
 
+if (!function_exists('contarOrdenesCompraHabilitadasBandejaAdministrativaEnConexion')) {
+    function contarOrdenesCompraHabilitadasBandejaAdministrativaEnConexion(mysqli $db, ?string $modoCircuito = null): int
+    {
+        if (!tabla_existe($db, 'presupuestos') || !tabla_existe($db, 'previsitas')) {
+            return 0;
+        }
+
+        $modoCircuito = normalizarModoEnvioMailPresupuestos(
+            $modoCircuito ?: obtenerModoActivoCircuitoComercialPresupuestos()
+        );
+        $columnaEstadoComercial = columnaEstadoComercialPresupuestoPorModo($modoCircuito);
+        $tieneColumnaEstadoComercial = columna_existe($db, 'presupuestos', $columnaEstadoComercial);
+        $tieneHistorialComercial = tabla_existe($db, 'presupuesto_historial_comercial');
+
+        if (!$tieneColumnaEstadoComercial && !$tieneHistorialComercial) {
+            return 0;
+        }
+
+        $estadoComercialSql = $tieneColumnaEstadoComercial
+            ? "COALESCE(NULLIF(UPPER(TRIM(p.{$columnaEstadoComercial})), ''), UPPER(TRIM(hc.estado_resultante)))"
+            : "UPPER(TRIM(hc.estado_resultante))";
+
+        $modoEscapado = mysqli_real_escape_string($db, $modoCircuito);
+        $joinHistorial = $tieneHistorialComercial
+            ? "
+                LEFT JOIN (
+                    SELECT h1.id_presupuesto, h1.estado_resultante
+                    FROM presupuesto_historial_comercial h1
+                    INNER JOIN (
+                        SELECT id_presupuesto, MAX(id_historial_comercial) AS id_historial_comercial
+                        FROM presupuesto_historial_comercial
+                        WHERE modo_circuito = '{$modoEscapado}'
+                        GROUP BY id_presupuesto
+                    ) uh ON uh.id_historial_comercial = h1.id_historial_comercial
+                ) hc ON hc.id_presupuesto = p.id_presupuesto
+            "
+            : "LEFT JOIN (SELECT NULL AS id_presupuesto, NULL AS estado_resultante) hc ON 1 = 0";
+
+        $sql = "
+            SELECT COUNT(*) AS total
+            FROM presupuestos p
+            INNER JOIN (
+                SELECT id_previsita, MAX(id_presupuesto) AS id_presupuesto
+                FROM presupuestos
+                GROUP BY id_previsita
+            ) up ON up.id_presupuesto = p.id_presupuesto
+            INNER JOIN previsitas v ON v.id_previsita = p.id_previsita
+            {$joinHistorial}
+            WHERE {$estadoComercialSql} = 'APROBADO'
+              AND v.estado_visita <> 'Eliminada'
+        ";
+
+        $resultado = mysqli_query($db, $sql);
+        if (!$resultado) {
+            return 0;
+        }
+
+        $row = mysqli_fetch_assoc($resultado);
+        mysqli_free_result($resultado);
+
+        return (int)($row['total'] ?? 0);
+    }
+}
+
+if (!function_exists('contarOrdenesCompraHabilitadasBandejaAdministrativa')) {
+    function contarOrdenesCompraHabilitadasBandejaAdministrativa(?string $modoCircuito = null): int
+    {
+        $db = conectDB();
+        if (!$db) {
+            return 0;
+        }
+
+        mysqli_set_charset($db, 'utf8mb4');
+        $total = contarOrdenesCompraHabilitadasBandejaAdministrativaEnConexion($db, $modoCircuito);
+        mysqli_close($db);
+
+        return $total;
+    }
+}
+
 if (!function_exists('resolverRangoTiempoDesdeAntiguedadOrdenCompra')) {
     function resolverRangoTiempoDesdeAntiguedadOrdenCompra(?int $dias): string
     {
