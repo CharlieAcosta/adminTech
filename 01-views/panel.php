@@ -29,8 +29,11 @@ $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
 $ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
+$ocHabilitadasBandejaAdministrativa = $esPanelOrdenCompraAdministrativa
+  ? contarOrdenesCompraHabilitadasBandejaAdministrativa()
+  : 0;
 $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
-  && (!$esPanelOrdenCompraAdministrativa || $ocPendientesSeguimiento > 0);
+  && (!$esPanelOrdenCompraAdministrativa || $ocHabilitadasBandejaAdministrativa > 0);
 ?>
 
 <!DOCTYPE html>
