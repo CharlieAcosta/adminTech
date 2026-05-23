@@ -150,7 +150,9 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                     <h3 class="info-box-text d-flex align-items-center flex-wrap"><?php echo $tituloModuloSeguimiento; ?>
                       
                       <?php if ($esPanelOrdenCompraAdministrativa){ ?>
+                        <?php if ($ocPendientesSeguimiento > 0){ ?>
                       <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> '.($ocPendientesSeguimiento === 1 ? 'OC pendiente' : 'OC pendientes').' </small></small>'; ?></span></small>
+                        <?php } ?>
                       <?php } else { ?>
                         <?php if ($vencidas !== false && $vencidas['total'] > 0){ ?>
                         <small><span class="right badge badge-danger ml-3 mt-2"><?php echo $vencidas['total'].'<small><small><br> Venc. </small></small>'; ?></span></small>
