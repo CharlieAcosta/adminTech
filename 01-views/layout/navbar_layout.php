@@ -63,8 +63,11 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $ocPendientesSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? contarOrdenesCompraPendientes() : 0;
+$ocHabilitadasBandejaAdministrativaNavbar = perfilPuedeAccederSoloOrdenCompra($perfil)
+    ? contarOrdenesCompraHabilitadasBandejaAdministrativa()
+    : 0;
 $mostrarSeguimientoNavbar = in_array($perfil, $presupuestos, true)
-    && (!perfilPuedeAccederSoloOrdenCompra($perfil) || $ocPendientesSeguimientoNavbar > 0);
+    && (!perfilPuedeAccederSoloOrdenCompra($perfil) || $ocHabilitadasBandejaAdministrativaNavbar > 0);
 $tituloSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? '&Oacute;rdenes de compra' : 'Seguimiento de obra';
 $iconoSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? 'fa-solid fa-file-invoice' : 'fa-solid fa-warehouse';
 ?>
