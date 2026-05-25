@@ -95,7 +95,7 @@ if (!function_exists('normalizarFiltroEstadoOrdenCompraAdministrativo')) {
     {
         $filtro = strtolower(trim((string)$filtro));
         $filtro = str_replace(['-', ' '], '_', $filtro);
-        $permitidos = ['pendientes', 'cargadas', 'todas_oc'];
+        $permitidos = ['pendientes', 'cargadas', 'todas_oc', 'previsita', 'pendientes_previsita'];
 
         return in_array($filtro, $permitidos, true) ? $filtro : 'pendientes';
     }

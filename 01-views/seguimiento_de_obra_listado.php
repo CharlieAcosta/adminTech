@@ -14,9 +14,9 @@ $deleteIcon = array('Super Administrador','Administrador');
 include_once '../03-controller/presupuestosController.php'; //conecta a la base de datos
 $esBandejaOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
 $rangoInicialSeguimiento = $esBandejaOrdenCompraAdministrativa
-    ? resolverRangoInicialOrdenCompraPendiente()
+    ? '30_dias'
     : '30_dias';
-$estadoOrdenCompraInicialSeguimiento = $esBandejaOrdenCompraAdministrativa ? 'pendientes' : '';
+$estadoOrdenCompraInicialSeguimiento = $esBandejaOrdenCompraAdministrativa ? 'pendientes_previsita' : '';
 $rangoInicialJsSeguimiento = strtoupper($rangoInicialSeguimiento);
 $tituloListadoSeguimiento = $esBandejaOrdenCompraAdministrativa
     ? 'Previsita &amp; OC | Listado'
@@ -68,6 +68,18 @@ $estadosOrdenCompraRapidos = array(
     'cargadas' => 'Cargadas',
     'todas_oc' => 'Todas OC'
 );
+$estadosPrevisitaRapidos = array(
+    'previsita' => 'Previsita'
+);
+$filtrosEstadoOcInicialesActivos = array();
+if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
+    $filtrosEstadoOcInicialesActivos = array(
+        'pendientes' => true,
+        'previsita' => true
+    );
+} elseif ($estadoOrdenCompraInicialSeguimiento !== '') {
+    $filtrosEstadoOcInicialesActivos[$estadoOrdenCompraInicialSeguimiento] = true;
+}
 ?> 
 
 <!DOCTYPE html>
@@ -180,13 +192,26 @@ $estadosOrdenCompraRapidos = array(
                         <?php foreach ($estadosOrdenCompraRapidos as $valorFiltro => $labelFiltro): ?>
                           <button
                             type="button"
-                            class="btn btn-sm btn-outline-primary seguimiento-filtro-btn seguimiento-filtro-oc-btn btn-filtro-rapido<?php echo $valorFiltro === $estadoOrdenCompraInicialSeguimiento ? ' is-active' : ''; ?>"
+                            class="btn btn-sm btn-outline-primary seguimiento-filtro-btn seguimiento-filtro-oc-btn btn-filtro-rapido<?php echo !empty($filtrosEstadoOcInicialesActivos[$valorFiltro]) ? ' is-active' : ''; ?>"
                             data-oc-state-filter="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
                             data-variant="primary"
-                            aria-pressed="<?php echo $valorFiltro === $estadoOrdenCompraInicialSeguimiento ? 'true' : 'false'; ?>">
+                            aria-pressed="<?php echo !empty($filtrosEstadoOcInicialesActivos[$valorFiltro]) ? 'true' : 'false'; ?>">
                             <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
                           </button>
                         <?php endforeach; ?>
+                        <?php if ($esBandejaOrdenCompraAdministrativa): ?>
+                          <span class="seguimiento-filtro-separador">|</span>
+                          <?php foreach ($estadosPrevisitaRapidos as $valorFiltro => $labelFiltro): ?>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-info seguimiento-filtro-btn seguimiento-filtro-oc-btn btn-filtro-rapido<?php echo !empty($filtrosEstadoOcInicialesActivos[$valorFiltro]) ? ' is-active' : ''; ?>"
+                              data-oc-state-filter="<?php echo htmlspecialchars($valorFiltro, ENT_QUOTES, 'UTF-8'); ?>"
+                              data-variant="info"
+                              aria-pressed="<?php echo !empty($filtrosEstadoOcInicialesActivos[$valorFiltro]) ? 'true' : 'false'; ?>">
+                              <?php echo htmlspecialchars($labelFiltro, ENT_QUOTES, 'UTF-8'); ?>
+                            </button>
+                          <?php endforeach; ?>
+                        <?php endif; ?>
                       </div>
                     </div>
 
@@ -381,7 +406,7 @@ $estadosOrdenCompraRapidos = array(
     value: <?php echo json_encode($rangoInicialJsSeguimiento); ?>
   };
   const filtroOrdenCompraSeguimiento = {
-    value: <?php echo $esBandejaOrdenCompraAdministrativa ? "'PENDIENTES'" : "''"; ?>
+    value: <?php echo json_encode(strtoupper($estadoOrdenCompraInicialSeguimiento)); ?>
   };
   const esBandejaOrdenCompraAdministrativa = <?php echo $esBandejaOrdenCompraAdministrativa ? 'true' : 'false'; ?>;
 
@@ -472,7 +497,11 @@ $estadosOrdenCompraRapidos = array(
     $('.seguimiento-filtro-btn[data-oc-state-filter]').each(function () {
       const $boton = $(this);
       const valor = normalizarFiltroOrdenCompraSeguimiento($boton.data('oc-state-filter'));
-      aplicarEstadoVisualBotonFiltro($boton, valor !== '' && valor === filtroOrdenCompraSeguimiento.value);
+      let activo = valor !== '' && valor === filtroOrdenCompraSeguimiento.value;
+      if (esBandejaOrdenCompraAdministrativa && filtroOrdenCompraSeguimiento.value === 'PENDIENTES_PREVISITA') {
+        activo = valor === 'PENDIENTES' || valor === 'PREVISITA';
+      }
+      aplicarEstadoVisualBotonFiltro($boton, activo);
     });
   }
 
@@ -568,6 +597,10 @@ $estadosOrdenCompraRapidos = array(
         return 'todas_oc';
       case 'PENDIENTES':
         return 'pendientes';
+      case 'PREVISITA':
+        return 'previsita';
+      case 'PENDIENTES_PREVISITA':
+        return 'pendientes_previsita';
       default:
         return '';
     }
@@ -686,7 +719,7 @@ $estadosOrdenCompraRapidos = array(
         { "targets": 6, "type": "date-eu" }  // Fecha
       ],
 
-      "order": [[5, "desc"], [6, "asc"], [7, "asc"]]
+      "order": <?php echo $esBandejaOrdenCompraAdministrativa ? '[[9, "asc"], [1, "desc"]]' : '[[5, "desc"], [6, "asc"], [7, "asc"]]'; ?>
     });
 
     $('#current_table_wrapper .dt-buttons').remove();
