@@ -116,31 +116,44 @@ function modGetAllRegistros($filtro, $rangoTiempo = '30_dias', $busqueda = '', $
 
    $modoCircuitoActivo = normalizarModoEnvioMailPresupuestos(obtenerModoActivoCircuitoComercialPresupuestos());
    $aliasHistorialActivo = $modoCircuitoActivo === 'smtp' ? 'hcm' : 'hcs';
-   $fechaFiltroSql = 'v.log_alta';
+   $fechaFiltroPrevisitaSql = 'v.log_alta';
+   $fechaFiltroOcSql = 'v.log_alta';
+   $fechaFiltroSql = $fechaFiltroPrevisitaSql;
    if ($origenFechaRango === 'aprobacion_oc' && $tieneCreatedAtHistorialComercial) {
-      $fechaFiltroSql = "COALESCE(CASE WHEN UPPER(TRIM({$aliasHistorialActivo}.estado_resultante)) = 'APROBADO' THEN {$aliasHistorialActivo}.created_at ELSE NULL END, v.log_alta)";
+      $fechaFiltroOcSql = "COALESCE(CASE WHEN UPPER(TRIM({$aliasHistorialActivo}.estado_resultante)) = 'APROBADO' THEN {$aliasHistorialActivo}.created_at ELSE NULL END, v.log_alta)";
+      $fechaFiltroSql = $fechaFiltroOcSql;
+   } elseif ($origenFechaRango === 'previsita_oc' && $tieneCreatedAtHistorialComercial) {
+      $fechaFiltroOcSql = "COALESCE(CASE WHEN UPPER(TRIM({$aliasHistorialActivo}.estado_resultante)) = 'APROBADO' THEN {$aliasHistorialActivo}.created_at ELSE NULL END, v.log_alta)";
    }
 
    $filtroTiempoSql = '';
+   $fechaDesdeSql = '';
    switch ($rangoTiempoNormalizado) {
       case '15_DIAS':
-         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 15 DAY)";
+         $fechaDesdeSql = 'DATE_SUB(CURDATE(), INTERVAL 15 DAY)';
          break;
       case '30_DIAS':
-         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)";
+         $fechaDesdeSql = 'DATE_SUB(CURDATE(), INTERVAL 30 DAY)';
          break;
       case 'TRIMESTRE':
-         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)";
+         $fechaDesdeSql = 'DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
          break;
       case 'SEMESTRE':
-         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)";
+         $fechaDesdeSql = 'DATE_SUB(CURDATE(), INTERVAL 6 MONTH)';
          break;
       case 'ANIO':
-         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)";
+         $fechaDesdeSql = 'DATE_SUB(CURDATE(), INTERVAL 1 YEAR)';
          break;
       default:
-         $filtroTiempoSql = '';
+         $fechaDesdeSql = '';
          break;
+   }
+   if ($fechaDesdeSql !== '') {
+      if ($origenFechaRango === 'previsita_oc') {
+         $filtroTiempoSql = " AND (DATE({$fechaFiltroPrevisitaSql}) >= {$fechaDesdeSql} OR DATE({$fechaFiltroOcSql}) >= {$fechaDesdeSql})";
+      } else {
+         $filtroTiempoSql = " AND DATE({$fechaFiltroSql}) >= {$fechaDesdeSql}";
+      }
    }
 
    $exprBusquedaEstadoComercialSimulacion = $tieneEstadoComercialSimulacion

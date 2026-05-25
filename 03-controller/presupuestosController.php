@@ -178,6 +178,17 @@ if (!function_exists('resolverBadgeEstadoPresupuestoSeguimientoListado')) {
     }
 }
 
+if (!function_exists('esEstadoPrevisitaAdministrativaSeguimientoListado')) {
+    function esEstadoPrevisitaAdministrativaSeguimientoListado(?string $estadoNormalizado): bool
+    {
+        return in_array(
+            strtoupper(trim((string)$estadoNormalizado)),
+            ['PROGRAMADA', 'REPROGRAMADA', 'VENCIDA'],
+            true
+        );
+    }
+}
+
 if (!function_exists('normalizarEstadoFiltroRapidoSeguimientoListado')) {
     function normalizarEstadoFiltroRapidoSeguimientoListado(?string $estado): string
     {
@@ -372,7 +383,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
       $estadoOrdenCompraFiltroNormalizado = normalizarFiltroEstadoOrdenCompraAdministrativo($estadoOrdenCompraFiltro);
    }
 
-   $origenFechaRango = $esBandejaOrdenCompraAdministrativa ? 'aprobacion_oc' : 'previsita';
+   $origenFechaRango = $esBandejaOrdenCompraAdministrativa ? 'previsita_oc' : 'previsita';
    $all_registros = modGetAllRegistros($filtro, $rangoTiempo, $busqueda, $origenFechaRango);
    $modoCircuitoActivo = obtenerModoActivoCircuitoComercialPresupuestos();
    $estadoVisitaFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoVisitaFiltro);
@@ -398,6 +409,7 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
    		}
 
 		  $estadoVisitaVisual = resolverBadgeEstadoVisitaSeguimientoListado($value_all_registros['estado_visita'] ?? '');
+          $esPrevisitaAdministrativa = esEstadoPrevisitaAdministrativaSeguimientoListado($estadoVisitaVisual['normalizado'] ?? '');
 
 		  $presupuestoHtml = '';
 		  $estadoVisiblePresupuestoNormalizado = '';
@@ -472,17 +484,35 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 		  }
 
           if ($esBandejaOrdenCompraAdministrativa) {
-            if (empty($estadoOrdenCompraCalculado['habilitada'])) {
-                continue;
-            }
+            $esOrdenCompraGestionable = !empty($estadoOrdenCompraCalculado['habilitada']);
+            $esOrdenCompraPendiente = $esOrdenCompraGestionable
+                && estadoOrdenCompraCoincideConFiltroAdministrativo($estadoOrdenCompraCalculado, 'pendientes');
 
-            if (!estadoOrdenCompraCoincideConFiltroAdministrativo($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
-                continue;
+            if ($estadoOrdenCompraFiltroNormalizado === 'previsita') {
+                if (!$esPrevisitaAdministrativa) {
+                    continue;
+                }
+            } elseif ($estadoOrdenCompraFiltroNormalizado === 'pendientes_previsita') {
+                if (!$esOrdenCompraPendiente && !$esPrevisitaAdministrativa) {
+                    continue;
+                }
+            } else {
+                if (!$esOrdenCompraGestionable) {
+                    continue;
+                }
+
+                if (!estadoOrdenCompraCoincideConFiltroAdministrativo($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
+                    continue;
+                }
             }
           } elseif ($estadoOrdenCompraFiltroNormalizado !== '') {
             if (!estadoOrdenCompraCoincideConFiltroSeguimiento($estadoOrdenCompraCalculado, $estadoOrdenCompraFiltroNormalizado)) {
                 continue;
             }
+          }
+
+          if ($esBandejaOrdenCompraAdministrativa && $esPrevisitaAdministrativa && empty($estadoOrdenCompraCalculado['habilitada'])) {
+            $ordenCompraHtml = construirBadgeEstadoSeguimientoListado('Previsita', 'badge-info');
           }
 
           if ($estadoVisitaFiltro !== '' && $estadoVisitaVisual['normalizado'] !== $estadoVisitaFiltro) {
@@ -636,7 +666,16 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 		  }
 
 		  // Presupuesto + Orden de compra
-          $filas .= '<td class="text-center align-middle">'.$presupuestoHtml.'</td><td class="text-center align-middle">'.$ordenCompraHtml.'</td>';
+          $ordenCompraOrdenListado = 9;
+          if (($estadoOrdenCompraCalculado['estado'] ?? '') === 'pendiente') {
+            $ordenCompraOrdenListado = 1;
+          } elseif ($esPrevisitaAdministrativa) {
+            $ordenCompraOrdenListado = 2;
+          } elseif (!empty($estadoOrdenCompraCalculado['habilitada'])) {
+            $ordenCompraOrdenListado = 0;
+          }
+
+          $filas .= '<td class="text-center align-middle">'.$presupuestoHtml.'</td><td class="text-center align-middle" data-order="'.$ordenCompraOrdenListado.'">'.$ordenCompraHtml.'</td>';
 
 			// acciones				
 			$filas .= '<td class="text-left pl-3" style="white-space: nowrap;">';
