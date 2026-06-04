@@ -38,6 +38,23 @@ if (!function_exists('responderOrdenCompraJson')) {
     }
 }
 
+if (!function_exists('responderOrdenCompraConfirmacionClienteJson')) {
+    function responderOrdenCompraConfirmacionClienteJson(array $clienteSugerido): void
+    {
+        http_response_code(200);
+        echo json_encode([
+            'success' => false,
+            'requires_cliente_confirmation' => true,
+            'message' => 'El cliente no existe en el maestro de Clientes.',
+            'data' => [
+                'cliente_sugerido' => $clienteSugerido,
+            ],
+            'errors' => [],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
 if (!function_exists('usuarioOrdenCompraController')) {
     function usuarioOrdenCompraController(): array
     {
@@ -120,6 +137,10 @@ if (!function_exists('payloadOrdenCompraController')) {
     function payloadOrdenCompraController(mysqli $db, array $presupuesto, string $perfil): array
     {
         $ordenCompra = obtenerOrdenCompraActivaPorPresupuestoEnConexion($db, (int)$presupuesto['id_presupuesto']);
+        if ($ordenCompra) {
+            $ordenCompra['intervino_resumen'] = construirResumenIntervencionesOrdenCompraEnConexion($db, $ordenCompra);
+        }
+
         $estadoCalculado = resolverEstadoOrdenCompraCalculado(
             (string)($presupuesto['estado_comercial_activo'] ?? ''),
             $ordenCompra
@@ -139,7 +160,8 @@ if (!function_exists('payloadOrdenCompraController')) {
             'estado_calculado' => $estadoCalculado['estado'],
             'label_estado' => $estadoCalculado['estado_label'],
             'badge_class' => $estadoCalculado['badge_class'],
-            'puede_editar' => perfilPuedeEditarOrdenCompra($perfil) && !empty($estadoCalculado['habilitada']),
+            'puede_editar' => perfilPuedeEditarOrdenCompra($perfil)
+                && !empty($estadoCalculado['habilitada']),
             'orden_compra' => $ordenCompra,
             'mensaje' => $mensaje,
         ];
@@ -221,6 +243,69 @@ if (!function_exists('adjuntarPdfOrdenCompraController')) {
         $datos['_pdf_ruta_absoluta_nueva'] = $pdfGuardado['ruta_absoluta'];
 
         return $datos;
+    }
+}
+
+if (!function_exists('flagOrdenCompraController')) {
+    function flagOrdenCompraController(array $input, string $nombre): bool
+    {
+        $valor = $input[$nombre] ?? null;
+        return $valor === true || $valor === 1 || $valor === '1' || $valor === 'true' || $valor === 'on';
+    }
+}
+
+if (!function_exists('evaluarAltaClienteDesdeOrdenCompraController')) {
+    function evaluarAltaClienteDesdeOrdenCompraController(mysqli $db, array $input, array $presupuesto, array $datosOrdenCompra, array $usuario): array
+    {
+        $datosCliente = prepararDatosClienteDesdeOrdenCompra(
+            $presupuesto,
+            array_merge($datosOrdenCompra, $input),
+            (int)$usuario['id_usuario']
+        );
+        $erroresCliente = validarDatosClienteDesdeOrdenCompra($datosCliente);
+
+        if (!empty($erroresCliente)) {
+            return [
+                'accion' => 'omitida',
+                'motivo' => 'datos_insuficientes',
+                'errores' => $erroresCliente,
+                'cliente_sugerido' => [
+                    'cuit' => (string)($presupuesto['cuit'] ?? ''),
+                    'razon_social' => (string)($presupuesto['razon_social'] ?? ''),
+                ],
+            ];
+        }
+
+        $clienteExistente = obtenerClientePorCuitNormalizadoEnConexion($db, $datosCliente['cuit']);
+        if ($clienteExistente) {
+            return [
+                'accion' => 'existente',
+                'cliente' => $clienteExistente,
+            ];
+        }
+
+        if (flagOrdenCompraController($input, 'guardar_sin_alta_cliente')) {
+            return [
+                'accion' => 'omitida',
+                'motivo' => 'rechazada_por_usuario',
+                'cliente_sugerido' => [
+                    'cuit' => $datosCliente['cuit'],
+                    'razon_social' => $datosCliente['razon_social'],
+                ],
+            ];
+        }
+
+        if (!flagOrdenCompraController($input, 'confirmar_alta_cliente')) {
+            responderOrdenCompraConfirmacionClienteJson([
+                'cuit' => $datosCliente['cuit'],
+                'razon_social' => $datosCliente['razon_social'],
+            ]);
+        }
+
+        return [
+            'accion' => 'crear',
+            'datos_cliente' => $datosCliente,
+        ];
     }
 }
 
@@ -324,25 +409,54 @@ try {
             }
 
             try {
+                validarArchivoPdfOrdenCompra($archivoPdf);
+            } catch (RuntimeException $e) {
+                responderOrdenCompraJson(false, 'El PDF de la OC no es valido.', [], ['pdf_oc' => $e->getMessage()], 422);
+            }
+
+            $altaCliente = evaluarAltaClienteDesdeOrdenCompraController($db, $input, $presupuesto, $datos, $usuario);
+
+            try {
                 $datos = adjuntarPdfOrdenCompraController($datos, $archivoPdf);
             } catch (RuntimeException $e) {
                 responderOrdenCompraJson(false, 'El PDF de la OC no es valido.', [], ['pdf_oc' => $e->getMessage()], 422);
             }
 
+            mysqli_begin_transaction($db);
+            $clienteAltaPayload = $altaCliente;
+            if (($altaCliente['accion'] ?? '') === 'crear') {
+                $resultadoAltaCliente = crearClienteDesdeOrdenCompraEnConexion($db, $altaCliente['datos_cliente']);
+                if (empty($resultadoAltaCliente['creado']) && empty($resultadoAltaCliente['existente'])) {
+                    mysqli_rollback($db);
+                    if (!empty($datos['_pdf_ruta_absoluta_nueva']) && file_exists($datos['_pdf_ruta_absoluta_nueva'])) {
+                        @unlink($datos['_pdf_ruta_absoluta_nueva']);
+                    }
+                    responderOrdenCompraJson(false, $resultadoAltaCliente['error'] ?? 'No se pudo crear el cliente desde la OC.', [], ['cliente' => 'No se pudo crear el cliente automaticamente.'], 500);
+                }
+
+                $clienteAltaPayload = [
+                    'accion' => !empty($resultadoAltaCliente['creado']) ? 'creado' : 'existente',
+                    'cliente' => $resultadoAltaCliente['cliente'] ?? null,
+                ];
+            }
+
             $idOrdenCompra = crearOrdenCompraEnConexion($db, $datos);
             if (!$idOrdenCompra) {
+                mysqli_rollback($db);
                 if (!empty($datos['_pdf_ruta_absoluta_nueva']) && file_exists($datos['_pdf_ruta_absoluta_nueva'])) {
                     @unlink($datos['_pdf_ruta_absoluta_nueva']);
                 }
                 responderOrdenCompraJson(false, 'No se pudo guardar la Orden de compra.', [], [], 500);
             }
 
+            mysqli_commit($db);
             $ordenCompra = obtenerOrdenCompraPorIdEnConexion($db, (int)$idOrdenCompra);
             responderOrdenCompraJson(true, 'Orden de compra creada.', [
                 'id_orden_compra' => (int)$idOrdenCompra,
                 'estado' => $ordenCompra['estado'] ?? 'cargada',
                 'numero_oc' => $ordenCompra['numero_oc'] ?? $datos['numero_oc'],
                 'orden_compra' => $ordenCompra,
+                'cliente_alta' => $clienteAltaPayload,
             ]);
             break;
 

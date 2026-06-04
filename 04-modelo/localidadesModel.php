@@ -9,6 +9,7 @@ if(isset($_POST['ajax']) && $_POST['ajax']=='on'){
 function getLocalidadesByPartido($id_partido, $metodo){
 
         $db = conectDB();
+        $rows = [];
         $query = "
         SELECT loc.*
         FROM localidades AS loc
@@ -17,7 +18,9 @@ function getLocalidadesByPartido($id_partido, $metodo){
         ;"; // trae los partidos por provincia seleccionada
 
         $resultado = $db->query($query);
-        while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
+        if ($resultado) {
+            while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
+        }
 
         foreach ($rows as $key => $value) {
             $rows[$key]['localidad'] = ucwords(mb_strtolower((string)($value['localidad'] ?? '')));
