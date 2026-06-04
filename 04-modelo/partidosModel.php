@@ -7,6 +7,7 @@ if(isset($_POST['ajax']) && $_POST['ajax']=='on'){
 
 function getPartidosByProvincia($id_provincia, $metodo){
         $db = conectDB();
+        $rows = [];
         $query = "
         SELECT par.*
         FROM partidos AS par
@@ -15,7 +16,9 @@ function getPartidosByProvincia($id_provincia, $metodo){
         ;"; // trae los partidos por provincia seleccionada
 
         $resultado = $db->query($query);
-        while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
+        if ($resultado) {
+            while($row = mysqli_fetch_array($resultado, MYSQLI_ASSOC)){$rows[] = $row;}
+        }
 
         foreach ($rows as $key => $value) {
             $rows[$key]['partido'] = (string)($value['partido'] ?? '');

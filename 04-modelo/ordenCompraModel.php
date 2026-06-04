@@ -193,6 +193,136 @@ if (!function_exists('listarOrdenesCompraPorPresupuestoEnConexion')) {
     }
 }
 
+if (!function_exists('formatearFechaIntervencionOrdenCompra')) {
+    function formatearFechaIntervencionOrdenCompra(?string $fecha): string
+    {
+        if (function_exists('formatearFechaIntervencionPresupuesto')) {
+            return formatearFechaIntervencionPresupuesto($fecha);
+        }
+
+        if (!$fecha) {
+            return '-';
+        }
+
+        $dt = date_create($fecha);
+        return $dt ? $dt->format('d/m/Y H:i:s') : $fecha;
+    }
+}
+
+if (!function_exists('escIntervencionOrdenCompra')) {
+    function escIntervencionOrdenCompra(string $texto): string
+    {
+        return htmlspecialchars($texto, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('obtenerNombreUsuarioOrdenCompraEnConexion')) {
+    function obtenerNombreUsuarioOrdenCompraEnConexion(mysqli $db, ?int $idUsuario): string
+    {
+        $idUsuario = (int)$idUsuario;
+        if ($idUsuario <= 0) {
+            return 'Usuario no informado';
+        }
+
+        $stmt = mysqli_prepare($db, 'SELECT apellidos, nombres FROM usuarios WHERE id_usuario = ? LIMIT 1');
+        if (!$stmt) {
+            return 'Usuario #' . $idUsuario;
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idUsuario);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        if (!$row) {
+            return 'Usuario #' . $idUsuario;
+        }
+
+        $nombre = trim((string)($row['apellidos'] ?? '') . ' ' . (string)($row['nombres'] ?? ''));
+
+        return $nombre !== '' ? $nombre : 'Usuario #' . $idUsuario;
+    }
+}
+
+if (!function_exists('construirResumenIntervencionesOrdenCompraEnConexion')) {
+    function construirResumenIntervencionesOrdenCompraEnConexion(mysqli $db, ?array $ordenCompra): array
+    {
+        $headerHtml = '<thead><tr><th>Usuario</th><th>Accion</th><th>Fecha</th></tr></thead>';
+        $tablaVacia = '<table class="table table-sm mb-0">'
+            . $headerHtml
+            . '<tbody><tr><td colspan="3" class="text-center text-muted">Sin otras intervenciones</td></tr></tbody>'
+            . '</table>';
+
+        if (empty($ordenCompra)) {
+            return [
+                'ultimo_texto' => 'Sin intervenciones',
+                'popover_html' => $tablaVacia,
+                'total' => 0,
+                'items' => [],
+            ];
+        }
+
+        $items = [];
+        $createdAt = (string)($ordenCompra['created_at'] ?? '');
+        $updatedAt = (string)($ordenCompra['updated_at'] ?? '');
+        $idAlta = isset($ordenCompra['id_usuario_alta']) ? (int)$ordenCompra['id_usuario_alta'] : 0;
+        $idModificacion = isset($ordenCompra['id_usuario_modificacion']) ? (int)$ordenCompra['id_usuario_modificacion'] : 0;
+
+        if ($updatedAt !== '' && ($updatedAt !== $createdAt || ($idModificacion > 0 && $idModificacion !== $idAlta))) {
+            $items[] = [
+                'usuario_nombre' => obtenerNombreUsuarioOrdenCompraEnConexion($db, $idModificacion),
+                'accion_label' => 'Actualizar OC',
+                'fecha_texto' => formatearFechaIntervencionOrdenCompra($updatedAt),
+            ];
+        }
+
+        if ($createdAt !== '') {
+            $items[] = [
+                'usuario_nombre' => obtenerNombreUsuarioOrdenCompraEnConexion($db, $idAlta),
+                'accion_label' => 'Cargar OC',
+                'fecha_texto' => formatearFechaIntervencionOrdenCompra($createdAt),
+            ];
+        }
+
+        if (empty($items)) {
+            return [
+                'ultimo_texto' => 'Sin intervenciones',
+                'popover_html' => $tablaVacia,
+                'total' => 0,
+                'items' => [],
+            ];
+        }
+
+        $ultimo = $items[0];
+        $ultimoTexto = $ultimo['usuario_nombre']
+            . ' | ' . $ultimo['accion_label']
+            . ' | ' . $ultimo['fecha_texto'];
+
+        $otros = array_slice($items, 1);
+        $html = '<table class="table table-sm mb-0">' . $headerHtml . '<tbody>';
+        if ($otros) {
+            foreach ($otros as $item) {
+                $html .= '<tr>'
+                    . '<td>' . escIntervencionOrdenCompra((string)$item['usuario_nombre']) . '</td>'
+                    . '<td>' . escIntervencionOrdenCompra((string)$item['accion_label']) . '</td>'
+                    . '<td>' . escIntervencionOrdenCompra((string)$item['fecha_texto']) . '</td>'
+                    . '</tr>';
+            }
+        } else {
+            $html .= '<tr><td colspan="3" class="text-center text-muted">Sin otras intervenciones</td></tr>';
+        }
+        $html .= '</tbody></table>';
+
+        return [
+            'ultimo_texto' => $ultimoTexto,
+            'popover_html' => $html,
+            'total' => count($items),
+            'items' => $items,
+        ];
+    }
+}
+
 if (!function_exists('obtenerOrdenCompraActivaPorPresupuesto')) {
     function obtenerOrdenCompraActivaPorPresupuesto(mysqli $db, int $idPresupuesto): ?array
     {
@@ -971,8 +1101,34 @@ if (!function_exists('obtenerPresupuestoBasicoParaOrdenCompra')) {
             : "'' AS estado_comercial_smtp";
 
         $selectPrevisita = $tienePrevisitas
-            ? "v.razon_social, v.cuit, v.estado_visita"
-            : "'' AS razon_social, '' AS cuit, '' AS estado_visita";
+            ? "
+                v.razon_social,
+                v.cuit,
+                v.estado_visita,
+                v.contacto_obra,
+                v.tel_contacto_obra,
+                v.email_contacto_obra,
+                v.provincia_visita,
+                v.partido_visita,
+                v.localidad_visita,
+                v.calle_visita,
+                v.altura_visita,
+                v.cp_visita
+            "
+            : "
+                '' AS razon_social,
+                '' AS cuit,
+                '' AS estado_visita,
+                '' AS contacto_obra,
+                '' AS tel_contacto_obra,
+                '' AS email_contacto_obra,
+                '' AS provincia_visita,
+                '' AS partido_visita,
+                '' AS localidad_visita,
+                '' AS calle_visita,
+                '' AS altura_visita,
+                '' AS cp_visita
+            ";
         $joinPrevisita = $tienePrevisitas
             ? 'LEFT JOIN previsitas v ON v.id_previsita = p.id_previsita'
             : '';
@@ -1050,6 +1206,303 @@ if (!function_exists('obtenerPresupuestoBasicoParaOrdenCompra')) {
             'razon_social' => $razonSocial,
             'cuit' => $cuit,
             'estado_visita' => (string)($row['estado_visita'] ?? ''),
+            'contacto_obra' => trim((string)($row['contacto_obra'] ?? '')),
+            'tel_contacto_obra' => trim((string)($row['tel_contacto_obra'] ?? '')),
+            'email_contacto_obra' => trim((string)($row['email_contacto_obra'] ?? '')),
+            'provincia_visita' => trim((string)($row['provincia_visita'] ?? '')),
+            'partido_visita' => trim((string)($row['partido_visita'] ?? '')),
+            'localidad_visita' => trim((string)($row['localidad_visita'] ?? '')),
+            'calle_visita' => trim((string)($row['calle_visita'] ?? '')),
+            'altura_visita' => trim((string)($row['altura_visita'] ?? '')),
+            'cp_visita' => trim((string)($row['cp_visita'] ?? '')),
         ];
+    }
+}
+
+if (!function_exists('normalizarCuitClienteOrdenCompra')) {
+    function normalizarCuitClienteOrdenCompra($cuit): string
+    {
+        return preg_replace('/\D+/', '', (string)$cuit) ?: '';
+    }
+}
+
+if (!function_exists('primerValorOrdenCompraCliente')) {
+    function primerValorOrdenCompraCliente(...$valores): ?string
+    {
+        foreach ($valores as $valor) {
+            $texto = trim((string)$valor);
+            if ($texto !== '') {
+                return $texto;
+            }
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('normalizarEmailClienteOrdenCompra')) {
+    function normalizarEmailClienteOrdenCompra($email): ?string
+    {
+        $email = strtolower(trim((string)$email));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        return normalizarTextoOrdenCompra($email, 255);
+    }
+}
+
+if (!function_exists('normalizarEnteroNullableClienteOrdenCompra')) {
+    function normalizarEnteroNullableClienteOrdenCompra($valor): ?int
+    {
+        $valor = trim((string)$valor);
+        if ($valor === '' || !ctype_digit($valor)) {
+            return null;
+        }
+
+        return (int)$valor;
+    }
+}
+
+if (!function_exists('obtenerClientePorCuitNormalizadoEnConexion')) {
+    function obtenerClientePorCuitNormalizadoEnConexion(mysqli $db, ?string $cuit): ?array
+    {
+        $cuitNormalizado = normalizarCuitClienteOrdenCompra($cuit);
+        if ($cuitNormalizado === '' || !tabla_existe($db, 'clientes')) {
+            return null;
+        }
+
+        $sql = "
+            SELECT id_cliente, cuit, razon_social, estado
+            FROM clientes
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(cuit, ''), '-', ''), '.', ''), ' ', ''), '/', '') = ?
+            LIMIT 1
+        ";
+        $stmt = mysqli_prepare($db, $sql);
+        if (!$stmt) {
+            return null;
+        }
+
+        mysqli_stmt_bind_param($stmt, 's', $cuitNormalizado);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('prepararDatosClienteDesdeOrdenCompra')) {
+    function prepararDatosClienteDesdeOrdenCompra(array $presupuesto, array $datosOrdenCompra, int $idUsuario): array
+    {
+        $cuit = normalizarCuitClienteOrdenCompra($presupuesto['cuit'] ?? '');
+        $razonSocial = normalizarTextoOrdenCompra($presupuesto['razon_social'] ?? '', 255);
+        $contactoPrincipal = primerValorOrdenCompraCliente(
+            $datosOrdenCompra['contacto_compras'] ?? null,
+            $datosOrdenCompra['area_facturacion'] ?? null,
+            $datosOrdenCompra['contacto_sitio'] ?? null,
+            $datosOrdenCompra['contacto_obra_mantenimiento'] ?? null,
+            $presupuesto['contacto_obra'] ?? null
+        );
+        $telefono = primerValorOrdenCompraCliente(
+            $datosOrdenCompra['contacto_compras_telefono'] ?? null,
+            $datosOrdenCompra['contacto_sitio_telefono'] ?? null,
+            $datosOrdenCompra['contacto_obra_mantenimiento_telefono'] ?? null,
+            $presupuesto['tel_contacto_obra'] ?? null
+        );
+        $email = primerValorOrdenCompraCliente(
+            $datosOrdenCompra['email_facturacion'] ?? null,
+            $datosOrdenCompra['contacto_compras_email'] ?? null,
+            $datosOrdenCompra['contacto_sitio_email'] ?? null,
+            $datosOrdenCompra['contacto_obra_mantenimiento_email'] ?? null,
+            $presupuesto['email_contacto_obra'] ?? null
+        );
+        $contactoPago = primerValorOrdenCompraCliente(
+            $datosOrdenCompra['area_facturacion'] ?? null,
+            $datosOrdenCompra['contacto_compras'] ?? null,
+            $contactoPrincipal
+        );
+        $emailPago = primerValorOrdenCompraCliente(
+            $datosOrdenCompra['email_facturacion'] ?? null,
+            $datosOrdenCompra['contacto_compras_email'] ?? null,
+            $email
+        );
+        $nota = sprintf(
+            'Alta automatica desde OC %s. Presupuesto %d / Previsita %d.',
+            trim((string)($datosOrdenCompra['numero_oc'] ?? '')) ?: 'sin numero',
+            (int)($presupuesto['id_presupuesto'] ?? 0),
+            (int)($presupuesto['id_previsita'] ?? 0)
+        );
+
+        return [
+            'cuit' => $cuit,
+            'razon_social' => $razonSocial ? strtoupper($razonSocial) : null,
+            'telefono' => normalizarTextoOrdenCompra($telefono, 255),
+            'email' => normalizarEmailClienteOrdenCompra($email),
+            'estado' => 'Activo',
+            'dirfis_provincia' => normalizarEnteroNullableClienteOrdenCompra($presupuesto['provincia_visita'] ?? null),
+            'dirfis_partido' => normalizarEnteroNullableClienteOrdenCompra($presupuesto['partido_visita'] ?? null),
+            'dirfis_localidad' => normalizarEnteroNullableClienteOrdenCompra($presupuesto['localidad_visita'] ?? null),
+            'dirfis_calle' => normalizarEnteroNullableClienteOrdenCompra($presupuesto['calle_visita'] ?? null),
+            'dirfis_altura' => normalizarEnteroNullableClienteOrdenCompra($presupuesto['altura_visita'] ?? null),
+            'dirfis_piso' => normalizarTextoOrdenCompra($datosOrdenCompra['dirfis_piso'] ?? $presupuesto['dirfis_piso'] ?? null, 3),
+            'dirfis_depto' => normalizarTextoOrdenCompra($datosOrdenCompra['dirfis_depto'] ?? $presupuesto['dirfis_depto'] ?? null, 3),
+            'dirfis_cp' => normalizarTextoOrdenCompra($presupuesto['cp_visita'] ?? null, 10),
+            'contacto_pri' => normalizarTextoOrdenCompra($contactoPrincipal, 255),
+            'contacto_pri_celular' => normalizarTextoOrdenCompra($telefono, 255),
+            'contacto_pri_email' => normalizarEmailClienteOrdenCompra($email),
+            'contacto_papro' => normalizarTextoOrdenCompra($contactoPago, 255),
+            'contacto_papro_celular' => normalizarTextoOrdenCompra($datosOrdenCompra['contacto_compras_telefono'] ?? $telefono, 255),
+            'contacto_papro_email' => normalizarEmailClienteOrdenCompra($emailPago),
+            'plat_licitacion' => normalizarTextoOrdenCompra($datosOrdenCompra['plat_licitacion'] ?? null, 255),
+            'usuario_licitacion' => normalizarTextoOrdenCompra($datosOrdenCompra['usuario_licitacion'] ?? null, 255),
+            'pass_licitacion' => normalizarTextoOrdenCompra($datosOrdenCompra['pass_licitacion'] ?? null, 255),
+            'email_licitacion' => normalizarEmailClienteOrdenCompra($datosOrdenCompra['email_licitacion'] ?? null),
+            'plat_pagos' => normalizarTextoOrdenCompra($datosOrdenCompra['plat_pagos'] ?? $datosOrdenCompra['portal_facturacion_url'] ?? null, 255),
+            'usuario_pagos' => normalizarTextoOrdenCompra($datosOrdenCompra['usuario_pagos'] ?? null, 255),
+            'pass_pagos' => normalizarTextoOrdenCompra($datosOrdenCompra['pass_pagos'] ?? null, 255),
+            'email_pagos' => normalizarEmailClienteOrdenCompra($datosOrdenCompra['email_pagos'] ?? $datosOrdenCompra['email_facturacion'] ?? null),
+            'plat_documentacion' => normalizarTextoOrdenCompra($datosOrdenCompra['plat_documentacion'] ?? $datosOrdenCompra['portal_ingreso_obra_url'] ?? null, 255),
+            'usuario_documentacion' => normalizarTextoOrdenCompra($datosOrdenCompra['usuario_documentacion'] ?? null, 255),
+            'pass_documentacion' => normalizarTextoOrdenCompra($datosOrdenCompra['pass_documentacion'] ?? null, 255),
+            'email_documentacion' => normalizarEmailClienteOrdenCompra($datosOrdenCompra['email_documentacion'] ?? $datosOrdenCompra['contacto_sitio_email'] ?? null),
+            'cliente_nota' => normalizarTextoOrdenCompra($nota, 255),
+            'log_usuario_id' => $idUsuario,
+            'log_accion' => 'alta',
+        ];
+    }
+}
+
+if (!function_exists('validarDatosClienteDesdeOrdenCompra')) {
+    function validarDatosClienteDesdeOrdenCompra(array $datosCliente): array
+    {
+        $errores = [];
+        if (normalizarCuitClienteOrdenCompra($datosCliente['cuit'] ?? '') === '') {
+            $errores['cliente_cuit'] = 'No hay CUIT disponible para verificar o crear el cliente.';
+        } elseif (strlen(normalizarCuitClienteOrdenCompra($datosCliente['cuit'])) !== 11) {
+            $errores['cliente_cuit'] = 'El CUIT disponible no tiene el formato esperado para alta automatica.';
+        }
+
+        if (trim((string)($datosCliente['razon_social'] ?? '')) === '') {
+            $errores['cliente_razon_social'] = 'No hay razon social suficiente para crear el cliente automaticamente.';
+        }
+
+        return $errores;
+    }
+}
+
+if (!function_exists('insertarClienteDesdeOrdenCompraEnConexion')) {
+    function insertarClienteDesdeOrdenCompraEnConexion(mysqli $db, array $datosCliente)
+    {
+        $campos = [
+            'cuit' => 's',
+            'razon_social' => 's',
+            'telefono' => 's',
+            'email' => 's',
+            'estado' => 's',
+            'dirfis_provincia' => 'i',
+            'dirfis_partido' => 'i',
+            'dirfis_localidad' => 'i',
+            'dirfis_calle' => 'i',
+            'dirfis_altura' => 'i',
+            'dirfis_piso' => 's',
+            'dirfis_depto' => 's',
+            'dirfis_cp' => 's',
+            'contacto_pri' => 's',
+            'contacto_pri_celular' => 's',
+            'contacto_pri_email' => 's',
+            'contacto_papro' => 's',
+            'contacto_papro_celular' => 's',
+            'contacto_papro_email' => 's',
+            'plat_licitacion' => 's',
+            'usuario_licitacion' => 's',
+            'pass_licitacion' => 's',
+            'email_licitacion' => 's',
+            'plat_pagos' => 's',
+            'usuario_pagos' => 's',
+            'pass_pagos' => 's',
+            'email_pagos' => 's',
+            'plat_documentacion' => 's',
+            'usuario_documentacion' => 's',
+            'pass_documentacion' => 's',
+            'email_documentacion' => 's',
+            'cliente_nota' => 's',
+            'log_usuario_id' => 'i',
+            'log_accion' => 's',
+        ];
+
+        $nombres = array_keys($campos);
+        $placeholders = implode(', ', array_fill(0, count($nombres), '?'));
+        $sql = 'INSERT INTO clientes (' . implode(', ', $nombres) . ') VALUES (' . $placeholders . ')';
+        $stmt = mysqli_prepare($db, $sql);
+        if (!$stmt) {
+            return false;
+        }
+
+        $types = implode('', array_values($campos));
+        $values = [];
+        foreach ($nombres as $nombre) {
+            $values[] = $datosCliente[$nombre] ?? null;
+        }
+
+        bindParametrosOrdenCompra($stmt, $types, $values);
+        $ok = mysqli_stmt_execute($stmt);
+        $idCliente = $ok ? mysqli_insert_id($db) : false;
+        mysqli_stmt_close($stmt);
+
+        return $idCliente;
+    }
+}
+
+if (!function_exists('crearClienteDesdeOrdenCompraEnConexion')) {
+    function crearClienteDesdeOrdenCompraEnConexion(mysqli $db, array $datosCliente): array
+    {
+        $cuitNormalizado = normalizarCuitClienteOrdenCompra($datosCliente['cuit'] ?? '');
+        $lockName = 'admintech_cliente_cuit_' . $cuitNormalizado;
+        $lockTomado = false;
+
+        $stmtLock = mysqli_prepare($db, 'SELECT GET_LOCK(?, 5) AS lock_status');
+        if ($stmtLock) {
+            mysqli_stmt_bind_param($stmtLock, 's', $lockName);
+            mysqli_stmt_execute($stmtLock);
+            $resLock = mysqli_stmt_get_result($stmtLock);
+            $rowLock = $resLock ? mysqli_fetch_assoc($resLock) : null;
+            $lockTomado = ((int)($rowLock['lock_status'] ?? 0) === 1);
+            mysqli_stmt_close($stmtLock);
+        }
+
+        if (!$lockTomado) {
+            return ['creado' => false, 'error' => 'No se pudo bloquear el CUIT para evitar duplicados.'];
+        }
+
+        try {
+            $clienteExistente = obtenerClientePorCuitNormalizadoEnConexion($db, $cuitNormalizado);
+            if ($clienteExistente) {
+                return ['creado' => false, 'existente' => true, 'cliente' => $clienteExistente];
+            }
+
+            $idCliente = insertarClienteDesdeOrdenCompraEnConexion($db, $datosCliente);
+            if (!$idCliente) {
+                return ['creado' => false, 'error' => 'No se pudo crear el cliente.'];
+            }
+
+            return [
+                'creado' => true,
+                'cliente' => [
+                    'id_cliente' => (int)$idCliente,
+                    'cuit' => $datosCliente['cuit'] ?? '',
+                    'razon_social' => $datosCliente['razon_social'] ?? '',
+                    'estado' => $datosCliente['estado'] ?? 'Activo',
+                ],
+            ];
+        } finally {
+            $stmtUnlock = mysqli_prepare($db, 'SELECT RELEASE_LOCK(?)');
+            if ($stmtUnlock) {
+                mysqli_stmt_bind_param($stmtUnlock, 's', $lockName);
+                mysqli_stmt_execute($stmtUnlock);
+                mysqli_stmt_close($stmtUnlock);
+            }
+        }
     }
 }
