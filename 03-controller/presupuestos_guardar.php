@@ -262,7 +262,11 @@ try {
                 }
 
                 echo json_encode(
-                    procesarEnvioDocumentoEmitidoPresupuestoModoActivo($_POST, $idUsuario),
+                    procesarEnvioDocumentoEmitidoPresupuestoModoActivo(
+                        $_POST,
+                        $idUsuario,
+                        $_FILES['adjuntos_adicionales'] ?? []
+                    ),
                     JSON_UNESCAPED_UNICODE
                 );
                 exit;
