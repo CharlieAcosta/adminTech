@@ -1019,6 +1019,17 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
     return implode("\n", $html);
 }
 
+$tituloEdicionSeguimiento = 'Edición de seguimiento de obra';
+$tituloVisualizacionSeguimiento = 'Visualización de solicitud de presupuesto';
+$numeroPrevisitaTitulo = isset($datos['id_previsita']) ? (int)$datos['id_previsita'] : 0;
+$obraPrevisitaTitulo = trim((string)($datos['razon_social'] ?? ''));
+
+if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
+  $detalleTituloSeguimiento = $numeroPrevisitaTitulo . ' | ' . mb_strtoupper($obraPrevisitaTitulo, 'UTF-8');
+  $tituloEdicionSeguimiento = 'Edición de: ' . $detalleTituloSeguimiento;
+  $tituloVisualizacionSeguimiento = 'Visualización de: ' . $detalleTituloSeguimiento;
+}
+
 ?>
 <script>
   const presupuestoGenerado = <?php echo jsonParaJsSeguro((bool)($presupuestoGenerado ?? false), 'false'); ?>;
@@ -1055,6 +1066,20 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <style>
     body.seguimiento-form-page > .wrapper > .content-wrapper {
       height: auto;
+    }
+
+    .seguimiento-titulo-principal {
+      font-size: 1.35rem;
+      line-height: 1.15;
+      margin-bottom: 0;
+    }
+
+    .seguimiento-content-header {
+      padding-bottom: 0.4rem;
+    }
+
+    .seguimiento-content-header .row.mb-2 {
+      margin-bottom: 0 !important;
     }
 
     #toast-container > .toast-info {
@@ -1152,11 +1177,11 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper pb-5">
     <!-- Content Header (Page header) -->
-    <section class="content-header">
+    <section class="content-header seguimiento-content-header">
       <div class="container-fluid">
         <div class="row mb-2">
           <div class="col-sm-6">
-            <h1><strong class="v-alta d-none">Alta de solicitud de presupuesto</strong><strong class="v-visual d-none">Visualización de solicitud de presupuesto</strong><strong class="v-edit d-none">Edición de seguimiento de obra</strong></h1>
+            <h1 class="seguimiento-titulo-principal"><strong class="v-alta d-none">Alta de solicitud de presupuesto</strong><strong class="v-visual d-none"><?php echo htmlspecialchars($tituloVisualizacionSeguimiento, ENT_QUOTES, 'UTF-8'); ?></strong><strong class="v-edit d-none"><?php echo htmlspecialchars($tituloEdicionSeguimiento, ENT_QUOTES, 'UTF-8'); ?></strong></h1>
           </div>
           <div class="col-sm-6">
             <ol class="breadcrumb float-sm-right">
@@ -1179,686 +1204,426 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
   </div>
 <?php endif; ?>
 
+<?php
+  $materialesPresupuestadosPedido = array_values(array_filter($materialesSolicitadosSeguimiento, function ($material) {
+    return (($material['origen'] ?? '') === 'presupuesto');
+  }));
+  $idsMaterialesPresupuestadosPedido = [];
+  foreach ($materialesPresupuestadosPedido as $materialPresupuestadoPedido) {
+    $idMaterialPresupuestado = (int)($materialPresupuestadoPedido['id_material'] ?? 0);
+    if ($idMaterialPresupuestado > 0) {
+      $idsMaterialesPresupuestadosPedido[$idMaterialPresupuestado] = true;
+    }
+  }
+
+  $materialesExtrasPedido = array_values(array_filter($materialesSolicitadosSeguimiento, function ($material) {
+    return (($material['origen'] ?? '') !== 'presupuesto');
+  }));
+
+  $materialesAgregadosPedido = array_values(array_filter($materialesExtrasPedido, function ($material) use ($idsMaterialesPresupuestadosPedido) {
+    $idMaterialAgregado = (int)($material['id_material'] ?? 0);
+    return $idMaterialAgregado > 0 && empty($idsMaterialesPresupuestadosPedido[$idMaterialAgregado]);
+  }));
+
+  $materialesAgregadosAgrupadosPedido = [];
+  foreach ($materialesAgregadosPedido as $materialAgregadoPedido) {
+    $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
+    if ($idMaterialAgregado <= 0) {
+      continue;
+    }
+
+    if (!isset($materialesAgregadosAgrupadosPedido[$idMaterialAgregado])) {
+      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado] = $materialAgregadoPedido;
+      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_inicial'] = 0;
+      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_agregada'] = 0;
+      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['_tiene_cantidad_inicial'] = false;
+    }
+
+    $cantidadMovimiento = (float)($materialAgregadoPedido['cantidad'] ?? $materialAgregadoPedido['material_cantidad'] ?? 0);
+    if ($cantidadMovimiento > 0) {
+      if (empty($materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['_tiene_cantidad_inicial'])) {
+        $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_inicial'] += $cantidadMovimiento;
+        $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['_tiene_cantidad_inicial'] = true;
+      } else {
+        $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_agregada'] += $cantidadMovimiento;
+      }
+    } elseif ($cantidadMovimiento < 0) {
+      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_agregada'] += $cantidadMovimiento;
+    }
+
+    $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad'] = $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_inicial'];
+  }
+  $materialesAgregadosPedido = array_values(array_filter(array_map(function ($materialAgregadoPedido) {
+    unset($materialAgregadoPedido['_tiene_cantidad_inicial']);
+    return $materialAgregadoPedido;
+  }, $materialesAgregadosAgrupadosPedido), function ($materialAgregadoPedido) {
+    return ((float)($materialAgregadoPedido['cantidad_inicial'] ?? 0) + (float)($materialAgregadoPedido['cantidad_agregada'] ?? 0)) > 0;
+  }));
+
+  $materialesAgregadosPorMaterialPedido = [];
+  foreach ($materialesExtrasPedido as $materialAgregadoPedido) {
+    $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
+    if ($idMaterialAgregado <= 0) {
+      continue;
+    }
+
+    if (!isset($materialesAgregadosPorMaterialPedido[$idMaterialAgregado])) {
+      $materialesAgregadosPorMaterialPedido[$idMaterialAgregado] = 0;
+    }
+    $materialesAgregadosPorMaterialPedido[$idMaterialAgregado] += (float)($materialAgregadoPedido['cantidad'] ?? $materialAgregadoPedido['material_cantidad'] ?? 0);
+  }
+
+  $idsMaterialesNoSeleccionablesPedido = $idsMaterialesPresupuestadosPedido;
+  foreach ($materialesAgregadosPedido as $materialAgregadoPedido) {
+    $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
+    if ($idMaterialAgregado > 0) {
+      $idsMaterialesNoSeleccionablesPedido[$idMaterialAgregado] = true;
+    }
+  }
+
+  $materialesDisponiblesPedido = array_values(array_filter(is_array($materiales ?? null) ? $materiales : [], function ($material) use ($idsMaterialesNoSeleccionablesPedido) {
+    $idMaterial = (int)($material['id_material'] ?? 0);
+    return $idMaterial > 0 && empty($idsMaterialesNoSeleccionablesPedido[$idMaterial]);
+  }));
+
+  $opcionesMaterialesPedido = arrayToOptionsWithData(
+    $materialesDisponiblesPedido,
+    'id_material',
+    'descripcion_corta',
+    'Seleccione un material',
+    ' | ',
+    ['unidad_venta', 'contenido', 'unidad_medida'],
+    [
+      'precio_unitario' => 'precio_unitario',
+      'unidad_medida'   => 'unidad_medida',
+      'unidad_venta'    => 'unidad_venta',
+      'contenido'       => 'contenido',
+      'log_alta'        => 'log_alta',
+      'log_edicion'     => 'log_edicion'
+    ]
+  );
+
+  $pedidoMaterialesTareasDisponibles = [];
+  $tareasPedidoMateriales = is_array($presupuesto_generado['tareas'] ?? null) ? $presupuesto_generado['tareas'] : [];
+  usort($tareasPedidoMateriales, function ($a, $b) {
+    return ((int)($a['nro'] ?? 0)) <=> ((int)($b['nro'] ?? 0));
+  });
+  foreach ($tareasPedidoMateriales as $tareaPedidoMateriales) {
+    $nroTareaPedidoMateriales = (int)($tareaPedidoMateriales['nro'] ?? 0);
+    if ($nroTareaPedidoMateriales <= 0) {
+      continue;
+    }
+
+    $descripcionTareaPedidoMateriales = trim(strip_tags((string)($tareaPedidoMateriales['descripcion'] ?? '')));
+    $tituloTareaPedidoMateriales = $descripcionTareaPedidoMateriales !== ''
+      ? (function_exists('mb_substr') ? mb_substr($descripcionTareaPedidoMateriales, 0, 80) : substr($descripcionTareaPedidoMateriales, 0, 80))
+      : '';
+
+    $pedidoMaterialesTareasDisponibles[] = [
+      'nro' => $nroTareaPedidoMateriales,
+      'titulo' => $tituloTareaPedidoMateriales,
+    ];
+  }
+?>
+
 <?php if ($mostrarBloquePrevisitaSeguimiento): ?>
-<form id="currentForm"  class="form" enctype="multipart/form-data">
 <?php if (!empty($bloqueoEdicionComercial['bloqueado']) && !$esPerfilAdministrativoSeguimiento): ?>
   <div class="alert alert-warning">
     <strong>Edicion bloqueada.</strong>
     <?php echo htmlspecialchars($bloqueoEdicionComercial['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicionComercial['estado'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
   </div>
 <?php endif; ?>
-<!-- start accordion -->
-<div class="accordion" id="accordionExample">
-  <div class="card <?php echo $previsita_card; ?> accordion 1">
-    <div class="card-header" id="headingOne">
-      <h2 class="mb-0 d-flex justify-content-between align-items-center">
-        <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-        <span class="previsita-titulo-base">Pre-visita <?php echo arrayPrintValue('Nro: <strong>', $datos, 'id_previsita', '</strong>'); ?></span><span id="previsita_cliente_titulo"><?php if (!empty($datos['razon_social'])) { echo ' | ' . strtoupper($datos['razon_social']); } ?></span>
-        </button>
-        <span class="col-3 card-title text-right"><?php imprimirValido("Intervino", "intervino_previsita_apenom", true, 'strong', ': ') ?></span>
-      </h2>
-    </div>
-
-    <!-- start collapse accordion 1 -->
-    <div id="collapseOne" class="collapse <?php echo $previsita_show; ?>" aria-labelledby="headingOne" data-parent="#accordionExample">
-          
-          <!-- start card body accordion 1-->
-          <div class="card-body">
-                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
-                <!-- /.row start-->
-                <div class="row pb-1">
-
-                    <div class="col-1 form-group mb-0 mt-1">
-                        <small class="v-visual-edit d-none"><label class="mb-0">Fecha de alta</label></small>
-                        <div class="input-group mb-0">
-                          <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fas fa-calendar-check"></i></span>
-                          </div>
-                            <input type="text" class="form-control v-disabled" inputmode="decimal" placeholder="" id="" name="" 
-                            value="<?php echo strToDateFormat(arrayPrintValue(null, $datos, 'log_alta', null), 'd-m-Y'); ?>">
-                        </div>
-                    </div>
-
-                  <div class="col-2 form-group mb-0 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Fecha de visita</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-calendar-check v-requerido-icon"></i></span>
-                        </div>
-                          <input type="date" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" inputmode="decimal" placeholder="Fecha de visita" id="fecha_visita" name="fecha_visita" value="<?php echo arrayPrintValue(null, $datos, 'fecha_visita', null); ?>" min=""> 
-                      </div>
-                  </div>
-
-                  <div class="col-1 form-group mb-0 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Hora Visita</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-clock v-requerido-icon"></i></span>
-                        </div>
-                          <input type="time" class="form-control <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" inputmode="decimal" placeholder="Hora" id="hora_visita" name="hora_visita" 
-                          value="<?php echo arrayPrintValue(null, $datos, 'hora_visita', null); ?>">
-                      </div>
-                  </div>
-
-                  <div class="col-2 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Estado</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-sliders-h v-requerido-icon"></i></span>
-                        </div>
-                        <select class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" id="estado_visita" name="estado_visita">
-                          <?php echo !isset($datos['estado_visita']) ? '<option value="" disabled selected class="bg-secondary">Estado</option>' : ''; ?>
-                          <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Vencida" ? '<option value="" disabled selected class="bg-secondary">Vencida</option>' : ''; ?>
-
-                            <?php 
-                            if (!isset($datos['estado_visita']) || $datos['estado_visita'] !== "Vencida") {
-                                echo '<option value="Programada" ' . (isset($datos['estado_visita']) && $datos['estado_visita'] == "Programada" ? "selected" : '') . '>Programada</option>';
-                            }
-                            ?>
-
-                          <option value="Reprogramada" <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Reprogramada" ? "selected" : ''; ?>>Reprogramada </option>
-                          <option value="Ejecutada" <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Ejecutada" ? "selected" : ''; ?>>Ejecutada </option>
-                          <option value="Cancelada" <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Cancelada" ? "selected" : ''; ?>>Cancelada </option>
-                        </select>
-                      </div>
-                  </div>
-
-                </div>
-                <!-- row end -->
-
-                <!-- /.row start-->
-                <div class="row">
-
-                  <div class="col-2 form-group mb-0 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">CUIT</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-file-invoice"></i></span>
-                        </div>
-                          <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" data-inputmask='"mask": "99-99999999-9", "clearIncomplete": "true"' data-mask="" inputmode="decimal" data-cuit="<?php echo arrayPrintValue(null, $datos, 'cuit', null); ?>" placeholder="CUIT" id="cuit" name="cuit" value="<?php echo arrayPrintValue(null, $datos, 'cuit', null); ?>">
-
-                      </div>
-                  </div>
-
-                  <div class="col-3 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Razón Social</label></small>
-                      <div class="input-group mb-0 cliente-sugerencias-group">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-city v-requerido-icon"></i></span>
-                        </div>
-                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Razón Social" id="razon_social" name="razon_social" list="clientes_razon_social_list" autocomplete="off" value="<?php echo arrayPrintValue(null, $datos, 'razon_social', null); ?>">
-                        <div id="razon_social_sugerencias" class="cliente-sugerencias-menu" role="listbox" aria-label="Clientes sugeridos"></div>
-                      </div>
-                  </div>
-
-                  <div class="col-3 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Contacto en obra</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-user-tie v-requerido-icon"></i></span>
-                        </div>
-                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Contacto en obra" id="contacto_obra" name="contacto_obra" value="<?php echo arrayPrintValue(null, $datos, 'contacto_obra', null); ?>">
-                      </div>
-                  </div>
-                  <div class="col-2 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Teléfono</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-phone v-requerido-icon"></i></span>
-                        </div>
-                          <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" data-inputmask='"mask": "(9{1,5})(99999999)", "clearIncomplete": "false"' data-mask="" inputmode="decimal" placeholder="Teléfono" id="tel_contacto_obra" name="tel_contacto_obra" value="<?php echo arrayPrintValue(null, $datos, 'tel_contacto_obra', null); ?>">
-                      </div>
-                  </div>
-
-                  <div class="col-2 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Email</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-                        </div>
-                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Email" data-inputmask='"mask": "[{1,20}|_|.]@*{1,20}.*{1,3}[.*{1,3}]", "clearIncomplete": "true"' autocomplete="rutjfkde" id="email_contacto_obra" name="email_contacto_obra" value="<?php echo arrayPrintValue(null, $datos, 'email_contacto_obra', null); ?>">
-                      </div>
-                  </div>
-
-                  <div class="col-3 form-group mb-1 mt-1">
-                        <small class="v-visual-edit d-none"><label class="mb-0">Provincia</label></small>
-                          <div class="input-group mb-0">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
-                            </div>
-                            <select class="form-control select2bs4 v-select2 provincia <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="provincia_visita" name="provincia_visita">
-                              <option value="<?php if(isset($datos['provincia_visita'])){echo $datos['provincia_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['provincianom'])){echo $datos['provincianom'];}else{echo "Provincia";} ?></option>
-                              <?php echo $provinciasSelect;?>
-                            </select>
-                          </div>
-                  </div>
-
-                  <div class="col-2 form-group mb-1 mt-1">
-                          <small class="v-visual-edit d-none"><label class="mb-0">Partido</label></small>
-                          <div class="input-group mb-0">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
-                            </div>
-                            <select class="form-control select2bs4 v-select2 partido <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="partido_visita" name="partido_visita">
-                              <option value="<?php if(isset($datos['partido_visita'])){echo $datos['partido_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary partidosOpt1"><?php if(isset($datos['partidonom'])){echo $datos['partidonom'];}else{echo "Partido";} ?></option>
-                            <?php if(isset($partidosSelect)){echo $partidosSelect;} ?>
-                            </select>
-                          </div>
-                  </div>
-
-                  <div class="col-3 form-group mb-1 mt-1">
-                          <small class="v-visual-edit d-none"><label class="mb-0">Localidad</label></small>
-                          <div class="input-group mb-0">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
-                            </div>
-                            <select class="form-control select2bs4 v-select2 localidad <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="localidad_visita" name="localidad_visita">
-                              <option value="<?php if(isset($datos['localidad_visita'])){echo $datos['localidad_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['localidadnom'])){echo $datos['localidadnom'];}else{echo "Localidad";} ?></option>
-                                <?php if(isset($localidadesSelect)){echo $localidadesSelect;} ?>
-                            </select>
-                          </div>
-                  </div>
-
-                  <div class="col-3 form-group mb-1 mt-1">
-                          <small class="v-visual-edit d-none"><label class="mb-0">Calle</label></small>
-                          <div class="input-group mb-0">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text"><i class="fas fa-road"></i></span>
-                            </div>
-                            <select class="form-control select2bs4 v-select2 calle <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="calle_visita" name="calle_visita" data-tags="true">
-                              <option value="<?php if(isset($datos['calle_visita'])){echo $datos['calle_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['callenom'])){echo $datos['callenom'];}else{echo "Calle";} ?></option>
-                            <?php if(isset($callesSelect)){echo $callesSelect;} ?>
-                            </select>
-                          </div>
-                  </div>
-
-                  <div class="col-1 form-group mb-1 mt-1">
-                          <small class="v-visual-edit d-none"><label class="mb-0">Altura / Km</label></small>
-                          <div class="input-group mb-0">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text"><i class="fas fa-sort-numeric-up"></i></span>
-                            </div>
-                              <input type="text" class="form-control <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" data-inputmask='"mask": "9{1,5}", "clearIncomplete": "true" ' data-mask="" inputmode="decimal" placeholder="Altura / Km" id="altura_visita" name="altura_visita" value="<?php echo arrayPrintValue(null, $datos, 'altura_visita', null); ?>">
-                          </div>
-                  </div>
-
-                  <div class="col-1 form-group mb-1 mt-1">
-                          <small class="v-visual-edit d-none"><label class="mb-0">CP</label></small>
-                          <div class="input-group mb-0">
-                            <div class="input-group-prepend">
-                              <span class="input-group-text"><i class="fas fa-mail-bulk"></i></span>
-                            </div>
-                            <input type="text" 
-                              class="form-control <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" 
-                              data-inputmask='"mask": "9{4,5}", "greedy": false, "clearIncomplete": false, "autoUnmask": true, "removeMaskOnSubmit": true' 
-                              data-mask 
-                              inputmode="decimal" 
-                              placeholder="CP" 
-                              id="cp_visita" 
-                              name="cp_visita" 
-                              value="<?php echo arrayPrintValue(null, $datos, 'cp_visita', null); ?>">
-                          </div>
-                  </div>
-
-                  <div class="col-2 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Medio Contacto</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fa-solid fa-headset v-requerido-icon"></i></span>
-                        </div>
-                        <select class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" id="medio_contacto" name="medio_contacto">
-                          <?php echo !isset($datos['medio_contacto']) ? '<option value="" disabled selected class="bg-secondary">Medio Contacto</option>' : ''; ?>
-                          <option value="Gestion anterior" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Gestion anterior" ? "selected" : ''; ?>>Gestión anterior</option>
-                          <option value="Gestion comercial" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Gestion comercial" ? "selected" : ''; ?>>Gestión comercial</option>
-                          <option value="Pagina Web" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Pagina Web" ? "selected" : ''; ?>>Página Web</option>
-                          <option value="Google" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Google" ? "selected" : ''; ?>>Google</option>
-                          <option value="Nueva gestion comercial" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Nueva gestion comercial" ? "selected" : ''; ?>>Nueva gestión comercial</option>
-                          <option value="Instagram" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Instagram" ? "selected" : ''; ?>>Instagram</option>
-                          <option value="WhatsApp" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "WhatsApp" ? "selected" : ''; ?>>WhatsApp</option>
-                        </select>
-                      </div>
-                  </div>
-
-                  <div class="col-2 form-group mb-1 mt-1">
-                      <small class="v-visual-edit d-none"><label class="mb-0">Empresa status</label></small>
-                      <div class="input-group mb-0">
-                        <div class="input-group-prepend">
-                          <span class="input-group-text"><i class="fa-solid fa-award v-requerido-icon"></i></span>
-                        </div>
-                        <select class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" id="empresa_status" name="empresa_status">
-                          <?php echo !isset($datos['empresa_status']) ? '<option value="" disabled selected class="bg-secondary">Empresa status</option>' : ''; ?>
-                          <option value="Cliente" <?php echo isset($datos['empresa_status']) && $datos['empresa_status'] == "Cliente" ? "selected" : ''; ?>>Cliente</option>
-                          <option value="Con cotizacion previa" <?php echo isset($datos['empresa_status']) && $datos['empresa_status'] == "Con cotizacion previa" ? "selected" : ''; ?>>Con cotización previa</option>
-                          <option value="Prospecto" <?php echo isset($datos['empresa_status']) && $datos['empresa_status'] == "Prospecto" ? "selected" : ''; ?>>Prospecto</option>
-                        </select>
-                      </div>
-                  </div>
-
-                </div>
-                <!-- row end -->
-
-                <!-- /.card start ---------------------------------------------------------------------------------- -->
-                <div class="card card-secondary mt-2">
-                          <div class="card-header p-2" style="background-color: #708bd3 !important;">
-                             <h3 class="card-title"><i class="fas fa-hammer mr-2"></i>Elementos</h3>
-                          </div>
-
-                          <!-- Start card-body -->
-                          <div class="card-body pb-0">
-
-                                              <!-- start row -->                                              
-                                              <div class="row d-flex align-items-center">
-
-                                                  <div class="col-sm-5 pr-0">
-                                                    <!-- checkbox -->
-                                                    <div class="form-group clearfix mb-1">
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="induccion_visita" name="induccion_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'induccion_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="induccion_visita">Inducción</label>
-                                                          </div>
-
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="chaleco_visita" name="chaleco_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'chaleco_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="chaleco_visita">Chaleco</label>
-                                                          </div>
-
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="casco_visita" name="casco_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'casco_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="casco_visita">Casco</label>
-                                                          </div>
-
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="escalera_visita" name="escalera_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'escalera_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="escalera_visita">Escalera</label>
-                                                          </div>
-
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="arnes_visita" name="arnes_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'arnes_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="arnes_visita">Arnes</label>
-                                                          </div>
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="soga_visita" name="soga_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'soga_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="soga_visita">Soga</label>
-                                                          </div>
-
-                                                          <div class="icheck-success d-inline mr-4">
-                                                            <input type="checkbox" id="gafas_visita" name="gafas_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'gafas_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
-                                                            <label for="gafas_visita">Gafas</label>
-                                                          </div>
-                                                    </div>
-                                                    <!-- checkbox -->
-                                                </div>
-
-                                                <div class="col-sm-7 pl-0">
-                                                    <div class="col-12 form-group">
-                                                        <small class="v-visual-edit d-none"><label class="mb-0">Otros</label></small>
-                                                        <div class="input-group mb-0">
-                                                          <div class="input-group-prepend">
-                                                            <span class="input-group-text"><i class="fas fa-toolbox"></i></span>
-                                                          </div>
-                                                          <input type="text" class="form-control v-input-requerido  <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Otros" id="otros_visita" name="otros_visita" value="<?php echo arrayPrintValue(null, $datos, 'otros_visita', null); ?>">
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                              </div>                                        
-                                              <!-- end row--> 
-
-                          </div>
-                          <!-- End card-body -->
-
-                </div>
-                <!-- /.card end ------------------------------------------------------------------------------------ -->
-
-                <div class="row">
-                      <div class="col-12 form-group mb-1 mt-1">
-                        <small class="v-visual-edit d-none"><label class="mb-0">Requerimiento técnico</label></small>
-                        <div class="input-group mb-0">
-                          <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fa-solid fa-gears"></i></span>
-                          </div>
-                          <textarea type="text" rows="3" class="v-visita form-control  <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Requerimiento técnico" id="requerimiento_tecnico" name="requerimiento_tecnico"><?php echo arrayPrintValue(null, $datos, 'requerimiento_tecnico', null); ?></textarea>
-                        </div>
-                      </div>
-                </div>
-
-                <div class="row">
-                      <div class="col-12 form-group mb-1 mt-1">
-                        <small class="v-visual-edit d-none"><label class="mb-0">Nota</label></small>
-                        <div class="input-group mb-0">
-                          <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fas fa-sticky-note"></i></span>
-                          </div>
-                          <textarea type="text" rows="3" class="v-visita form-control  <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Nota" id="nota_visita" name="nota_visita"><?php echo arrayPrintValue(null, $datos, 'nota_visita', null); ?></textarea>
-                        </div>
-                      </div>
-                </div>                
-
-                <div class="row">
-                  <div class="col-12 form-group mb-1 mt-2">
-                      <small class="v-visual-edit d-none"><label class="mb-1">Documentos</label></small>
-                      <div class="previsita-documentos-panel" id="previsitaDocumentosPanel" data-readonly="<?php echo $permiteEditarDocumentosPrevisita ? '0' : '1'; ?>" data-documentos-iniciales="<?php echo htmlspecialchars($documentosPrevisitaJson, ENT_QUOTES, 'UTF-8'); ?>">
-                        <input
-                          type="file"
-                          class="d-none"
-                          id="doc_previsita"
-                          multiple
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,image/jpeg,image/png"
-                        >
-                        <input type="hidden" id="previsita_documentos_eliminados" name="previsita_documentos_eliminados" value="">
-
-                        <div class="previsita-documentos-dropzone border rounded bg-light p-3 text-muted mb-2" id="previsitaDocumentosDropzone" role="button" tabindex="0" aria-label="Adjuntar documentos de la pre-visita">
-                          <div class="previsita-documentos-dropzone-copy text-center">
-                            <i class="fas fa-file-upload mb-2"></i>
-                            <div><strong>Arrastre aqui los archivos</strong> o haga click.</div>
-                            <small class="d-block mt-1">PDF, Word, Excel, JPG, PNG o TXT. Maximo 5 MB por archivo.</small>
-                          </div>
-                        </div>
-
-                        <div class="d-flex justify-content-between align-items-center mb-2 previsita-documentos-encabezado">
-                          <div class="small text-muted" id="previsitaDocumentosResumen"></div>
-                        </div>
-
-                        <div class="row previsita-documentos-grid" id="previsitaDocumentosGrid"></div>
-                      </div>
-                  </div>
-                </div>
-
-                <div class="row <?php echo $previsita_buttons;?> text-center justify-content-center pr-1 mt-2">
-                  <button type="submit" class="col-1 btn btn-primary btn-block m-2 v-alta-edit d-none" data-accion="guardar"><i class="fa fa-plus-circle"></i> Guardar</button>
-                  <button type="button" class="col-1 btn btn-warning btn-block m-2 v-alta-edit d-none v-accion-cancelar" data-accion="cancelar"><i class="fa fa-ban"></i> Cancelar</button>
-                </div>
-
-                <?php if ($mostrarGuardarSoloDocumentosPrevisita): ?>
-                <div class="row text-center justify-content-center pr-1 mt-2">
-                  <button type="button" class="btn btn-primary btn-uniform m-2 btn-guardar-documentos-previsita">
-                    <i class="fa fa-save"></i> Guardar documentos
-                  </button>
-                </div>
-                <?php endif; ?>
-
-          </div>
-          <!-- end card accordion 1 -->
-
-    </div>
-    <!-- end collapse accordion 1-->
-
-  </div>
-  <!-- end card accordion 1 -->
-</div>
-<!-- end accordion -->
-</form>
 <?php endif; ?>
 
-<?php if ($mostrarBloquesTecnicosSeguimiento && isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
-  <!-- start accordion visita -->
-  <div class="accordion" id="accordionVisita">
-    <div class="card <?php echo $visita_card; ?> accordion_2">
-    <div class="card-header" id="headingVisita">
-      <h2 class="mb-0 d-flex align-items-center">
-        <!-- Botón collapse -->
-        <button
-          class="col-9 btn btn-link btn-block text-left text-white p-0 card-title"
-          type="button"
-          data-toggle="collapse"
-          data-target="#collapseVisita"
-          aria-expanded="<?php echo $visita_show === 'show' ? 'true' : 'false'; ?>"
-          aria-controls="collapseVisita"
-        >
-          Visita
-          <?php echo isset($datos['0']['id_previsita'])
-            ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>'
-            : '';
-          ?>
+<!-- start accordion 5 - Pedido de materiales -->
+<?php if ($puedeGestionarPedidoMateriales): ?>
+<script>
+  window.PEDIDO_MATERIALES_TAREAS = <?php echo jsonParaJsSeguro($pedidoMaterialesTareasDisponibles, '[]'); ?>;
+</script>
+<div class="accordion <?php echo $pedidoMaterialesHabilitadoInicial ? '' : 'd-none'; ?>" id="accordionExample5" aria-hidden="<?php echo $pedidoMaterialesHabilitadoInicial ? 'false' : 'true'; ?>">
+  <div class="card <?php echo $orden_compra_card; ?> accordion 5">
+    <div class="card-header" id="heading5">
+      <h2 class="mb-0">
+        <button class="btn btn-link btn-block text-left text-white p-0 card-title<?php echo $pedido_materiales_show === 'show' ? '' : ' collapsed'; ?>"
+                type="button" 
+                data-toggle="collapse" 
+                data-target="#collapse5_PM" 
+                aria-expanded="<?php echo $pedido_materiales_show === 'show' ? 'true' : 'false'; ?>"
+                aria-controls="collapse5_PM">
+          Pedido de materiales<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
         </button>
-
-        <!-- Span con el popover -->
-        <span class="col-3 card-title text-right">
-          <strong>Intervino: </strong>
-          <span
-            tabindex="0"
-            role="button"
-            data-toggle="popover"
-            data-html="true"
-            data-placement="bottom"
-            data-content='<?php echo htmlspecialchars($popoverIntervinientes, ENT_QUOTES); ?>'
-          >
-            <?php echo htmlspecialchars($ultimo, ENT_QUOTES); ?>
-          </span>
-        </span>
       </h2>
     </div>
 
-    <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
-        <div class="card-body">
-
-          <!-- start accordion tareas -->
-          <div class="accordion" id="accordionTareas">
-
-            <!-- Ejemplo de Tarea 1 -->
-            <div class="card tarea-card">
-              <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center" id="headingTarea1">
-                <button class="btn btn-link text-white p-0 m-0 flex-grow-1 text-left"
-                        type="button"
-                        data-toggle="collapse"
-                        data-target="#collapseTarea1"
-                        aria-expanded="true"
-                        aria-controls="collapseTarea1"
-                        data-titulo-base="Tarea 1">
-                  <strong>Tarea 1:</strong> 
-                </button>
-                <i class="fa fa-trash eliminar-tarea v-icon-pointer" title="Eliminar tarea" style="cursor: pointer; font-size: 1.3rem;"></i>
-              </div>
-              <div id="collapseTarea1" class="collapse show" aria-labelledby="headingTarea1" data-parent="#accordionTareas">
-                <div class="card-body">
-                  <div class="row d-flex align-items-stretch">
-
-                    <!-- Columna 1: Descripción -->
-                    <div class="col-md-3">
-                      <div class="card h-100 mb-2">
-                        <div class="card-header v-bg-violeta text-white">
-                          <h5 class="card-title mb-0">Descripción de la Tarea</h5>
+    <div id="collapse5_PM" class="collapse <?php echo $pedido_materiales_show; ?>"
+         aria-labelledby="heading5" 
+         data-parent="#accordionExample5">
+      <div class="card-body">
+        <div class="card card-info mb-0 pedido-materiales-card">
+          <div class="card-header py-2">
+            <h5 class="card-title mb-0 text-white">
+              <i class="fas fa-dolly-flatbed mr-2"></i>Materiales presupuestados
+            </h5>
+          </div>
+          <div class="card-body p-2">
+            <div class="table-responsive <?php echo empty($materialesPresupuestadosPedido) ? 'd-none' : ''; ?>" id="pedidoMaterialesPresupuestadosTablaWrap">
+              <table class="table table-bordered table-sm mb-0 pedido-materiales-table">
+                <thead class="thead-light">
+                  <tr>
+                    <th class="text-center" style="width: 58px;">#</th>
+                    <th style="width: 220px;">Tarea</th>
+                    <th>Material</th>
+                    <th class="text-center" style="width: 120px;">Autorización</th>
+                    <th class="text-center" style="width: 210px;">Inicial / Solicitado</th>
+                    <th class="text-center" style="width: 105px;">Pedido #1</th>
+                    <th class="text-center" style="width: 110px;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="pedidoMaterialesPresupuestadosTableBody">
+                  <?php foreach ($materialesPresupuestadosPedido as $idxMaterial => $materialSolicitado): ?>
+                    <?php
+                      $productoMaterial = trim((string)($materialSolicitado['nombre_material'] ?? $materialSolicitado['producto'] ?? ''));
+                      $cantidadBaseMaterial = (float)($materialSolicitado['cantidad'] ?? $materialSolicitado['material_cantidad'] ?? 0);
+                      $tareaNroMaterial = (int)($materialSolicitado['tarea_nro'] ?? 0);
+                      $tareaTituloMaterial = trim((string)($materialSolicitado['tarea_titulo'] ?? ''));
+                      $idMaterialPedido = (int)($materialSolicitado['id_material'] ?? 0);
+                      $saldoAgregadoMaterial = (float)($materialesAgregadosPorMaterialPedido[$idMaterialPedido] ?? 0);
+                      $cantidadInicialMaterial = $cantidadBaseMaterial;
+                      $cantidadAgregadaMaterial = max(0, $saldoAgregadoMaterial);
+                      $cantidadMaterial = number_format($cantidadInicialMaterial, 0, ',', '.');
+                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, 0, ',', '.');
+                      $materialLabel = $productoMaterial !== ''
+                        ? $productoMaterial
+                        : 'Material #' . $idMaterialPedido;
+                    ?>
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>">
+                      <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
+                      <td class="align-middle">
+                        <?php if ($tareaNroMaterial > 0): ?>
+                          <strong>Tarea <?php echo $tareaNroMaterial; ?></strong>
+                          <?php if ($tareaTituloMaterial !== ''): ?>
+                            <span class="d-block text-muted small"><?php echo htmlspecialchars($tareaTituloMaterial, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></span>
+                          <?php endif; ?>
+                        <?php else: ?>
+                          <span class="text-muted">Sin tarea asociada</span>
+                        <?php endif; ?>
+                      </td>
+                      <td class="align-middle">
+                        <strong><?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></strong>
+                        <span class="d-block text-muted small">ID <?php echo (int)($materialSolicitado['id_material'] ?? 0); ?></span>
+                      </td>
+                      <td class="text-center align-middle">
+                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-autorizacion pedido-materiales-autorizacion-neutra">
+                          <strong>Sin solicitud</strong>
+                        </span>
+                      </td>
+                      <td class="text-center align-middle">
+                        <div class="pedido-materiales-resumen-cantidades">
+                          <span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial">
+                            <small>Inicial</small>
+                            <strong><?php echo $cantidadMaterial; ?></strong>
+                          </span>
+                          <span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada">
+                            <small>Solicitado</small>
+                            <strong><?php echo $cantidadAgregadaMaterialTexto; ?></strong>
+                          </span>
                         </div>
-                        <div class="card-body p-2 d-flex flex-column">
-                          <div class="form-group flex-grow-1">
-                            <textarea class="form-control tarea-descripcion h-100" placeholder="Describa la tarea..."></textarea>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Columna 2: Materiales y Mano de Obra -->
-                    <div class="col-md-6 d-flex flex-column">
-                      <!-- Materiales Asociados -->
-                      <div class="card mb-2 flex-fill">
-                        <div class="card-header v-bg-violeta text-white">
-                          <h5 class="card-title mb-0">Materiales Asociados</h5>
-                        </div>
-                        <div class="card-body p-2">
-                          <div class="form-row align-items-center mb-2">
-                            <div class="col-8">
-                              <select class="form-control form-control-sm material-select">
-                                <?= $opcionesMateriales ?>
-                              </select>
-                            </div>
-                            <div class="col-3">
-                              <input type="number" class="form-control form-control-sm material-cantidad" placeholder="Cantidad" min="1">
-                            </div>
-                            <div class="col-1">
-                              <button type="button" class="btn btn-success btn-sm agregar-material w-100"><i class="fa fa-plus"></i></button>
-                            </div>
-                          </div>
-
-                          <div class="table-responsive">
-                            <table class="table table-bordered materiales-table mb-2">
-                              <thead class="thead-light">
-                                <tr>
-                                  <th>#</th>
-                                  <th>Material</th>
-                                  <th>Cantidad</th>
-                                  <th>Acción</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr class="fila-vacia-materiales">
-                                  <td colspan="4" class="text-center text-muted">Sin materiales asociados</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Mano de Obra Asociada -->
-                      <div class="card flex-fill">
-                        <div class="card-header v-bg-violeta text-white">
-                          <h5 class="card-title mb-0">Mano de Obra Asociada</h5>
-                        </div>
-                        <div class="card-body p-2">
-                          <div class="form-row align-items-center mb-2">
-                            <div class="col-8">
-                              <select class="form-control form-control-sm mano-obra-select">
-                                <?= $opcionesManoDeObra ?>
-                              </select>
-                            </div>
-                            <div class="col-3">
-                              <input type="number" class="form-control form-control-sm mano-obra-cantidad" placeholder="Cantidad" min="1">
-                            </div>
-                            <div class="col-1">
-                              <button type="button" class="btn btn-success btn-sm agregar-mano-obra w-100"><i class="fa fa-plus"></i></button>
-                            </div>
-                          </div>
-
-                          <div class="table-responsive">
-                            <table class="table table-bordered mano-obra-table mb-2">
-                              <thead class="thead-light text-center">
-                                <tr>
-                                  <th>#</th>
-                                  <th>Mano de obra</th>
-                                  <th>Cantidad</th>
-                                  <th>Días</th>
-                                  <th>Jornales</th>
-                                  <th>Observaciones</th>
-                                  <th>Acción</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr class="fila-vacia-mano-obra">
-                                  <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Columna 3: Fotos -->
-                    <div class="col-md-3">
-                      <div class="card h-100 mb-2">
-                        <div class="card-header v-bg-violeta text-white">
-                          <h5 class="card-title mb-0">Fotos de la Tarea</h5>
-                        </div>
-                        <div class="card-body p-2">
-                          <div class="custom-file mb-2">
-                            <input 
-                              type="file" 
-                              class="custom-file-input tarea-fotos" 
-                              id="fotos_tarea_1" 
-                              name="fotos_tarea_1[]" 
-                              multiple 
-                              accept="image/*" 
-                              capture="environment"
-                              data-index="1"
-                            />
-                            <label class="custom-file-label" for="fotos_tarea_1">Seleccionar fotos</label>
-                          </div>
-                          <div class="row preview-fotos" id="preview_fotos_tarea_1"></div>
-                        </div>
-                      </div>
-                    </div>
-
-                  </div> <!-- end row -->
-                </div> <!-- end card-body -->
-              </div> <!-- end collapse -->
+                      </td>
+                      <td class="text-center align-middle">
+                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1">
+                          <small>Pedido #1</small>
+                          <strong><?php echo $cantidadAgregadaMaterialTexto; ?></strong>
+                        </span>
+                      </td>
+                      <td class="text-center align-middle">
+                        <button type="button"
+                                class="btn btn-link p-0 pedido-material-agregar-unidades"
+                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
+                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                data-toggle="tooltip"
+                                data-placement="top"
+                                title="Agregar"
+                                aria-label="Agregar">
+                          <i class="v-icon-accion fas fa-plus-circle" aria-hidden="true"></i>
+                        </button>
+                        <button type="button"
+                                class="btn btn-link p-0 ml-1 pedido-material-quitar-unidad"
+                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
+                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                data-toggle="tooltip"
+                                data-placement="top"
+                                title="Quitar"
+                                aria-label="Quitar">
+                          <i class="v-icon-accion fas fa-minus-circle" aria-hidden="true"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
             </div>
-            <!-- end card tarea1 -->
+
+            <div class="alert alert-secondary mb-0 text-center <?php echo empty($materialesPresupuestadosPedido) ? '' : 'd-none'; ?>" id="pedidoMaterialesPresupuestadosSinDatos">
+                <i class="fas fa-info-circle mr-1"></i>
+                No hay materiales presupuestados para este seguimiento.
+            </div>
           </div>
-          <!-- end accordion tareas -->
+        </div>
 
-          <!-- Botón agregar nueva tarea -->
-          <div class="text-center my-3">
-            <button type="button" class="btn btn-primary" id="btn-agregar-tarea"><i class="fa fa-plus-circle"></i> Agregar nueva tarea</button>
+        <div class="card card-info mt-3 mb-0 pedido-materiales-card" id="pedidoMaterialesAgregadosCard">
+          <div class="card-header py-2">
+            <h5 class="card-title mb-0 text-white">
+              <i class="fas fa-plus-circle mr-2"></i>Materiales agregados
+            </h5>
           </div>
+          <div class="card-body p-2">
+            <?php if ($puedeGestionarPedidoMateriales): ?>
+              <div class="pedido-materiales-agregar mb-3">
+                <div class="form-row align-items-end">
+                  <div class="col-md-7 form-group mb-2">
+                    <small><label class="mb-0">Material</label></small>
+                    <div class="input-group mb-0">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fas fa-list-check text-success"></i></span>
+                      </div>
+                      <select class="form-control select2bs4 v-select2" id="pedido_material_select">
+                        <?php echo $opcionesMaterialesPedido; ?>
+                      </select>
+                    </div>
+                  </div>
 
-          <!-- Botones generales -->
-          <div class="text-center">
-            <button type="button" class="btn bg-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
-            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
-            <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
-            <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
+                  <div class="col-md-2 form-group mb-2">
+                    <small><label class="mb-0">Cantidad</label></small>
+                    <div class="input-group mb-0">
+                      <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fas fa-list-ol"></i></span>
+                      </div>
+                      <input type="number" class="form-control" id="pedido_material_cantidad" min="0.01" step="0.01" placeholder="Cantidad">
+                    </div>
+                  </div>
+
+                  <div class="col-md-3 form-group mb-2">
+                    <button type="button" class="btn btn-success btn-block" id="pedido_material_agregar">
+                      <i class="fa-solid fa-circle-plus mr-1"></i> Agregar material
+                    </button>
+                  </div>
+                </div>
+              </div>
+            <?php endif; ?>
+
+            <div class="table-responsive <?php echo empty($materialesAgregadosPedido) ? 'd-none' : ''; ?>" id="pedidoMaterialesAgregadosTablaWrap">
+              <table class="table table-bordered table-sm mb-0 pedido-materiales-table">
+                <thead class="thead-light">
+                  <tr>
+                    <th class="text-center" style="width: 58px;">#</th>
+                    <th style="width: 220px;">Tarea</th>
+                    <th>Material</th>
+                    <th class="text-center" style="width: 120px;">Autorización</th>
+                    <th class="text-center" style="width: 210px;">Inicial / Solicitado</th>
+                    <th class="text-center" style="width: 105px;">Pedido #1</th>
+                    <th class="text-center" style="width: 110px;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="pedidoMaterialesAgregadosTableBody">
+                  <?php foreach ($materialesAgregadosPedido as $idxMaterial => $materialSolicitado): ?>
+                    <?php
+                      $productoMaterial = trim((string)($materialSolicitado['nombre_material'] ?? $materialSolicitado['producto'] ?? ''));
+                      $cantidadInicialAgregada = (float)($materialSolicitado['cantidad_inicial'] ?? $materialSolicitado['cantidad'] ?? $materialSolicitado['material_cantidad'] ?? 0);
+                      $cantidadAgregadaMaterial = (float)($materialSolicitado['cantidad_agregada'] ?? 0);
+                      $cantidadMaterial = number_format($cantidadInicialAgregada, 0, ',', '.');
+                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, 0, ',', '.');
+                      $idMaterialPedido = (int)($materialSolicitado['id_material'] ?? 0);
+                      $materialLabel = $productoMaterial !== ''
+                        ? $productoMaterial
+                        : 'Material #' . $idMaterialPedido;
+                    ?>
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>">
+                      <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
+                      <td class="align-middle">
+                        <strong>Adicional</strong>
+                        <span class="d-block text-muted small">Material agregado</span>
+                      </td>
+                      <td class="align-middle">
+                        <strong><?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></strong>
+                        <span class="d-block text-muted small">ID <?php echo (int)($materialSolicitado['id_material'] ?? 0); ?></span>
+                      </td>
+                      <td class="text-center align-middle">
+                        <span class="badge badge-warning pedido-materiales-cantidad pedido-materiales-autorizacion pedido-materiales-autorizacion-solicitada">
+                          <strong>Solicitada</strong>
+                        </span>
+                      </td>
+                      <td class="text-center align-middle">
+                        <div class="pedido-materiales-resumen-cantidades">
+                          <span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial">
+                            <small>Inicial</small>
+                            <strong><?php echo $cantidadMaterial; ?></strong>
+                          </span>
+                          <span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada">
+                            <small>Solicitado</small>
+                            <strong><?php echo number_format($cantidadInicialAgregada + $cantidadAgregadaMaterial, 0, ',', '.'); ?></strong>
+                          </span>
+                        </div>
+                      </td>
+                      <td class="text-center align-middle">
+                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1">
+                          <small>Pedido #1</small>
+                          <strong><?php echo number_format($cantidadInicialAgregada + $cantidadAgregadaMaterial, 0, ',', '.'); ?></strong>
+                        </span>
+                      </td>
+                      <td class="text-center align-middle">
+                        <button type="button"
+                                class="btn btn-link p-0 pedido-material-agregar-unidades"
+                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
+                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                data-toggle="tooltip"
+                                data-placement="top"
+                                title="Agregar"
+                                aria-label="Agregar">
+                          <i class="v-icon-accion fas fa-plus-circle" aria-hidden="true"></i>
+                        </button>
+                        <button type="button"
+                                class="btn btn-link p-0 ml-1 pedido-material-quitar-unidad"
+                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
+                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                data-toggle="tooltip"
+                                data-placement="top"
+                                title="Quitar"
+                                aria-label="Quitar">
+                          <i class="v-icon-accion fas fa-minus-circle" aria-hidden="true"></i>
+                        </button>
+                        <button type="button"
+                                class="btn btn-link p-0 ml-1 pedido-material-eliminar-fila"
+                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
+                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                data-toggle="tooltip"
+                                data-placement="top"
+                                title="Quitar material"
+                                aria-label="Quitar material">
+                          <i class="v-icon-accion fas fa-trash-alt" aria-hidden="true"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
           </div>
+        </div>
 
-        </div> <!-- end card-body visita -->
-      </div> <!-- end collapse visita -->
-    </div> <!-- end card visita -->
-  </div>
-  <!-- end accordion visita -->
-<?php endif; ?>
-
-<!-- Fuera del accordion, al fondo de la página -->
-<select id="opcionesMaterialBase" class="d-none">
-  <?= $opcionesMateriales ?>
-</select>
-
-<select id="opcionesManoObraBase" class="d-none">
-  <?= $opcionesManoDeObra ?>
-</select>
-
-<!-- /accordion presupuesto -->
-<?php if ($mostrarBloquesTecnicosSeguimiento && !empty($presupuestoGenerado)): ?>
-  <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
-    <div class="card <?php echo $presupuesto_card; ?> accordion_3">
-      <div class="card-header" id="headingPresupuesto">
-        <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
-          <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle" 
-                  type="button" 
-                  data-toggle="collapse" 
-                  data-target="#collapsePresupuesto" 
-                  aria-expanded="<?php echo $presupuesto_show === 'show' ? 'true' : 'false'; ?>" 
-                  aria-controls="collapsePresupuesto">
-            Presupuesto
+        <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
+          <button type="button"
+                  class="btn btn-secondary btn-uniform"
+                  id="pedido_materiales_ejecutar"
+                  disabled>
+            <i class="fa-solid fa-circle-check mr-1"></i> Realizar pedido
           </button>
-          <span class="card-title text-right presupuesto-accordion-intervino">
-            <strong>Intervino: </strong>
-            <span
-              class="intervino-presupuesto-ultimo"
-              tabindex="0"
-              role="button"
-              data-toggle="popover"
-              data-html="true"
-              data-placement="bottom"
-            >
-              <?php echo htmlspecialchars($ultimoIntervinoPresupuesto, ENT_QUOTES); ?>
-            </span>
-          </span>
-        </h2>
-      </div>
-      <div id="collapsePresupuesto" class="collapse <?php echo $presupuesto_show; ?>" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
-        <div class="card-body" id="presupuesto-card-body">
-          <!-- Aquí se insertará el contenido dinámico generado -->
-            <?php 
-              if($presupuestoGenerado): 
-                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada, !empty($bloqueoEdicionComercial['bloqueado']) || !empty($workflowPrevisita['bloquea_avance']));
-              endif;                
-            ?>
         </div>
       </div>
     </div>
   </div>
+</div>
 <?php endif; ?>
-<!-- /accordion presupuesto -->
-
+<!-- end accordion 5 -->
 
 <!-- start accordion 4 - Orden de compra -->
 <?php if ($mostrarBloqueOrdenCompraSeguimiento): ?>
@@ -2489,417 +2254,679 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 <?php endif; ?>
 <!-- end accordion 4 -->
 
-<?php
-  $materialesPresupuestadosPedido = array_values(array_filter($materialesSolicitadosSeguimiento, function ($material) {
-    return (($material['origen'] ?? '') === 'presupuesto');
-  }));
-  $idsMaterialesPresupuestadosPedido = [];
-  foreach ($materialesPresupuestadosPedido as $materialPresupuestadoPedido) {
-    $idMaterialPresupuestado = (int)($materialPresupuestadoPedido['id_material'] ?? 0);
-    if ($idMaterialPresupuestado > 0) {
-      $idsMaterialesPresupuestadosPedido[$idMaterialPresupuestado] = true;
-    }
-  }
-
-  $materialesExtrasPedido = array_values(array_filter($materialesSolicitadosSeguimiento, function ($material) {
-    return (($material['origen'] ?? '') !== 'presupuesto');
-  }));
-
-  $materialesAgregadosPedido = array_values(array_filter($materialesExtrasPedido, function ($material) use ($idsMaterialesPresupuestadosPedido) {
-    $idMaterialAgregado = (int)($material['id_material'] ?? 0);
-    return $idMaterialAgregado > 0 && empty($idsMaterialesPresupuestadosPedido[$idMaterialAgregado]);
-  }));
-
-  $materialesAgregadosAgrupadosPedido = [];
-  foreach ($materialesAgregadosPedido as $materialAgregadoPedido) {
-    $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
-    if ($idMaterialAgregado <= 0) {
-      continue;
-    }
-
-    if (!isset($materialesAgregadosAgrupadosPedido[$idMaterialAgregado])) {
-      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado] = $materialAgregadoPedido;
-      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_inicial'] = 0;
-      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_agregada'] = 0;
-      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['_tiene_cantidad_inicial'] = false;
-    }
-
-    $cantidadMovimiento = (float)($materialAgregadoPedido['cantidad'] ?? $materialAgregadoPedido['material_cantidad'] ?? 0);
-    if ($cantidadMovimiento > 0) {
-      if (empty($materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['_tiene_cantidad_inicial'])) {
-        $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_inicial'] += $cantidadMovimiento;
-        $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['_tiene_cantidad_inicial'] = true;
-      } else {
-        $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_agregada'] += $cantidadMovimiento;
-      }
-    } elseif ($cantidadMovimiento < 0) {
-      $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_agregada'] += $cantidadMovimiento;
-    }
-
-    $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad'] = $materialesAgregadosAgrupadosPedido[$idMaterialAgregado]['cantidad_inicial'];
-  }
-  $materialesAgregadosPedido = array_values(array_filter(array_map(function ($materialAgregadoPedido) {
-    unset($materialAgregadoPedido['_tiene_cantidad_inicial']);
-    return $materialAgregadoPedido;
-  }, $materialesAgregadosAgrupadosPedido), function ($materialAgregadoPedido) {
-    return ((float)($materialAgregadoPedido['cantidad_inicial'] ?? 0) + (float)($materialAgregadoPedido['cantidad_agregada'] ?? 0)) > 0;
-  }));
-
-  $materialesAgregadosPorMaterialPedido = [];
-  foreach ($materialesExtrasPedido as $materialAgregadoPedido) {
-    $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
-    if ($idMaterialAgregado <= 0) {
-      continue;
-    }
-
-    if (!isset($materialesAgregadosPorMaterialPedido[$idMaterialAgregado])) {
-      $materialesAgregadosPorMaterialPedido[$idMaterialAgregado] = 0;
-    }
-    $materialesAgregadosPorMaterialPedido[$idMaterialAgregado] += (float)($materialAgregadoPedido['cantidad'] ?? $materialAgregadoPedido['material_cantidad'] ?? 0);
-  }
-
-  $idsMaterialesNoSeleccionablesPedido = $idsMaterialesPresupuestadosPedido;
-  foreach ($materialesAgregadosPedido as $materialAgregadoPedido) {
-    $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
-    if ($idMaterialAgregado > 0) {
-      $idsMaterialesNoSeleccionablesPedido[$idMaterialAgregado] = true;
-    }
-  }
-
-  $materialesDisponiblesPedido = array_values(array_filter(is_array($materiales ?? null) ? $materiales : [], function ($material) use ($idsMaterialesNoSeleccionablesPedido) {
-    $idMaterial = (int)($material['id_material'] ?? 0);
-    return $idMaterial > 0 && empty($idsMaterialesNoSeleccionablesPedido[$idMaterial]);
-  }));
-
-  $opcionesMaterialesPedido = arrayToOptionsWithData(
-    $materialesDisponiblesPedido,
-    'id_material',
-    'descripcion_corta',
-    'Seleccione un material',
-    ' | ',
-    ['unidad_venta', 'contenido', 'unidad_medida'],
-    [
-      'precio_unitario' => 'precio_unitario',
-      'unidad_medida'   => 'unidad_medida',
-      'unidad_venta'    => 'unidad_venta',
-      'contenido'       => 'contenido',
-      'log_alta'        => 'log_alta',
-      'log_edicion'     => 'log_edicion'
-    ]
-  );
-
-  $pedidoMaterialesTareasDisponibles = [];
-  $tareasPedidoMateriales = is_array($presupuesto_generado['tareas'] ?? null) ? $presupuesto_generado['tareas'] : [];
-  usort($tareasPedidoMateriales, function ($a, $b) {
-    return ((int)($a['nro'] ?? 0)) <=> ((int)($b['nro'] ?? 0));
-  });
-  foreach ($tareasPedidoMateriales as $tareaPedidoMateriales) {
-    $nroTareaPedidoMateriales = (int)($tareaPedidoMateriales['nro'] ?? 0);
-    if ($nroTareaPedidoMateriales <= 0) {
-      continue;
-    }
-
-    $descripcionTareaPedidoMateriales = trim(strip_tags((string)($tareaPedidoMateriales['descripcion'] ?? '')));
-    $tituloTareaPedidoMateriales = $descripcionTareaPedidoMateriales !== ''
-      ? (function_exists('mb_substr') ? mb_substr($descripcionTareaPedidoMateriales, 0, 80) : substr($descripcionTareaPedidoMateriales, 0, 80))
-      : '';
-
-    $pedidoMaterialesTareasDisponibles[] = [
-      'nro' => $nroTareaPedidoMateriales,
-      'titulo' => $tituloTareaPedidoMateriales,
-    ];
-  }
-?>
-
-<!-- start accordion 5 - Pedido de materiales -->
-<?php if ($puedeGestionarPedidoMateriales): ?>
-<script>
-  window.PEDIDO_MATERIALES_TAREAS = <?php echo jsonParaJsSeguro($pedidoMaterialesTareasDisponibles, '[]'); ?>;
-</script>
-<div class="accordion <?php echo $pedidoMaterialesHabilitadoInicial ? '' : 'd-none'; ?>" id="accordionExample5" aria-hidden="<?php echo $pedidoMaterialesHabilitadoInicial ? 'false' : 'true'; ?>">
-  <div class="card <?php echo $orden_compra_card; ?> accordion 5">
-    <div class="card-header" id="heading5">
-      <h2 class="mb-0">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title<?php echo $pedido_materiales_show === 'show' ? '' : ' collapsed'; ?>"
-                type="button" 
-                data-toggle="collapse" 
-                data-target="#collapse5_PM" 
-                aria-expanded="<?php echo $pedido_materiales_show === 'show' ? 'true' : 'false'; ?>"
-                aria-controls="collapse5_PM">
-          Pedido de materiales<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
-        </button>
-      </h2>
-    </div>
-
-    <div id="collapse5_PM" class="collapse <?php echo $pedido_materiales_show; ?>"
-         aria-labelledby="heading5" 
-         data-parent="#accordionExample5">
-      <div class="card-body">
-        <div class="card card-info mb-0 pedido-materiales-card">
-          <div class="card-header py-2">
-            <h5 class="card-title mb-0 text-white">
-              <i class="fas fa-dolly-flatbed mr-2"></i>Materiales presupuestados
-            </h5>
-          </div>
-          <div class="card-body p-2">
-            <div class="table-responsive <?php echo empty($materialesPresupuestadosPedido) ? 'd-none' : ''; ?>" id="pedidoMaterialesPresupuestadosTablaWrap">
-              <table class="table table-bordered table-sm mb-0 pedido-materiales-table">
-                <thead class="thead-light">
-                  <tr>
-                    <th class="text-center" style="width: 58px;">#</th>
-                    <th style="width: 220px;">Tarea</th>
-                    <th>Material</th>
-                    <th class="text-center" style="width: 120px;">Autorización</th>
-                    <th class="text-center" style="width: 210px;">Inicial / Solicitado</th>
-                    <th class="text-center" style="width: 105px;">Pedido #1</th>
-                    <th class="text-center" style="width: 110px;">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody id="pedidoMaterialesPresupuestadosTableBody">
-                  <?php foreach ($materialesPresupuestadosPedido as $idxMaterial => $materialSolicitado): ?>
-                    <?php
-                      $productoMaterial = trim((string)($materialSolicitado['nombre_material'] ?? $materialSolicitado['producto'] ?? ''));
-                      $cantidadBaseMaterial = (float)($materialSolicitado['cantidad'] ?? $materialSolicitado['material_cantidad'] ?? 0);
-                      $tareaNroMaterial = (int)($materialSolicitado['tarea_nro'] ?? 0);
-                      $tareaTituloMaterial = trim((string)($materialSolicitado['tarea_titulo'] ?? ''));
-                      $idMaterialPedido = (int)($materialSolicitado['id_material'] ?? 0);
-                      $saldoAgregadoMaterial = (float)($materialesAgregadosPorMaterialPedido[$idMaterialPedido] ?? 0);
-                      $cantidadInicialMaterial = $cantidadBaseMaterial;
-                      $cantidadAgregadaMaterial = max(0, $saldoAgregadoMaterial);
-                      $cantidadMaterial = number_format($cantidadInicialMaterial, 0, ',', '.');
-                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, 0, ',', '.');
-                      $materialLabel = $productoMaterial !== ''
-                        ? $productoMaterial
-                        : 'Material #' . $idMaterialPedido;
-                    ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>">
-                      <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
-                      <td class="align-middle">
-                        <?php if ($tareaNroMaterial > 0): ?>
-                          <strong>Tarea <?php echo $tareaNroMaterial; ?></strong>
-                          <?php if ($tareaTituloMaterial !== ''): ?>
-                            <span class="d-block text-muted small"><?php echo htmlspecialchars($tareaTituloMaterial, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></span>
-                          <?php endif; ?>
-                        <?php else: ?>
-                          <span class="text-muted">Sin tarea asociada</span>
-                        <?php endif; ?>
-                      </td>
-                      <td class="align-middle">
-                        <strong><?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></strong>
-                        <span class="d-block text-muted small">ID <?php echo (int)($materialSolicitado['id_material'] ?? 0); ?></span>
-                      </td>
-                      <td class="text-center align-middle">
-                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-autorizacion pedido-materiales-autorizacion-neutra">
-                          <strong>Sin solicitud</strong>
-                        </span>
-                      </td>
-                      <td class="text-center align-middle">
-                        <div class="pedido-materiales-resumen-cantidades">
-                          <span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial">
-                            <small>Inicial</small>
-                            <strong><?php echo $cantidadMaterial; ?></strong>
-                          </span>
-                          <span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada">
-                            <small>Solicitado</small>
-                            <strong><?php echo $cantidadAgregadaMaterialTexto; ?></strong>
-                          </span>
-                        </div>
-                      </td>
-                      <td class="text-center align-middle">
-                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1">
-                          <small>Pedido #1</small>
-                          <strong><?php echo $cantidadAgregadaMaterialTexto; ?></strong>
-                        </span>
-                      </td>
-                      <td class="text-center align-middle">
-                        <button type="button"
-                                class="btn btn-link p-0 pedido-material-agregar-unidades"
-                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
-                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
-                                data-toggle="tooltip"
-                                data-placement="top"
-                                title="Agregar"
-                                aria-label="Agregar">
-                          <i class="v-icon-accion fas fa-plus-circle" aria-hidden="true"></i>
-                        </button>
-                        <button type="button"
-                                class="btn btn-link p-0 ml-1 pedido-material-quitar-unidad"
-                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
-                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
-                                data-toggle="tooltip"
-                                data-placement="top"
-                                title="Quitar"
-                                aria-label="Quitar">
-                          <i class="v-icon-accion fas fa-minus-circle" aria-hidden="true"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="alert alert-secondary mb-0 text-center <?php echo empty($materialesPresupuestadosPedido) ? '' : 'd-none'; ?>" id="pedidoMaterialesPresupuestadosSinDatos">
-                <i class="fas fa-info-circle mr-1"></i>
-                No hay materiales presupuestados para este seguimiento.
-            </div>
-          </div>
-        </div>
-
-        <div class="card card-info mt-3 mb-0 pedido-materiales-card" id="pedidoMaterialesAgregadosCard">
-          <div class="card-header py-2">
-            <h5 class="card-title mb-0 text-white">
-              <i class="fas fa-plus-circle mr-2"></i>Materiales agregados
-            </h5>
-          </div>
-          <div class="card-body p-2">
-            <?php if ($puedeGestionarPedidoMateriales): ?>
-              <div class="pedido-materiales-agregar mb-3">
-                <div class="form-row align-items-end">
-                  <div class="col-md-7 form-group mb-2">
-                    <small><label class="mb-0">Material</label></small>
-                    <div class="input-group mb-0">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text"><i class="fas fa-list-check text-success"></i></span>
-                      </div>
-                      <select class="form-control select2bs4 v-select2" id="pedido_material_select">
-                        <?php echo $opcionesMaterialesPedido; ?>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="col-md-2 form-group mb-2">
-                    <small><label class="mb-0">Cantidad</label></small>
-                    <div class="input-group mb-0">
-                      <div class="input-group-prepend">
-                        <span class="input-group-text"><i class="fas fa-list-ol"></i></span>
-                      </div>
-                      <input type="number" class="form-control" id="pedido_material_cantidad" min="0.01" step="0.01" placeholder="Cantidad">
-                    </div>
-                  </div>
-
-                  <div class="col-md-3 form-group mb-2">
-                    <button type="button" class="btn btn-success btn-block" id="pedido_material_agregar">
-                      <i class="fa-solid fa-circle-plus mr-1"></i> Agregar material
-                    </button>
-                  </div>
-                </div>
-              </div>
-            <?php endif; ?>
-
-            <div class="table-responsive <?php echo empty($materialesAgregadosPedido) ? 'd-none' : ''; ?>" id="pedidoMaterialesAgregadosTablaWrap">
-              <table class="table table-bordered table-sm mb-0 pedido-materiales-table">
-                <thead class="thead-light">
-                  <tr>
-                    <th class="text-center" style="width: 58px;">#</th>
-                    <th style="width: 220px;">Tarea</th>
-                    <th>Material</th>
-                    <th class="text-center" style="width: 120px;">Autorización</th>
-                    <th class="text-center" style="width: 210px;">Inicial / Solicitado</th>
-                    <th class="text-center" style="width: 105px;">Pedido #1</th>
-                    <th class="text-center" style="width: 110px;">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody id="pedidoMaterialesAgregadosTableBody">
-                  <?php foreach ($materialesAgregadosPedido as $idxMaterial => $materialSolicitado): ?>
-                    <?php
-                      $productoMaterial = trim((string)($materialSolicitado['nombre_material'] ?? $materialSolicitado['producto'] ?? ''));
-                      $cantidadInicialAgregada = (float)($materialSolicitado['cantidad_inicial'] ?? $materialSolicitado['cantidad'] ?? $materialSolicitado['material_cantidad'] ?? 0);
-                      $cantidadAgregadaMaterial = (float)($materialSolicitado['cantidad_agregada'] ?? 0);
-                      $cantidadMaterial = number_format($cantidadInicialAgregada, 0, ',', '.');
-                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, 0, ',', '.');
-                      $idMaterialPedido = (int)($materialSolicitado['id_material'] ?? 0);
-                      $materialLabel = $productoMaterial !== ''
-                        ? $productoMaterial
-                        : 'Material #' . $idMaterialPedido;
-                    ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>">
-                      <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
-                      <td class="align-middle">
-                        <strong>Adicional</strong>
-                        <span class="d-block text-muted small">Material agregado</span>
-                      </td>
-                      <td class="align-middle">
-                        <strong><?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></strong>
-                        <span class="d-block text-muted small">ID <?php echo (int)($materialSolicitado['id_material'] ?? 0); ?></span>
-                      </td>
-                      <td class="text-center align-middle">
-                        <span class="badge badge-warning pedido-materiales-cantidad pedido-materiales-autorizacion pedido-materiales-autorizacion-solicitada">
-                          <strong>Solicitada</strong>
-                        </span>
-                      </td>
-                      <td class="text-center align-middle">
-                        <div class="pedido-materiales-resumen-cantidades">
-                          <span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial">
-                            <small>Inicial</small>
-                            <strong><?php echo $cantidadMaterial; ?></strong>
-                          </span>
-                          <span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada">
-                            <small>Solicitado</small>
-                            <strong><?php echo number_format($cantidadInicialAgregada + $cantidadAgregadaMaterial, 0, ',', '.'); ?></strong>
-                          </span>
-                        </div>
-                      </td>
-                      <td class="text-center align-middle">
-                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1">
-                          <small>Pedido #1</small>
-                          <strong><?php echo number_format($cantidadInicialAgregada + $cantidadAgregadaMaterial, 0, ',', '.'); ?></strong>
-                        </span>
-                      </td>
-                      <td class="text-center align-middle">
-                        <button type="button"
-                                class="btn btn-link p-0 pedido-material-agregar-unidades"
-                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
-                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
-                                data-toggle="tooltip"
-                                data-placement="top"
-                                title="Agregar"
-                                aria-label="Agregar">
-                          <i class="v-icon-accion fas fa-plus-circle" aria-hidden="true"></i>
-                        </button>
-                        <button type="button"
-                                class="btn btn-link p-0 ml-1 pedido-material-quitar-unidad"
-                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
-                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
-                                data-toggle="tooltip"
-                                data-placement="top"
-                                title="Quitar"
-                                aria-label="Quitar">
-                          <i class="v-icon-accion fas fa-minus-circle" aria-hidden="true"></i>
-                        </button>
-                        <button type="button"
-                                class="btn btn-link p-0 ml-1 pedido-material-eliminar-fila"
-                                data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
-                                data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
-                                data-toggle="tooltip"
-                                data-placement="top"
-                                title="Quitar material"
-                                aria-label="Quitar material">
-                          <i class="v-icon-accion fas fa-trash-alt" aria-hidden="true"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
-          <button type="button"
-                  class="btn btn-secondary btn-uniform"
-                  id="pedido_materiales_ejecutar"
-                  disabled>
-            <i class="fa-solid fa-circle-check mr-1"></i> Realizar pedido
+<!-- /accordion presupuesto -->
+<?php if ($mostrarBloquesTecnicosSeguimiento && !empty($presupuestoGenerado)): ?>
+  <div class="accordion <?php echo $presupuesto_display; ?>" id="accordionPresupuesto">
+    <div class="card <?php echo $presupuesto_card; ?> accordion_3">
+      <div class="card-header" id="headingPresupuesto">
+        <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
+          <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle" 
+                  type="button" 
+                  data-toggle="collapse" 
+                  data-target="#collapsePresupuesto" 
+                  aria-expanded="<?php echo $presupuesto_show === 'show' ? 'true' : 'false'; ?>" 
+                  aria-controls="collapsePresupuesto">
+            Presupuesto
           </button>
+          <span class="card-title text-right presupuesto-accordion-intervino">
+            <strong>Intervino: </strong>
+            <span
+              class="intervino-presupuesto-ultimo"
+              tabindex="0"
+              role="button"
+              data-toggle="popover"
+              data-html="true"
+              data-placement="bottom"
+            >
+              <?php echo htmlspecialchars($ultimoIntervinoPresupuesto, ENT_QUOTES); ?>
+            </span>
+          </span>
+        </h2>
+      </div>
+      <div id="collapsePresupuesto" class="collapse <?php echo $presupuesto_show; ?>" aria-labelledby="headingPresupuesto" data-parent="#accordionPresupuesto">
+        <div class="card-body" id="presupuesto-card-body">
+          <!-- Aquí se insertará el contenido dinámico generado -->
+            <?php 
+              if($presupuestoGenerado): 
+                echo renderizar_presupuesto_html($presupuesto_generado, $mostrarVistaDetallada, !empty($bloqueoEdicionComercial['bloqueado']) || !empty($workflowPrevisita['bloquea_avance']));
+              endif;                
+            ?>
         </div>
       </div>
     </div>
   </div>
-</div>
 <?php endif; ?>
-<!-- end accordion 5 -->
+<!-- /accordion presupuesto -->
+
+<?php if ($mostrarBloquesTecnicosSeguimiento && isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
+  <!-- start accordion visita -->
+  <div class="accordion" id="accordionVisita">
+    <div class="card <?php echo $visita_card; ?> accordion_2">
+    <div class="card-header" id="headingVisita">
+      <h2 class="mb-0 d-flex align-items-center">
+        <!-- Botón collapse -->
+        <button
+          class="col-9 btn btn-link btn-block text-left text-white p-0 card-title"
+          type="button"
+          data-toggle="collapse"
+          data-target="#collapseVisita"
+          aria-expanded="<?php echo $visita_show === 'show' ? 'true' : 'false'; ?>"
+          aria-controls="collapseVisita"
+        >
+          Visita
+          <?php echo isset($datos['0']['id_previsita'])
+            ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>'
+            : '';
+          ?>
+        </button>
+
+        <!-- Span con el popover -->
+        <span class="col-3 card-title text-right">
+          <strong>Intervino: </strong>
+          <span
+            tabindex="0"
+            role="button"
+            data-toggle="popover"
+            data-html="true"
+            data-placement="bottom"
+            data-content='<?php echo htmlspecialchars($popoverIntervinientes, ENT_QUOTES); ?>'
+          >
+            <?php echo htmlspecialchars($ultimo, ENT_QUOTES); ?>
+          </span>
+        </span>
+      </h2>
+    </div>
+
+    <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
+        <div class="card-body">
+
+          <!-- start accordion tareas -->
+          <div class="accordion" id="accordionTareas">
+
+            <!-- Ejemplo de Tarea 1 -->
+            <div class="card tarea-card">
+              <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center" id="headingTarea1">
+                <button class="btn btn-link text-white p-0 m-0 flex-grow-1 text-left"
+                        type="button"
+                        data-toggle="collapse"
+                        data-target="#collapseTarea1"
+                        aria-expanded="true"
+                        aria-controls="collapseTarea1"
+                        data-titulo-base="Tarea 1">
+                  <strong>Tarea 1:</strong> 
+                </button>
+                <i class="fa fa-trash eliminar-tarea v-icon-pointer" title="Eliminar tarea" style="cursor: pointer; font-size: 1.3rem;"></i>
+              </div>
+              <div id="collapseTarea1" class="collapse show" aria-labelledby="headingTarea1" data-parent="#accordionTareas">
+                <div class="card-body">
+                  <div class="row d-flex align-items-stretch">
+
+                    <!-- Columna 1: Descripción -->
+                    <div class="col-md-3">
+                      <div class="card h-100 mb-2">
+                        <div class="card-header v-bg-violeta text-white">
+                          <h5 class="card-title mb-0">Descripción de la Tarea</h5>
+                        </div>
+                        <div class="card-body p-2 d-flex flex-column">
+                          <div class="form-group flex-grow-1">
+                            <textarea class="form-control tarea-descripcion h-100" placeholder="Describa la tarea..."></textarea>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Columna 2: Materiales y Mano de Obra -->
+                    <div class="col-md-6 d-flex flex-column">
+                      <!-- Materiales Asociados -->
+                      <div class="card mb-2 flex-fill">
+                        <div class="card-header v-bg-violeta text-white">
+                          <h5 class="card-title mb-0">Materiales Asociados</h5>
+                        </div>
+                        <div class="card-body p-2">
+                          <div class="form-row align-items-center mb-2">
+                            <div class="col-8">
+                              <select class="form-control form-control-sm material-select">
+                                <?= $opcionesMateriales ?>
+                              </select>
+                            </div>
+                            <div class="col-3">
+                              <input type="number" class="form-control form-control-sm material-cantidad" placeholder="Cantidad" min="1">
+                            </div>
+                            <div class="col-1">
+                              <button type="button" class="btn btn-success btn-sm agregar-material w-100"><i class="fa fa-plus"></i></button>
+                            </div>
+                          </div>
+
+                          <div class="table-responsive">
+                            <table class="table table-bordered materiales-table mb-2">
+                              <thead class="thead-light">
+                                <tr>
+                                  <th>#</th>
+                                  <th>Material</th>
+                                  <th>Cantidad</th>
+                                  <th>Acción</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr class="fila-vacia-materiales">
+                                  <td colspan="4" class="text-center text-muted">Sin materiales asociados</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Mano de Obra Asociada -->
+                      <div class="card flex-fill">
+                        <div class="card-header v-bg-violeta text-white">
+                          <h5 class="card-title mb-0">Mano de Obra Asociada</h5>
+                        </div>
+                        <div class="card-body p-2">
+                          <div class="form-row align-items-center mb-2">
+                            <div class="col-8">
+                              <select class="form-control form-control-sm mano-obra-select">
+                                <?= $opcionesManoDeObra ?>
+                              </select>
+                            </div>
+                            <div class="col-3">
+                              <input type="number" class="form-control form-control-sm mano-obra-cantidad" placeholder="Cantidad" min="1">
+                            </div>
+                            <div class="col-1">
+                              <button type="button" class="btn btn-success btn-sm agregar-mano-obra w-100"><i class="fa fa-plus"></i></button>
+                            </div>
+                          </div>
+
+                          <div class="table-responsive">
+                            <table class="table table-bordered mano-obra-table mb-2">
+                              <thead class="thead-light text-center">
+                                <tr>
+                                  <th>#</th>
+                                  <th>Mano de obra</th>
+                                  <th>Cantidad</th>
+                                  <th>Días</th>
+                                  <th>Jornales</th>
+                                  <th>Observaciones</th>
+                                  <th>Acción</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr class="fila-vacia-mano-obra">
+                                  <td colspan="7" class="text-center text-muted">Sin mano de obra asociada</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Columna 3: Fotos -->
+                    <div class="col-md-3">
+                      <div class="card h-100 mb-2">
+                        <div class="card-header v-bg-violeta text-white">
+                          <h5 class="card-title mb-0">Fotos de la Tarea</h5>
+                        </div>
+                        <div class="card-body p-2">
+                          <div class="custom-file mb-2">
+                            <input 
+                              type="file" 
+                              class="custom-file-input tarea-fotos" 
+                              id="fotos_tarea_1" 
+                              name="fotos_tarea_1[]" 
+                              multiple 
+                              accept="image/*" 
+                              capture="environment"
+                              data-index="1"
+                            />
+                            <label class="custom-file-label" for="fotos_tarea_1">Seleccionar fotos</label>
+                          </div>
+                          <div class="row preview-fotos" id="preview_fotos_tarea_1"></div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div> <!-- end row -->
+                </div> <!-- end card-body -->
+              </div> <!-- end collapse -->
+            </div>
+            <!-- end card tarea1 -->
+          </div>
+          <!-- end accordion tareas -->
+
+          <!-- Botón agregar nueva tarea -->
+          <div class="text-center my-3">
+            <button type="button" class="btn btn-primary" id="btn-agregar-tarea"><i class="fa fa-plus-circle"></i> Agregar nueva tarea</button>
+          </div>
+
+          <!-- Botones generales -->
+          <div class="text-center">
+            <button type="button" class="btn bg-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
+            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
+            <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
+            <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
+          </div>
+
+        </div> <!-- end card-body visita -->
+      </div> <!-- end collapse visita -->
+    </div> <!-- end card visita -->
+  </div>
+  <!-- end accordion visita -->
+<?php endif; ?>
+
+<!-- Fuera del accordion, al fondo de la página -->
+<select id="opcionesMaterialBase" class="d-none">
+  <?= $opcionesMateriales ?>
+</select>
+
+<select id="opcionesManoObraBase" class="d-none">
+  <?= $opcionesManoDeObra ?>
+</select>
+
+<?php if ($mostrarBloquePrevisitaSeguimiento): ?>
+<form id="currentForm"  class="form" enctype="multipart/form-data">
+<!-- start accordion -->
+<div class="accordion" id="accordionExample">
+  <div class="card <?php echo $previsita_card; ?> accordion 1">
+    <div class="card-header" id="headingOne">
+      <h2 class="mb-0 d-flex justify-content-between align-items-center">
+        <button class="col-9 btn btn-link btn-block text-left text-white p-0 card-title " type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+        <span class="previsita-titulo-base">Pre-visita</span>
+        </button>
+        <span class="col-3 card-title text-right"><?php imprimirValido("Intervino", "intervino_previsita_apenom", true, 'strong', ': ') ?></span>
+      </h2>
+    </div>
+
+    <!-- start collapse accordion 1 -->
+    <div id="collapseOne" class="collapse <?php echo $previsita_show; ?>" aria-labelledby="headingOne" data-parent="#accordionExample">
+          
+          <!-- start card body accordion 1-->
+          <div class="card-body">
+                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
+                <!-- /.row start-->
+                <div class="row pb-1">
+
+                    <div class="col-1 form-group mb-0 mt-1">
+                        <small class="v-visual-edit d-none"><label class="mb-0">Fecha de alta</label></small>
+                        <div class="input-group mb-0">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-calendar-check"></i></span>
+                          </div>
+                            <input type="text" class="form-control v-disabled" inputmode="decimal" placeholder="" id="" name="" 
+                            value="<?php echo strToDateFormat(arrayPrintValue(null, $datos, 'log_alta', null), 'd-m-Y'); ?>">
+                        </div>
+                    </div>
+
+                  <div class="col-2 form-group mb-0 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Fecha de visita</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-calendar-check v-requerido-icon"></i></span>
+                        </div>
+                          <input type="date" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" inputmode="decimal" placeholder="Fecha de visita" id="fecha_visita" name="fecha_visita" value="<?php echo arrayPrintValue(null, $datos, 'fecha_visita', null); ?>" min=""> 
+                      </div>
+                  </div>
+
+                  <div class="col-1 form-group mb-0 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Hora Visita</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-clock v-requerido-icon"></i></span>
+                        </div>
+                          <input type="time" class="form-control <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" inputmode="decimal" placeholder="Hora" id="hora_visita" name="hora_visita" 
+                          value="<?php echo arrayPrintValue(null, $datos, 'hora_visita', null); ?>">
+                      </div>
+                  </div>
+
+                  <div class="col-2 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Estado</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-sliders-h v-requerido-icon"></i></span>
+                        </div>
+                        <select class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" id="estado_visita" name="estado_visita">
+                          <?php echo !isset($datos['estado_visita']) ? '<option value="" disabled selected class="bg-secondary">Estado</option>' : ''; ?>
+                          <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Vencida" ? '<option value="" disabled selected class="bg-secondary">Vencida</option>' : ''; ?>
+
+                            <?php 
+                            if (!isset($datos['estado_visita']) || $datos['estado_visita'] !== "Vencida") {
+                                echo '<option value="Programada" ' . (isset($datos['estado_visita']) && $datos['estado_visita'] == "Programada" ? "selected" : '') . '>Programada</option>';
+                            }
+                            ?>
+
+                          <option value="Reprogramada" <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Reprogramada" ? "selected" : ''; ?>>Reprogramada </option>
+                          <option value="Ejecutada" <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Ejecutada" ? "selected" : ''; ?>>Ejecutada </option>
+                          <option value="Cancelada" <?php echo isset($datos['estado_visita']) && $datos['estado_visita'] == "Cancelada" ? "selected" : ''; ?>>Cancelada </option>
+                        </select>
+                      </div>
+                  </div>
+
+                </div>
+                <!-- row end -->
+
+                <!-- /.row start-->
+                <div class="row">
+
+                  <div class="col-2 form-group mb-0 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">CUIT</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-file-invoice"></i></span>
+                        </div>
+                          <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" data-inputmask='"mask": "99-99999999-9", "clearIncomplete": "true"' data-mask="" inputmode="decimal" data-cuit="<?php echo arrayPrintValue(null, $datos, 'cuit', null); ?>" placeholder="CUIT" id="cuit" name="cuit" value="<?php echo arrayPrintValue(null, $datos, 'cuit', null); ?>">
+
+                      </div>
+                  </div>
+
+                  <div class="col-3 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Razón Social</label></small>
+                      <div class="input-group mb-0 cliente-sugerencias-group">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-city v-requerido-icon"></i></span>
+                        </div>
+                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Razón Social" id="razon_social" name="razon_social" list="clientes_razon_social_list" autocomplete="off" value="<?php echo arrayPrintValue(null, $datos, 'razon_social', null); ?>">
+                        <div id="razon_social_sugerencias" class="cliente-sugerencias-menu" role="listbox" aria-label="Clientes sugeridos"></div>
+                      </div>
+                  </div>
+
+                  <div class="col-3 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Contacto en obra</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-user-tie v-requerido-icon"></i></span>
+                        </div>
+                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Contacto en obra" id="contacto_obra" name="contacto_obra" value="<?php echo arrayPrintValue(null, $datos, 'contacto_obra', null); ?>">
+                      </div>
+                  </div>
+                  <div class="col-2 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Teléfono</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-phone v-requerido-icon"></i></span>
+                        </div>
+                          <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" data-inputmask='"mask": "(9{1,5})(99999999)", "clearIncomplete": "false"' data-mask="" inputmode="decimal" placeholder="Teléfono" id="tel_contacto_obra" name="tel_contacto_obra" value="<?php echo arrayPrintValue(null, $datos, 'tel_contacto_obra', null); ?>">
+                      </div>
+                  </div>
+
+                  <div class="col-2 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Email</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                        </div>
+                        <input type="text" class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Email" data-inputmask='"mask": "[{1,20}|_|.]@*{1,20}.*{1,3}[.*{1,3}]", "clearIncomplete": "true"' autocomplete="rutjfkde" id="email_contacto_obra" name="email_contacto_obra" value="<?php echo arrayPrintValue(null, $datos, 'email_contacto_obra', null); ?>">
+                      </div>
+                  </div>
+
+                  <div class="col-3 form-group mb-1 mt-1">
+                        <small class="v-visual-edit d-none"><label class="mb-0">Provincia</label></small>
+                          <div class="input-group mb-0">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
+                            </div>
+                            <select class="form-control select2bs4 v-select2 provincia <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="provincia_visita" name="provincia_visita">
+                              <option value="<?php if(isset($datos['provincia_visita'])){echo $datos['provincia_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['provincianom'])){echo $datos['provincianom'];}else{echo "Provincia";} ?></option>
+                              <?php echo $provinciasSelect;?>
+                            </select>
+                          </div>
+                  </div>
+
+                  <div class="col-2 form-group mb-1 mt-1">
+                          <small class="v-visual-edit d-none"><label class="mb-0">Partido</label></small>
+                          <div class="input-group mb-0">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
+                            </div>
+                            <select class="form-control select2bs4 v-select2 partido <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="partido_visita" name="partido_visita">
+                              <option value="<?php if(isset($datos['partido_visita'])){echo $datos['partido_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary partidosOpt1"><?php if(isset($datos['partidonom'])){echo $datos['partidonom'];}else{echo "Partido";} ?></option>
+                            <?php if(isset($partidosSelect)){echo $partidosSelect;} ?>
+                            </select>
+                          </div>
+                  </div>
+
+                  <div class="col-3 form-group mb-1 mt-1">
+                          <small class="v-visual-edit d-none"><label class="mb-0">Localidad</label></small>
+                          <div class="input-group mb-0">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text"><i class="fas fa-map-marked-alt"></i></span>
+                            </div>
+                            <select class="form-control select2bs4 v-select2 localidad <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="localidad_visita" name="localidad_visita">
+                              <option value="<?php if(isset($datos['localidad_visita'])){echo $datos['localidad_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['localidadnom'])){echo $datos['localidadnom'];}else{echo "Localidad";} ?></option>
+                                <?php if(isset($localidadesSelect)){echo $localidadesSelect;} ?>
+                            </select>
+                          </div>
+                  </div>
+
+                  <div class="col-3 form-group mb-1 mt-1">
+                          <small class="v-visual-edit d-none"><label class="mb-0">Calle</label></small>
+                          <div class="input-group mb-0">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text"><i class="fas fa-road"></i></span>
+                            </div>
+                            <select class="form-control select2bs4 v-select2 calle <?php echo $visualiza_prevista !== "" ? 'v-disabled-select2' : ''; ?>" id="calle_visita" name="calle_visita" data-tags="true">
+                              <option value="<?php if(isset($datos['calle_visita'])){echo $datos['calle_visita'];}else{echo "";} ?>" disabled selected class="bg-secondary"><?php if(isset($datos['callenom'])){echo $datos['callenom'];}else{echo "Calle";} ?></option>
+                            <?php if(isset($callesSelect)){echo $callesSelect;} ?>
+                            </select>
+                          </div>
+                  </div>
+
+                  <div class="col-1 form-group mb-1 mt-1">
+                          <small class="v-visual-edit d-none"><label class="mb-0">Altura / Km</label></small>
+                          <div class="input-group mb-0">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text"><i class="fas fa-sort-numeric-up"></i></span>
+                            </div>
+                              <input type="text" class="form-control <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" data-inputmask='"mask": "9{1,5}", "clearIncomplete": "true" ' data-mask="" inputmode="decimal" placeholder="Altura / Km" id="altura_visita" name="altura_visita" value="<?php echo arrayPrintValue(null, $datos, 'altura_visita', null); ?>">
+                          </div>
+                  </div>
+
+                  <div class="col-1 form-group mb-1 mt-1">
+                          <small class="v-visual-edit d-none"><label class="mb-0">CP</label></small>
+                          <div class="input-group mb-0">
+                            <div class="input-group-prepend">
+                              <span class="input-group-text"><i class="fas fa-mail-bulk"></i></span>
+                            </div>
+                            <input type="text" 
+                              class="form-control <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" 
+                              data-inputmask='"mask": "9{4,5}", "greedy": false, "clearIncomplete": false, "autoUnmask": true, "removeMaskOnSubmit": true' 
+                              data-mask 
+                              inputmode="decimal" 
+                              placeholder="CP" 
+                              id="cp_visita" 
+                              name="cp_visita" 
+                              value="<?php echo arrayPrintValue(null, $datos, 'cp_visita', null); ?>">
+                          </div>
+                  </div>
+
+                  <div class="col-2 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Medio Contacto</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fa-solid fa-headset v-requerido-icon"></i></span>
+                        </div>
+                        <select class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" id="medio_contacto" name="medio_contacto">
+                          <?php echo !isset($datos['medio_contacto']) ? '<option value="" disabled selected class="bg-secondary">Medio Contacto</option>' : ''; ?>
+                          <option value="Gestion anterior" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Gestion anterior" ? "selected" : ''; ?>>Gestión anterior</option>
+                          <option value="Gestion comercial" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Gestion comercial" ? "selected" : ''; ?>>Gestión comercial</option>
+                          <option value="Pagina Web" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Pagina Web" ? "selected" : ''; ?>>Página Web</option>
+                          <option value="Google" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Google" ? "selected" : ''; ?>>Google</option>
+                          <option value="Nueva gestion comercial" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Nueva gestion comercial" ? "selected" : ''; ?>>Nueva gestión comercial</option>
+                          <option value="Instagram" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "Instagram" ? "selected" : ''; ?>>Instagram</option>
+                          <option value="WhatsApp" <?php echo isset($datos['medio_contacto']) && $datos['medio_contacto'] == "WhatsApp" ? "selected" : ''; ?>>WhatsApp</option>
+                        </select>
+                      </div>
+                  </div>
+
+                  <div class="col-2 form-group mb-1 mt-1">
+                      <small class="v-visual-edit d-none"><label class="mb-0">Empresa status</label></small>
+                      <div class="input-group mb-0">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text"><i class="fa-solid fa-award v-requerido-icon"></i></span>
+                        </div>
+                        <select class="form-control v-input-requerido <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" id="empresa_status" name="empresa_status">
+                          <?php echo !isset($datos['empresa_status']) ? '<option value="" disabled selected class="bg-secondary">Empresa status</option>' : ''; ?>
+                          <option value="Cliente" <?php echo isset($datos['empresa_status']) && $datos['empresa_status'] == "Cliente" ? "selected" : ''; ?>>Cliente</option>
+                          <option value="Con cotizacion previa" <?php echo isset($datos['empresa_status']) && $datos['empresa_status'] == "Con cotizacion previa" ? "selected" : ''; ?>>Con cotización previa</option>
+                          <option value="Prospecto" <?php echo isset($datos['empresa_status']) && $datos['empresa_status'] == "Prospecto" ? "selected" : ''; ?>>Prospecto</option>
+                        </select>
+                      </div>
+                  </div>
+
+                </div>
+                <!-- row end -->
+
+                <!-- /.card start ---------------------------------------------------------------------------------- -->
+                <div class="card card-secondary mt-2">
+                          <div class="card-header p-2" style="background-color: #708bd3 !important;">
+                             <h3 class="card-title"><i class="fas fa-hammer mr-2"></i>Elementos</h3>
+                          </div>
+
+                          <!-- Start card-body -->
+                          <div class="card-body pb-0">
+
+                                              <!-- start row -->                                              
+                                              <div class="row d-flex align-items-center">
+
+                                                  <div class="col-sm-5 pr-0">
+                                                    <!-- checkbox -->
+                                                    <div class="form-group clearfix mb-1">
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="induccion_visita" name="induccion_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'induccion_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="induccion_visita">Inducción</label>
+                                                          </div>
+
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="chaleco_visita" name="chaleco_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'chaleco_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="chaleco_visita">Chaleco</label>
+                                                          </div>
+
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="casco_visita" name="casco_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'casco_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="casco_visita">Casco</label>
+                                                          </div>
+
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="escalera_visita" name="escalera_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'escalera_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="escalera_visita">Escalera</label>
+                                                          </div>
+
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="arnes_visita" name="arnes_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'arnes_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="arnes_visita">Arnes</label>
+                                                          </div>
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="soga_visita" name="soga_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'soga_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="soga_visita">Soga</label>
+                                                          </div>
+
+                                                          <div class="icheck-success d-inline mr-4">
+                                                            <input type="checkbox" id="gafas_visita" name="gafas_visita" value="s" <?php echo arrayPrintValue(null, $datos, 'gafas_visita', null) == 's' ? 'checked' : '' ; ?> <?php echo $visualiza_prevista !== "" ? 'disabled' : ''; ?>>
+                                                            <label for="gafas_visita">Gafas</label>
+                                                          </div>
+                                                    </div>
+                                                    <!-- checkbox -->
+                                                </div>
+
+                                                <div class="col-sm-7 pl-0">
+                                                    <div class="col-12 form-group">
+                                                        <small class="v-visual-edit d-none"><label class="mb-0">Otros</label></small>
+                                                        <div class="input-group mb-0">
+                                                          <div class="input-group-prepend">
+                                                            <span class="input-group-text"><i class="fas fa-toolbox"></i></span>
+                                                          </div>
+                                                          <input type="text" class="form-control v-input-requerido  <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Otros" id="otros_visita" name="otros_visita" value="<?php echo arrayPrintValue(null, $datos, 'otros_visita', null); ?>">
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                              </div>                                        
+                                              <!-- end row--> 
+
+                          </div>
+                          <!-- End card-body -->
+
+                </div>
+                <!-- /.card end ------------------------------------------------------------------------------------ -->
+
+                <div class="row">
+                      <div class="col-12 form-group mb-1 mt-1">
+                        <small class="v-visual-edit d-none"><label class="mb-0">Requerimiento técnico</label></small>
+                        <div class="input-group mb-0">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fa-solid fa-gears"></i></span>
+                          </div>
+                          <textarea type="text" rows="3" class="v-visita form-control  <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Requerimiento técnico" id="requerimiento_tecnico" name="requerimiento_tecnico"><?php echo arrayPrintValue(null, $datos, 'requerimiento_tecnico', null); ?></textarea>
+                        </div>
+                      </div>
+                </div>
+
+                <div class="row">
+                      <div class="col-12 form-group mb-1 mt-1">
+                        <small class="v-visual-edit d-none"><label class="mb-0">Nota</label></small>
+                        <div class="input-group mb-0">
+                          <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-sticky-note"></i></span>
+                          </div>
+                          <textarea type="text" rows="3" class="v-visita form-control  <?php echo $visualiza_prevista !== "" ? 'v-disabled' : ''; ?>" placeholder="Nota" id="nota_visita" name="nota_visita"><?php echo arrayPrintValue(null, $datos, 'nota_visita', null); ?></textarea>
+                        </div>
+                      </div>
+                </div>                
+
+                <div class="row">
+                  <div class="col-12 form-group mb-1 mt-2">
+                      <small class="v-visual-edit d-none"><label class="mb-1">Documentos</label></small>
+                      <div class="previsita-documentos-panel" id="previsitaDocumentosPanel" data-readonly="<?php echo $permiteEditarDocumentosPrevisita ? '0' : '1'; ?>" data-documentos-iniciales="<?php echo htmlspecialchars($documentosPrevisitaJson, ENT_QUOTES, 'UTF-8'); ?>">
+                        <input
+                          type="file"
+                          class="d-none"
+                          id="doc_previsita"
+                          multiple
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,image/jpeg,image/png"
+                        >
+                        <input type="hidden" id="previsita_documentos_eliminados" name="previsita_documentos_eliminados" value="">
+
+                        <div class="previsita-documentos-dropzone border rounded bg-light p-3 text-muted mb-2" id="previsitaDocumentosDropzone" role="button" tabindex="0" aria-label="Adjuntar documentos de la pre-visita">
+                          <div class="previsita-documentos-dropzone-copy text-center">
+                            <i class="fas fa-file-upload mb-2"></i>
+                            <div><strong>Arrastre aqui los archivos</strong> o haga click.</div>
+                            <small class="d-block mt-1">PDF, Word, Excel, JPG, PNG o TXT. Maximo 5 MB por archivo.</small>
+                          </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-2 previsita-documentos-encabezado">
+                          <div class="small text-muted" id="previsitaDocumentosResumen"></div>
+                        </div>
+
+                        <div class="row previsita-documentos-grid" id="previsitaDocumentosGrid"></div>
+                      </div>
+                  </div>
+                </div>
+
+                <div class="row <?php echo $previsita_buttons;?> text-center justify-content-center pr-1 mt-2">
+                  <button type="submit" class="col-1 btn btn-primary btn-block m-2 v-alta-edit d-none" data-accion="guardar"><i class="fa fa-plus-circle"></i> Guardar</button>
+                  <button type="button" class="col-1 btn btn-warning btn-block m-2 v-alta-edit d-none v-accion-cancelar" data-accion="cancelar"><i class="fa fa-ban"></i> Cancelar</button>
+                </div>
+
+                <?php if ($mostrarGuardarSoloDocumentosPrevisita): ?>
+                <div class="row text-center justify-content-center pr-1 mt-2">
+                  <button type="button" class="btn btn-primary btn-uniform m-2 btn-guardar-documentos-previsita">
+                    <i class="fa fa-save"></i> Guardar documentos
+                  </button>
+                </div>
+                <?php endif; ?>
+
+          </div>
+          <!-- end card accordion 1 -->
+
+    </div>
+    <!-- end collapse accordion 1-->
+
+  </div>
+  <!-- end card accordion 1 -->
+</div>
+<!-- end accordion -->
+</form>
+<?php endif; ?>
 
 <!-- start accordion 6 - Facturación -->
 <div class="accordion d-none" id="accordionExample6">

@@ -959,8 +959,8 @@ $(document).ready(function() {
           const tpl = document.getElementById('tpl-accordion-presupuesto');
           if (tpl) {
               const clone = tpl.content.cloneNode(true);
-              // Insertarlo después del accordion de Visita
-              $('#accordionVisita').after(clone);
+              // Insertarlo antes del accordion de Visita
+              $('#accordionVisita').before(clone);
               if (typeof window.initPopoverIntervinoPresupuesto === 'function') {
                 window.initPopoverIntervinoPresupuesto();
               }
