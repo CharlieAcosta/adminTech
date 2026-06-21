@@ -56,6 +56,92 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/custom.css">
+  <style>
+    #modulos-grid .modulo-card {
+      height: 100px;
+    }
+
+    #modulos-grid .modulo-card .info-box-icon {
+      flex: 0 0 70px;
+      width: 70px;
+    }
+
+    #modulos-grid .modulo-card .info-box-content {
+      display: grid;
+      grid-template-rows: auto minmax(40px, auto);
+      row-gap: 4px;
+      align-content: start;
+      align-items: start;
+      justify-content: stretch;
+      justify-items: stretch;
+      min-width: 0;
+      padding: 4px 10px;
+      overflow: hidden;
+      line-height: normal;
+      text-align: left;
+    }
+
+    #modulos-grid .modulo-card__titulo {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      overflow: visible;
+      font-size: 1.80rem;
+      line-height: 1.15;
+      text-align: left;
+      white-space: normal;
+    }
+
+    #modulos-grid .modulo-card__alertas {
+      display: flex;
+      align-items: flex-start;
+      align-content: flex-start;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      font-size: 1.75rem;
+      line-height: 1.2;
+      text-align: left;
+    }
+
+    #modulos-grid .modulo-card__alertas .badge {
+      margin-top: 2px !important;
+    }
+
+    #modulos-grid .modulo-card__alertas > small:first-child .badge {
+      margin-left: 0 !important;
+    }
+
+    @media (max-width: 1199.98px) {
+      #modulos-grid .modulo-card {
+        height: 156px;
+      }
+
+      #modulos-grid .modulo-card__titulo {
+        font-size: 1.3rem;
+      }
+    }
+
+    @media (max-width: 991.98px) {
+      #modulos-grid .modulo-card__alertas {
+        font-size: 1.5rem;
+      }
+
+      #modulos-grid .modulo-card__alertas .ml-2,
+      #modulos-grid .modulo-card__alertas .ml-3 {
+        margin-left: .25rem !important;
+      }
+
+      #modulos-grid .modulo-card__alertas > small:first-child .badge {
+        margin-left: 0 !important;
+      }
+    }
+  </style>
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
 </head>
@@ -84,18 +170,19 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
     <!-- Main content -->
     <section class="content">
         <!-- boxes -->
-    <div class=" col-10 offset-1 row justify-content-center">
+    <div id="modulos-grid" class="col-10 offset-1 row justify-content-center">
 
         
          <?php if (in_array($perfil, $agentes)){ ?>
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/listado_personal.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon bg-warning elevation-1"><i class="fas fa-users"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text">Agentes</h3>
+                    <h3 class="info-box-text modulo-card__titulo">Agentes</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -108,11 +195,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/novedades_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-calendar-check"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text">Novedades</h3>
+                    <h3 class="info-box-text modulo-card__titulo">Novedades</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -126,11 +214,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
           <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/clientes_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon bg-info elevation-1"><i class="fas fa-handshake"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text">Clientes</h3>
+                    <h3 class="info-box-text modulo-card__titulo">Clientes</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -143,12 +232,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/seguimiento_de_obra_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon bg-success elevation-1"><i class="<?php echo $iconoModuloSeguimiento; ?>"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center flex-wrap"><?php echo $tituloModuloSeguimiento; ?>
-                      
+                    <h3 class="info-box-text modulo-card__titulo"><?php echo $tituloModuloSeguimiento; ?></h3>
+                    <div class="modulo-card__alertas">
                       <?php if ($esPanelOrdenCompraAdministrativa){ ?>
                         <?php if ($ocPendientesSeguimiento > 0){ ?>
                       <small><span class="right badge badge-warning ml-3 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> '.($ocPendientesSeguimiento === 1 ? 'OC pendiente' : 'OC pendientes').' </small></small>'; ?></span></small>
@@ -170,7 +259,7 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                         <small><span class="right badge badge-warning ml-2 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> OC Pend. </small></small>'; ?></span></small>
                         <?php } ?>
                       <?php } ?>
-                  </h3>  
+                    </div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -183,11 +272,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/materiales_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon bg-secondary elevation-1"><i class="fa-solid fa-dolly"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">Materiales</h3>  
+                    <h3 class="info-box-text modulo-card__titulo">Materiales</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -200,11 +290,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/obras_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon bg-primary elevation-1"><i class="fa-solid fa-helmet-safety"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">Obras</h3>  
+                    <h3 class="info-box-text modulo-card__titulo">Obras</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -217,11 +308,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/aeo_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon v-bg-magenta elevation-1"><i class="fa-solid fa-people-roof"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">AEO - Asistencia en obras</h3>  
+                    <h3 class="info-box-text modulo-card__titulo">AEO - Asistencia en obras</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -234,11 +326,12 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
          <!-- /.info-box -->
           <div class="col-12 col-sm-6 col-md-4">
             <a href="../01-views/jornales_listado.php">
-               <div class="info-box">
+               <div class="info-box modulo-card">
                   <span class="info-box-icon v-bg-verde-oscuro elevation-1"><i class="fa-solid fa-sack-dollar"></i></span>
                   <!-- .info-box-content -->
                   <div class="info-box-content">
-                    <h3 class="info-box-text d-flex align-items-center">Tipos de Jornales</h3>  
+                    <h3 class="info-box-text modulo-card__titulo">Tipos de Jornales</h3>
+                    <div class="modulo-card__alertas"></div>
                   </div>
                 <!-- /.info-box-content -->
               </div>

@@ -414,6 +414,13 @@ docker compose exec db mysql -uroot -p
 - La verificacion hoy parece ser principalmente manual.
 - Existen cambios SQL recientes en `11-migraciones_sql/`, por lo que conviene revisar el estado del working tree antes de hacer merges o deploys.
 
+### Pantalla de modulos
+
+- La vista activa se construye en `01-views/panel.php` con bloques `info-box` de AdminLTE y visibilidad condicionada por el perfil de la sesion.
+- La grilla usa `#modulos-grid` y `modulo-card`: cada card mide `100px` en escritorio y `156px` hasta `1199.98px`, con altura uniforme y estilos acotados a esta pantalla.
+- El sector derecho usa CSS Grid con filas `auto minmax(40px, auto)` y `row-gap: 4px`: titulo arriba y espacio reservado para alertas abajo, incluso cuando esta vacio.
+- Perfiles, navegacion y alertas conservan su logica PHP, orden, colores, textos y cantidades dinamicas.
+
 ## Recomendaciones para seguir mejorando la documentacion
 
 - Agregar un dump base anonimizando datos sensibles o documentar de donde obtenerlo.
