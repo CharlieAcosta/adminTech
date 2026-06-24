@@ -494,7 +494,6 @@ $(document).ready(function() {
 
     // acciones y eventos
     $(document).on('click', '#btn-agregar-tarea', function () {
-          //console.log('Agregar nueva tarea clickeado');
             if (!modoVisualizacion) hayCambios = true;
             controlarBotonGenerarPresupuesto();
             let hayDescripcionIncompleta = false;
@@ -975,7 +974,6 @@ $(document).ready(function() {
 
       // 3. Recolección de datos y render dinámico
       const datosExtraidos = recolectarDatosParaPresupuesto();
-      console.log('📦 Datos extraídos para presupuesto:', datosExtraidos);
       renderizarPresupuestoDesdeDatos(datosExtraidos);
       marcarPresupuestoComoModificado();
 
@@ -1329,7 +1327,7 @@ $(document).ready(function() {
      */
     function calcularFilaMaterial($tr) {
       const cantidad = parseFloat($tr.find('.cantidad-material').val()) || 0;
-      const precio   = parseFloat($tr.find('.precio-unitario').val())   || 0;
+      const precio   = parseFloat(String($tr.find('.precio-unitario').val()).replace(',', '.')) || 0;
     
       let subtotal = cantidad * precio;
     
@@ -1637,7 +1635,7 @@ $(document).ready(function() {
         }
 
         htmlMateriales += `
-        <tr data-material-id="${mat.id_material ?? ''}" data-orden="${ordenMaterial}">
+        <tr data-material-id="${mat.id_material ?? ''}" data-orden="${ordenMaterial}" data-log_alta="${mat.log_alta ?? ''}" data-log_edicion="${mat.log_edicion ?? ''}">
           <td>${mat.nombre || ''}</td>
           <td>
             <input
@@ -1650,7 +1648,8 @@ $(document).ready(function() {
           </td>
           <td>
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
               class="form-control form-control-sm precio-unitario ${claseAlerta}"
               value="${precioUnitario}"
               min="0"
@@ -1702,7 +1701,7 @@ $(document).ready(function() {
         }
 
         htmlManoObra += `
-        <tr data-jornal_id="${mo.jornal_id ?? ''}" data-orden="${ordenManoObra}">
+        <tr data-jornal_id="${mo.jornal_id ?? ''}" data-orden="${ordenManoObra}" data-updated_at="${mo.updated_at ?? ''}">
           <td>${mo.nombre || ''}</td>
         
           <!-- Operarios (internamente cantidad) -->
@@ -1741,7 +1740,8 @@ $(document).ready(function() {
         
           <td>
             <input
-              type="number"
+              type="text"
+              inputmode="decimal"
               class="form-control form-control-sm valor-jornal ${claseAlerta}"
               value="${valorJornal}"
               min="0"
@@ -2220,7 +2220,6 @@ $(document).ready(function() {
             mostrarError(resp?.msg || 'No se pudo guardar el presupuesto.');
           }        
         } catch (err) {
-          console.log('Error al guardar presupuesto:', err);
           mostrarError('Error al guardar el presupuesto.');
         } finally {
           $btn.prop('disabled', false);
@@ -2366,65 +2365,20 @@ $(document).ready(function() {
       // 5) Delegado de eventos (único y correcto)
       //    + Si cambia un precio/jornal que estaba en rojo, persistimos en BD y, si es exitoso,
       //      reemplazamos bg-danger → bg-success, seteamos readonly y revalidamos.
-      contenedor.off('input change', 'input').on('input change', 'input', function (e) {
-        const $el   = $(this);
-        const $card = $el.closest('.tarea-card');
-        const $tr   = $el.closest('tr');
-
-        const esMaterial = $el.hasClass('precio-unitario');
-        const esJornal   = $el.hasClass('valor-jornal');
-        const estabaRojo = $el.hasClass('bg-danger');
-
-        // --- A) Si se trata de precio/jornal y estaba en rojo, en 'change' persistimos en BD
-        if ((esMaterial || esJornal) && estabaRojo && e.type === 'change') {
-          const valorNuevo = parseFloat(String($el.val()).replace(',', '.')) || 0;
-
-          if (esMaterial) {
-            // La <tr> del presupuesto debe traer data-material-id="<id_material>"
-            const idMaterial = $tr.data('material-id');
-            if (idMaterial) {
-              simpleUpdateInDB(
-                '../06-funciones_php/funciones.php', // urlDestino
-                'materiales',                         // tabla
-                { precio_unitario: valorNuevo },      // SET
-                [                                      // WHERE
-                  { columna: 'id_material', condicion: '=', valorCompara: String(idMaterial) }
-                ],
-                'ajax'
-              ).then(() => {
-                // ✅ Éxito: pasar a vigente (verde) y bloquear edición
-                $el.removeClass('bg-danger').addClass('bg-success').prop('readonly', true);
-                verificarDatosVencidos();
-                mostrarExito('PRECIO DE MATERIAL ACTUALIZADO');
-              }).catch(() => {
-                mostrarError('NO SE PUDO ACTUALIZAR EL PRECIO DEL MATERIAL');
-              });
-            }
-          } else if (esJornal) {
-            // La <tr> del presupuesto debe traer data-jornal_id="<jornal_id>"
-            const idJornal = $tr.data('jornal_id');
-            if (idJornal) {
-              simpleUpdateInDB(
-                '../06-funciones_php/funciones.php', // urlDestino
-                'tipo_jornales',                      // tabla
-                { jornal_valor: valorNuevo },         // SET
-                [                                      // WHERE
-                  { columna: 'jornal_id', condicion: '=', valorCompara: String(idJornal) }
-                ],
-                'ajax'
-              ).then(() => {
-                // ✅ Éxito: pasar a vigente (verde) y bloquear edición
-                $el.removeClass('bg-danger').addClass('bg-success').prop('readonly', true);
-                verificarDatosVencidos();
-                mostrarExito('VALOR DE JORNAL ACTUALIZADO');
-              }).catch(() => {
-                mostrarError('NO SE PUDO ACTUALIZAR EL VALOR DEL JORNAL');
-              });
-            }
-          }
+      function mostrarMensajeErrorConfirmacionDinamica(mensaje) {
+        const texto = mensaje || 'No se pudo confirmar la vigencia del precio.';
+        if (typeof mostrarError === 'function') {
+          mostrarError(texto);
+        } else if (window.toastr && typeof window.toastr.error === 'function') {
+          window.toastr.error(texto);
+        } else if (window.Swal && typeof window.Swal.fire === 'function') {
+          window.Swal.fire('Error', texto, 'error');
+        } else {
+          alert(texto);
         }
+      }
 
-        // --- B) Recalcular (tu lógica existente)
+      function recalcularFilaPresupuestoDinamico($card, $tr) {
         if ($tr.find('.cantidad-material').length) calcularFilaMaterial($tr);
         if ($tr.find('.cantidad-mano-obra').length) calcularFilaManoObra($tr);
 
@@ -2433,14 +2387,125 @@ $(document).ready(function() {
         const idBtn = $card.find('.btn-total-tarea').last().attr('id');
         const numeroTarea = parseInt(idBtn?.split('-').pop(), 10);
         actualizarTotalesPorTarea(numeroTarea, $card);
-
         actualizarTotalGeneral();
-
-        // --- C) Revalidar botones/alertas (si el usuario solo tipea, sin “change”, también se controla)
         verificarDatosVencidos();
-      });
+      }
 
-      
+      function obtenerMensajeErrorConfirmacionDinamica(xhr, respuesta) {
+        if (respuesta && respuesta.mensaje) return respuesta.mensaje;
+        if (xhr && xhr.responseJSON && xhr.responseJSON.mensaje) return xhr.responseJSON.mensaje;
+
+        if (xhr && xhr.responseText) {
+          try {
+            const json = JSON.parse(xhr.responseText);
+            if (json && json.mensaje) return json.mensaje;
+          } catch (e) {
+            // Respuesta no JSON: se usa fallback funcional.
+          }
+        }
+
+        return 'No se pudo confirmar la vigencia del precio.';
+      }
+
+      function confirmarPrecioCatalogoPresupuestoDinamico($el) {
+        if (!$el.hasClass('bg-danger')) return;
+        if ($el.data('precioDinamicoPendiente')) return;
+        if (!$el.data('precioDinamicoIntervenido')) return;
+
+        const $tr = $el.closest('tr');
+        const $card = $el.closest('.tarea-card');
+        const esMaterial = $el.hasClass('precio-unitario');
+        const esJornal = $el.hasClass('valor-jornal');
+        const tipo = esMaterial ? 'material' : (esJornal ? 'jornal' : '');
+        const idCatalogo = esMaterial
+          ? ($tr.data('material-id') || $tr.data('material_id'))
+          : ($tr.data('jornal_id') || $tr.data('jornal-id'));
+        const importeTexto = String($el.val() ?? '').trim();
+
+        if (!tipo || !idCatalogo) {
+          mostrarMensajeErrorConfirmacionDinamica('No se pudo identificar el registro de catalogo.');
+          return;
+        }
+
+        $el
+          .data('precioDinamicoPendiente', true)
+          .data('precioDinamicoIntervenido', false)
+          .prop('readonly', true);
+
+        $.ajax({
+          url: '../03-controller/presupuestos_guardar.php',
+          type: 'POST',
+          dataType: 'json',
+          data: {
+            via: 'ajax',
+            funcion: 'confirmarPrecioCatalogoPresupuestoDinamico',
+            tipo: tipo,
+            id_catalogo: idCatalogo,
+            importe: importeTexto
+          }
+        }).done(function (respuesta) {
+          if (!respuesta || respuesta.ok !== true) {
+            mostrarMensajeErrorConfirmacionDinamica(obtenerMensajeErrorConfirmacionDinamica(null, respuesta));
+            $el.prop('readonly', false).data('precioDinamicoIntervenido', true);
+            return;
+          }
+
+          $el
+            .val(respuesta.importe_persistido)
+            .removeClass('bg-danger')
+            .addClass('bg-success')
+            .prop('readonly', true)
+            .attr('data-fecha-actualizacion', respuesta.fecha_actualizacion || '');
+
+          if (tipo === 'material') {
+            $tr
+              .attr('data-log_edicion', respuesta.fecha_actualizacion || '')
+              .data('log_edicion', respuesta.fecha_actualizacion || '');
+          } else {
+            $tr
+              .attr('data-updated_at', respuesta.fecha_actualizacion || '')
+              .data('updated_at', respuesta.fecha_actualizacion || '');
+          }
+
+          recalcularFilaPresupuestoDinamico($card, $tr);
+        }).fail(function (xhr) {
+          mostrarMensajeErrorConfirmacionDinamica(obtenerMensajeErrorConfirmacionDinamica(xhr, null));
+          $el.prop('readonly', false).data('precioDinamicoIntervenido', true);
+        }).always(function () {
+          $el.data('precioDinamicoPendiente', false);
+        });
+      }
+
+      // 5) Delegados de eventos con namespace para evitar duplicados al rerenderizar.
+      contenedor
+        .off('input.presupuestoDinamicoRecalc change.presupuestoDinamicoRecalc', 'input')
+        .on('input.presupuestoDinamicoRecalc change.presupuestoDinamicoRecalc', 'input', function () {
+          const $el   = $(this);
+          const $card = $el.closest('.tarea-card');
+          const $tr   = $el.closest('tr');
+
+          if ($el.hasClass('precio-unitario') || $el.hasClass('valor-jornal')) {
+            $el.data('precioDinamicoIntervenido', true);
+          }
+
+          recalcularFilaPresupuestoDinamico($card, $tr);
+        });
+
+      contenedor
+        .off(
+          'blur.presupuestoDinamicoPrecio keydown.presupuestoDinamicoPrecio',
+          '.precio-unitario.bg-danger, .valor-jornal.bg-danger'
+        )
+        .on('blur.presupuestoDinamicoPrecio', '.precio-unitario.bg-danger, .valor-jornal.bg-danger', function () {
+          confirmarPrecioCatalogoPresupuestoDinamico($(this));
+        })
+        .on('keydown.presupuestoDinamicoPrecio', '.precio-unitario.bg-danger, .valor-jornal.bg-danger', function (e) {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          e.stopPropagation();
+          confirmarPrecioCatalogoPresupuestoDinamico($(this));
+        });
+
     }
 
    // START - Rederizado con datos backend ///////////////////////////////////////////////////////
@@ -2833,7 +2898,6 @@ $(document).ready(function() {
       try {
         await document.fonts.ready;
       } catch (err) {
-        console.log('No se pudo esperar la carga completa de fuentes:', err);
       }
     }
 
@@ -4060,7 +4124,6 @@ const htmlPaginaTotal = `
         return false;
 
       } catch (err) {
-        console.log('Error al generar documento del presupuesto:', err);
         const mensajeErrorDocumento = extraerMensajeErrorDocumento(err);
         const mensajeErrorDocumentoHtml = mensajeErrorDocumento
           .replaceAll('&', '&amp;')
