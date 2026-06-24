@@ -688,6 +688,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $pctExtra = $m['porcentaje_extra'] ?? '0';
             $subfila  = $m['subtotal_fila'] ?? '0.00';
             $idMat    = $m['id_material'] ?? null;
+            $idPtm    = $m['id_ptm'] ?? null;
             $ordenMat = $m['orden'] ?? null;
 
             // vigencia: log_edicion o log_alta
@@ -702,8 +703,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                        value="'. $e($cant) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
               <td>
-                <input type="number" class="form-control form-control-sm precio-unitario '. $e($clase) .'"
-                       value="'. $e($pu) .'" min="0" step="any" '. $e($ro) .'>
+                <input type="text" class="form-control form-control-sm precio-unitario '. $e($clase) .'"
+                       value="'. $e($pu) .'" min="0" step="any" inputmode="decimal"
+                       data-confirmar-precio-tipo="material"
+                       data-id-presupuesto="'. $e($idPresupuesto) .'"
+                       data-id-ptm="'. $e($idPtm) .'"
+                       data-id-material="'. $e($idMat) .'"
+                       data-fecha-actualizacion="'. $e($fechaRef) .'"
+                       '. $e($ro) .'>
               </td>
               <td>
                 <input type="number" class="form-control form-control-sm porcentaje-extra"
@@ -723,6 +730,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $pctExtra = $mo['porcentaje_extra'] ?? '0';
             $subfila  = $mo['subtotal_fila'] ?? '0.00';
             $jId      = $mo['id_jornal'] ?? $mo['jornal_id'] ?? null;
+            $idPtmo   = $mo['id_ptmo'] ?? null;
             $ordenMo  = $mo['orden'] ?? null;
 
             // vigencia: updated_at_origen preferente, si no updated_at
@@ -784,8 +792,14 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </td>
 
               <td>
-                <input type="number" class="form-control form-control-sm valor-jornal '. $e($clase) .'"
-                      value="'. $e($jValNum) .'" min="0" step="any" '. $e($ro) .'>
+                <input type="text" class="form-control form-control-sm valor-jornal '. $e($clase) .'"
+                      value="'. $e($jValNum) .'" min="0" step="any" inputmode="decimal"
+                      data-confirmar-precio-tipo="jornal"
+                      data-id-presupuesto="'. $e($idPresupuesto) .'"
+                      data-id-ptmo="'. $e($idPtmo) .'"
+                      data-id-jornal="'. $e($jId) .'"
+                      data-fecha-actualizacion="'. $e($fechaRef) .'"
+                      '. $e($ro) .'>
               </td>
 
               <td>
@@ -4064,10 +4078,6 @@ $(document).ready(function() {
   // Desactiva el evento 'blur' automático que borra el valor si lo considera incompleto
   $('#cp_visita').off('blur');
 
-  // (Opcional) Reaplicar el valor manualmente si querés ver qué pasa
-  $('#cp_visita').on('blur', function () {
-    console.log('Valor desenfocado:', $(this).val());
-  });
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       navigator.clipboard.writeText('').catch(function () {});
     }
@@ -6703,7 +6713,6 @@ $(document).ready(function() {
                 dataByIdCalleLocalidad(
                   '../06-funciones_php/funciones.php', 'dataByIdCalleLocalidad', resultado['dirfis_calle'], resultado['dirfis_localidad']
                 ).then(function(resultado){
-                   console.log(resultado);    
                    mensajeCuit += 'Domicilio<br>';
                    mensajeCuit += '<strong>'+resultado['calle']+' Nro: '+altura+' - '+resultado['localidad']+'<br>';
                    mensajeCuit += resultado['provincia']+' - CP: '+cp+'</strong><br><br>';   
@@ -6830,7 +6839,6 @@ $("#v-visita-guardar").click(function(){
 $("#v-visita-generar-presupuesto").click(function(){
 
         var htmlPresupuestoBody = <?php echo jsonParaJsSeguro($html ?? ''); ?>;
-        console.log(htmlPresupuestoBody);
         htmlPresupuestoBody = htmlPresupuestoBody.replace(/v-materiales-visita/g, 'v-materiales-presupuesto');
 
         var itemsSugeridoPresupuesto = <?php echo jsonParaJsSeguro($items_options ?? ''); ?>;
@@ -6986,7 +6994,6 @@ $(function () {
 
   $.validator.setDefaults({
     submitHandler: function () {
-console.log('1865 | previsitaGuardar()');      
       previsitaGuardar();
     }
   });

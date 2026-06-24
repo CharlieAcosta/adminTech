@@ -193,6 +193,744 @@ if (!function_exists('sanitizarHtmlDetalleTareaPresupuesto')) {
     }
 }
 
+if (!function_exists('normalizarImporteConfirmacionPrecioPresupuesto')) {
+    function normalizarImporteConfirmacionPrecioPresupuesto($importe): string
+    {
+        if (!is_string($importe) && !is_int($importe)) {
+            throw new RuntimeException('El importe tiene un formato invalido.', 400);
+        }
+
+        $importe = trim((string)$importe);
+        if (!preg_match('/^\d+(?:[\.,]\d{1,2})?$/D', $importe)) {
+            throw new RuntimeException('El importe debe ser un numero positivo con hasta dos decimales.', 400);
+        }
+
+        $importe = str_replace(',', '.', $importe);
+        [$parteEntera, $parteDecimal] = array_pad(explode('.', $importe, 2), 2, '');
+        $parteEntera = ltrim($parteEntera, '0');
+        $parteEntera = $parteEntera === '' ? '0' : $parteEntera;
+
+        if (strlen($parteEntera) > 8) {
+            throw new RuntimeException('El importe supera el maximo permitido.', 400);
+        }
+
+        $parteDecimal = str_pad($parteDecimal, 2, '0');
+        if ($parteEntera === '0' && $parteDecimal === '00') {
+            throw new RuntimeException('El importe debe ser mayor que cero.', 400);
+        }
+
+        return $parteEntera . '.' . $parteDecimal;
+    }
+}
+
+if (!function_exists('decimalPersistidoComparableConfirmacionPrecioPresupuesto')) {
+    function decimalPersistidoComparableConfirmacionPrecioPresupuesto(?string $importe): string
+    {
+        $importe = trim((string)$importe);
+        if (!preg_match('/^(\d+)(?:\.(\d+))?$/D', $importe, $coincidencias)) {
+            return '';
+        }
+
+        $entero = ltrim((string)$coincidencias[1], '0');
+        $entero = $entero === '' ? '0' : $entero;
+        $decimal = rtrim((string)($coincidencias[2] ?? ''), '0');
+
+        return $decimal === '' ? $entero : ($entero . '.' . $decimal);
+    }
+}
+
+if (!function_exists('confirmarPrecioPresupuesto')) {
+    function confirmarPrecioPresupuesto(
+        string $tipo,
+        int $idPresupuesto,
+        int $idLinea,
+        int $idCatalogo,
+        $importe
+    ): array {
+        $db = null;
+        $transaccionActiva = false;
+        $catalogoMaterialOriginal = null;
+        $catalogoMaterialEscrito = null;
+        $catalogoMaterialModificado = false;
+        $lockMaterialAdquirido = false;
+        $resultadoOperacion = null;
+
+        try {
+            $tipo = strtolower(trim($tipo));
+            if (!in_array($tipo, ['material', 'jornal'], true)) {
+                throw new RuntimeException('El tipo de precio es invalido.', 400);
+            }
+            if ($idPresupuesto <= 0 || $idLinea <= 0 || $idCatalogo <= 0) {
+                throw new RuntimeException('Los identificadores deben ser enteros positivos.', 400);
+            }
+            $importeNormalizado = normalizarImporteConfirmacionPrecioPresupuesto($importe);
+
+            $db = conectDB();
+            if (!mysqli_set_charset($db, 'utf8mb4')) {
+                throw new RuntimeException('No se pudo configurar la conexion de base de datos.');
+            }
+            if (!mysqli_begin_transaction($db)) {
+                throw new RuntimeException('No se pudo iniciar la transaccion.');
+            }
+            $transaccionActiva = true;
+
+            $stmt = mysqli_prepare($db, "
+                SELECT id_presupuesto, id_previsita, id_visita, estado,
+                       estado_comercial_simulacion, estado_comercial_smtp,
+                       created_at, updated_at
+                FROM presupuestos
+                WHERE id_presupuesto = ?
+                LIMIT 1
+                FOR UPDATE
+            ");
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo validar el presupuesto.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idPresupuesto);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la validacion del presupuesto.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el resultado de la validacion del presupuesto.');
+            }
+            $presupuesto = $res ? mysqli_fetch_assoc($res) : null;
+            mysqli_stmt_close($stmt);
+
+            if (!$presupuesto) {
+                throw new RuntimeException('El presupuesto no existe.', 404);
+            }
+
+            $modoCircuito = obtenerModoActivoCircuitoComercialPresupuestosLock($db);
+            $estadoComercial = resolverEstadoBloqueoEdicionComercialPresupuestoEnConexion(
+                $db,
+                $presupuesto,
+                $modoCircuito
+            );
+            $estadosAValidar = [
+                $estadoComercial,
+                (string)($presupuesto['estado'] ?? ''),
+                (string)($presupuesto['estado_comercial_simulacion'] ?? ''),
+                (string)($presupuesto['estado_comercial_smtp'] ?? ''),
+            ];
+            $presupuestoBloqueado = false;
+            foreach ($estadosAValidar as $estadoAValidar) {
+                if (estadoBloqueaEdicionComercialPresupuesto($estadoAValidar)) {
+                    $presupuestoBloqueado = true;
+                    break;
+                }
+            }
+            if ($presupuestoBloqueado) {
+                throw new RuntimeException('El presupuesto esta bloqueado por su estado comercial.', 409);
+            }
+
+            $idPrevisita = (int)$presupuesto['id_previsita'];
+            $estadoWorkflow = obtenerEstadoWorkflowPrevisitaPorIdEnConexion($db, $idPrevisita);
+            if (estadoBloqueaAvanceWorkflowPrevisita($estadoWorkflow)) {
+                throw new RuntimeException('El workflow de la pre-visita no permite confirmar precios.', 409);
+            }
+
+            if ($tipo === 'material') {
+                $tablaLinea = 'presupuesto_tarea_material';
+                $columnaIdLinea = 'id_ptm';
+                $columnaIdCatalogo = 'id_material';
+            } else {
+                $tablaLinea = 'presupuesto_tarea_mano_obra';
+                $columnaIdLinea = 'id_ptmo';
+                $columnaIdCatalogo = 'id_jornal';
+            }
+
+            $stmt = mysqli_prepare($db, "
+                SELECT linea.{$columnaIdLinea} AS id_linea,
+                       linea.{$columnaIdCatalogo} AS id_catalogo,
+                       tarea.id_presupuesto
+                FROM {$tablaLinea} AS linea
+                INNER JOIN presupuesto_tareas AS tarea
+                    ON tarea.id_presu_tarea = linea.id_presu_tarea
+                WHERE linea.{$columnaIdLinea} = ?
+                LIMIT 1
+                FOR UPDATE
+            ");
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo validar la linea del presupuesto.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idLinea);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la validacion de la linea del presupuesto.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el resultado de la linea del presupuesto.');
+            }
+            $linea = $res ? mysqli_fetch_assoc($res) : null;
+            mysqli_stmt_close($stmt);
+
+            if (!$linea) {
+                throw new RuntimeException('La linea del presupuesto no existe.', 404);
+            }
+            if ((int)$linea['id_presupuesto'] !== $idPresupuesto) {
+                throw new RuntimeException('La linea no pertenece al presupuesto indicado.', 409);
+            }
+            if ((int)$linea['id_catalogo'] !== $idCatalogo) {
+                throw new RuntimeException('El registro de catalogo no coincide con la linea.', 409);
+            }
+
+            if ($tipo === 'material') {
+                $nombreLockMaterial = 'confirmar_precio_material_' . $idCatalogo;
+                $stmt = mysqli_prepare($db, 'SELECT GET_LOCK(?, 5) AS adquirido');
+                if (!$stmt) {
+                    throw new RuntimeException('No se pudo bloquear el precio del material.');
+                }
+                mysqli_stmt_bind_param($stmt, 's', $nombreLockMaterial);
+                if (!mysqli_stmt_execute($stmt)) {
+                    throw new RuntimeException('No se pudo ejecutar el bloqueo del precio del material.');
+                }
+                $res = mysqli_stmt_get_result($stmt);
+                if ($res === false) {
+                    throw new RuntimeException('No se pudo obtener el resultado del bloqueo del material.');
+                }
+                $lockRow = $res ? mysqli_fetch_assoc($res) : null;
+                mysqli_stmt_close($stmt);
+                if ((int)($lockRow['adquirido'] ?? 0) !== 1) {
+                    throw new RuntimeException('El precio del material esta siendo actualizado.', 409);
+                }
+                $lockMaterialAdquirido = true;
+            }
+
+            $sqlCatalogoLock = $tipo === 'material'
+                ? 'SELECT id_material, precio_unitario, log_edicion FROM materiales WHERE id_material = ? LIMIT 1'
+                : 'SELECT jornal_id FROM tipo_jornales WHERE jornal_id = ? LIMIT 1 FOR UPDATE';
+            $stmt = mysqli_prepare($db, $sqlCatalogoLock);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo validar el registro de catalogo.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idCatalogo);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la validacion del registro de catalogo.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el resultado del registro de catalogo.');
+            }
+            $catalogoExiste = $res ? mysqli_fetch_assoc($res) : null;
+            mysqli_stmt_close($stmt);
+
+            if (!$catalogoExiste) {
+                throw new RuntimeException('El registro de catalogo no existe.', 404);
+            }
+            if ($tipo === 'material') {
+                $catalogoMaterialOriginal = [
+                    'precio_unitario' => (string)$catalogoExiste['precio_unitario'],
+                    'log_edicion' => $catalogoExiste['log_edicion'],
+                ];
+            }
+            $sqlActualizarCatalogo = $tipo === 'material'
+                ? 'UPDATE materiales SET precio_unitario = ?, log_edicion = NOW() WHERE id_material = ?'
+                : 'UPDATE tipo_jornales SET jornal_valor = ?, updated_at = NOW() WHERE jornal_id = ?';
+            $stmt = mysqli_prepare($db, $sqlActualizarCatalogo);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo preparar la actualizacion del catalogo.');
+            }
+            mysqli_stmt_bind_param($stmt, 'si', $importeNormalizado, $idCatalogo);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo actualizar el precio del catalogo.');
+            }
+            mysqli_stmt_close($stmt);
+            if ($tipo === 'material') {
+                $catalogoMaterialModificado = true;
+            }
+
+            $sqlLeerCatalogo = $tipo === 'material'
+                ? 'SELECT precio_unitario AS importe, log_edicion AS fecha_actualizacion FROM materiales WHERE id_material = ? LIMIT 1'
+                : 'SELECT jornal_valor AS importe, updated_at AS fecha_actualizacion FROM tipo_jornales WHERE jornal_id = ? LIMIT 1';
+            $stmt = mysqli_prepare($db, $sqlLeerCatalogo);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo verificar el precio actualizado del catalogo.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idCatalogo);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la verificacion del catalogo actualizado.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el precio actualizado del catalogo.');
+            }
+            $catalogo = $res ? mysqli_fetch_assoc($res) : null;
+            mysqli_stmt_close($stmt);
+
+            if (!$catalogo || empty($catalogo['fecha_actualizacion'])) {
+                throw new RuntimeException('No se pudo verificar la actualizacion del catalogo.');
+            }
+
+            $importeCatalogo = (string)$catalogo['importe'];
+            $fechaCatalogo = (string)$catalogo['fecha_actualizacion'];
+            if ($tipo === 'material') {
+                $catalogoMaterialEscrito = [
+                    'precio_unitario' => $importeCatalogo,
+                    'log_edicion' => $fechaCatalogo,
+                ];
+            }
+            if (
+                decimalPersistidoComparableConfirmacionPrecioPresupuesto($importeCatalogo)
+                !== decimalPersistidoComparableConfirmacionPrecioPresupuesto($importeNormalizado)
+            ) {
+                throw new RuntimeException('El importe persistido en el catalogo no coincide con el solicitado.');
+            }
+
+            if ($tipo === 'material') {
+                $sqlActualizarSnapshot = '
+                    UPDATE presupuesto_tarea_material AS linea
+                    INNER JOIN presupuesto_tareas AS tarea
+                        ON tarea.id_presu_tarea = linea.id_presu_tarea
+                    SET linea.precio_unitario_usado = ?,
+                        linea.log_edicion = ?,
+                        linea.subtotal_fila = ROUND(
+                            linea.cantidad * ? * (1 + (linea.porcentaje_extra / 100)),
+                            2
+                        )
+                    WHERE linea.id_ptm = ? AND linea.id_material = ?
+                      AND tarea.id_presupuesto = ?
+                ';
+            } else {
+                $sqlActualizarSnapshot = '
+                    UPDATE presupuesto_tarea_mano_obra AS linea
+                    INNER JOIN presupuesto_tareas AS tarea
+                        ON tarea.id_presu_tarea = linea.id_presu_tarea
+                    SET linea.valor_jornal_usado = ?,
+                        linea.updated_at_origen = ?,
+                        linea.subtotal_fila = ROUND(
+                            linea.cantidad * linea.dias * ? * (1 + (linea.porcentaje_extra / 100)),
+                            2
+                        )
+                    WHERE linea.id_ptmo = ? AND linea.id_jornal = ?
+                      AND tarea.id_presupuesto = ?
+                ';
+            }
+            $stmt = mysqli_prepare($db, $sqlActualizarSnapshot);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo preparar la actualizacion del snapshot.');
+            }
+            mysqli_stmt_bind_param(
+                $stmt,
+                'sssiii',
+                $importeCatalogo,
+                $fechaCatalogo,
+                $importeCatalogo,
+                $idLinea,
+                $idCatalogo,
+                $idPresupuesto
+            );
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo actualizar el snapshot del presupuesto.');
+            }
+            mysqli_stmt_close($stmt);
+            if ($tipo === 'material') {
+                $sqlLeerSnapshot = '
+                    SELECT linea.precio_unitario_usado AS importe_snapshot,
+                           linea.log_edicion AS fecha_origen_snapshot,
+                           linea.subtotal_fila AS subtotal_snapshot,
+                           ROUND(
+                               linea.cantidad * linea.precio_unitario_usado
+                               * (1 + (linea.porcentaje_extra / 100)),
+                               2
+                           ) AS subtotal_esperado,
+                           linea.id_material AS id_catalogo,
+                           tarea.id_presupuesto
+                    FROM presupuesto_tarea_material AS linea
+                    INNER JOIN presupuesto_tareas AS tarea
+                        ON tarea.id_presu_tarea = linea.id_presu_tarea
+                    WHERE linea.id_ptm = ? LIMIT 1
+                ';
+            } else {
+                $sqlLeerSnapshot = '
+                    SELECT linea.valor_jornal_usado AS importe_snapshot,
+                           linea.updated_at_origen AS fecha_origen_snapshot,
+                           linea.subtotal_fila AS subtotal_snapshot,
+                           ROUND(
+                               linea.cantidad * linea.dias * linea.valor_jornal_usado
+                               * (1 + (linea.porcentaje_extra / 100)),
+                               2
+                           ) AS subtotal_esperado,
+                           linea.id_jornal AS id_catalogo,
+                           tarea.id_presupuesto
+                    FROM presupuesto_tarea_mano_obra AS linea
+                    INNER JOIN presupuesto_tareas AS tarea
+                        ON tarea.id_presu_tarea = linea.id_presu_tarea
+                    WHERE linea.id_ptmo = ? LIMIT 1
+                ';
+            }
+            $stmt = mysqli_prepare($db, $sqlLeerSnapshot);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo verificar el snapshot actualizado.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idLinea);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la verificacion del snapshot actualizado.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el snapshot actualizado.');
+            }
+            $snapshot = $res ? mysqli_fetch_assoc($res) : null;
+            mysqli_stmt_close($stmt);
+
+            if (
+                !$snapshot
+                || (int)$snapshot['id_presupuesto'] !== $idPresupuesto
+                || (int)$snapshot['id_catalogo'] !== $idCatalogo
+                || decimalPersistidoComparableConfirmacionPrecioPresupuesto((string)$snapshot['importe_snapshot'])
+                    !== decimalPersistidoComparableConfirmacionPrecioPresupuesto($importeCatalogo)
+                || (string)$snapshot['fecha_origen_snapshot'] !== $fechaCatalogo
+                || decimalPersistidoComparableConfirmacionPrecioPresupuesto((string)$snapshot['subtotal_snapshot'])
+                    !== decimalPersistidoComparableConfirmacionPrecioPresupuesto((string)$snapshot['subtotal_esperado'])
+            ) {
+                throw new RuntimeException('No se pudo verificar la consistencia entre catalogo y snapshot.');
+            }
+
+            $stmtWorkflowFinal = mysqli_prepare(
+                $db,
+                'SELECT estado_visita FROM previsitas WHERE id_previsita = ? LIMIT 1'
+            );
+            if (!$stmtWorkflowFinal) {
+                throw new RuntimeException('No se pudo preparar la revalidacion del workflow.');
+            }
+            mysqli_stmt_bind_param($stmtWorkflowFinal, 'i', $idPrevisita);
+            if (!mysqli_stmt_execute($stmtWorkflowFinal)) {
+                throw new RuntimeException('No se pudo ejecutar la revalidacion del workflow.');
+            }
+            $workflowFinalResult = mysqli_stmt_get_result($stmtWorkflowFinal);
+            if ($workflowFinalResult === false) {
+                throw new RuntimeException('No se pudo obtener la revalidacion del workflow.');
+            }
+            $workflowFinalRow = mysqli_fetch_assoc($workflowFinalResult);
+            mysqli_stmt_close($stmtWorkflowFinal);
+            if (!$workflowFinalRow) {
+                throw new RuntimeException('La pre-visita asociada no existe.', 409);
+            }
+            $estadoWorkflowFinal = trim((string)$workflowFinalRow['estado_visita']);
+            if (estadoBloqueaAvanceWorkflowPrevisita($estadoWorkflowFinal)) {
+                throw new RuntimeException('El workflow de la pre-visita no permite confirmar precios.', 409);
+            }
+
+            if (!mysqli_commit($db)) {
+                throw new RuntimeException('No se pudo confirmar la transaccion.');
+            }
+            $transaccionActiva = false;
+
+            $resultadoOperacion = [
+                'ok' => true,
+                'tipo' => $tipo,
+                'id_presupuesto' => $idPresupuesto,
+                'id_linea' => $idLinea,
+                'id_catalogo' => $idCatalogo,
+                'importe_persistido' => $importeCatalogo,
+                'fecha_actualizacion' => $fechaCatalogo,
+                'importe_snapshot' => (string)$snapshot['importe_snapshot'],
+                'fecha_origen_snapshot' => (string)$snapshot['fecha_origen_snapshot'],
+                'subtotal_snapshot' => (string)$snapshot['subtotal_snapshot'],
+            ];
+        } catch (Throwable $e) {
+            $falloRollback = false;
+            $falloCompensacionMaterial = false;
+
+            if ($db instanceof mysqli) {
+                if ($transaccionActiva) {
+                    try {
+                        if (!mysqli_rollback($db)) {
+                            $falloRollback = true;
+                            error_log('confirmarPrecioPresupuesto: fallo critico al ejecutar rollback.');
+                        }
+                    } catch (Throwable $rollbackError) {
+                        $falloRollback = true;
+                        error_log('confirmarPrecioPresupuesto rollback: ' . $rollbackError->getMessage());
+                    }
+                    $transaccionActiva = false;
+                }
+
+                if ($catalogoMaterialModificado) {
+                    if (!is_array($catalogoMaterialOriginal) || !is_array($catalogoMaterialEscrito)) {
+                        $falloCompensacionMaterial = true;
+                        error_log('confirmarPrecioPresupuesto: no hay datos suficientes para compensar el catalogo MyISAM.');
+                    } else {
+                        try {
+                            $stmtRestaurar = mysqli_prepare($db, '
+                                UPDATE materiales
+                                SET precio_unitario = ?, log_edicion = ?
+                                WHERE id_material = ?
+                                  AND precio_unitario = ?
+                                  AND log_edicion <=> ?
+                            ');
+                            if (!$stmtRestaurar) {
+                                throw new RuntimeException('No se pudo preparar la compensacion del catalogo MyISAM.');
+                            }
+
+                            $precioOriginal = (string)$catalogoMaterialOriginal['precio_unitario'];
+                            $fechaOriginal = $catalogoMaterialOriginal['log_edicion'];
+                            $precioEscrito = (string)$catalogoMaterialEscrito['precio_unitario'];
+                            $fechaEscrita = $catalogoMaterialEscrito['log_edicion'];
+                            mysqli_stmt_bind_param(
+                                $stmtRestaurar,
+                                'ssiss',
+                                $precioOriginal,
+                                $fechaOriginal,
+                                $idCatalogo,
+                                $precioEscrito,
+                                $fechaEscrita
+                            );
+                            if (!mysqli_stmt_execute($stmtRestaurar)) {
+                                throw new RuntimeException('No se pudo ejecutar la compensacion del catalogo MyISAM.');
+                            }
+                            $filasCompensadas = mysqli_stmt_affected_rows($stmtRestaurar);
+                            mysqli_stmt_close($stmtRestaurar);
+
+                            if ($filasCompensadas !== 1) {
+                                $falloCompensacionMaterial = true;
+                                error_log(
+                                    'confirmarPrecioPresupuesto: compensacion critica omitida; '
+                                    . 'el material cambio concurrentemente o no conserva los valores escritos.'
+                                );
+                            }
+                        } catch (Throwable $compensacionError) {
+                            $falloCompensacionMaterial = true;
+                            error_log('confirmarPrecioPresupuesto compensacion MyISAM: ' . $compensacionError->getMessage());
+                        }
+                    }
+                }
+            }
+
+            $codigo = (int)$e->getCode();
+            $esControlado = in_array($codigo, [400, 404, 409], true);
+            if ($falloRollback || $falloCompensacionMaterial) {
+                $codigo = 500;
+                $esControlado = false;
+            }
+            if (!$esControlado) {
+                error_log('confirmarPrecioPresupuesto: ' . $e->getMessage());
+            }
+
+            $resultadoOperacion = [
+                'ok' => false,
+                'mensaje' => $esControlado
+                    ? $e->getMessage()
+                    : 'No se pudo confirmar la vigencia del precio.',
+                'http_status' => $esControlado ? $codigo : 500,
+            ];
+        } finally {
+            if ($db instanceof mysqli) {
+                if ($lockMaterialAdquirido) {
+                    try {
+                        $stmtRelease = mysqli_prepare($db, 'SELECT RELEASE_LOCK(?) AS liberado');
+                        if (!$stmtRelease) {
+                            throw new RuntimeException('No se pudo preparar RELEASE_LOCK.');
+                        }
+                        mysqli_stmt_bind_param($stmtRelease, 's', $nombreLockMaterial);
+                        if (!mysqli_stmt_execute($stmtRelease)) {
+                            throw new RuntimeException('No se pudo ejecutar RELEASE_LOCK.');
+                        }
+                        $releaseResult = mysqli_stmt_get_result($stmtRelease);
+                        if ($releaseResult === false) {
+                            throw new RuntimeException('No se pudo obtener el resultado de RELEASE_LOCK.');
+                        }
+                        $releaseRow = mysqli_fetch_assoc($releaseResult);
+                        mysqli_stmt_close($stmtRelease);
+                        if ((int)($releaseRow['liberado'] ?? 0) !== 1) {
+                            error_log('confirmarPrecioPresupuesto: RELEASE_LOCK no devolvio 1.');
+                        }
+                    } catch (Throwable $releaseError) {
+                        error_log('confirmarPrecioPresupuesto cleanup lock: ' . $releaseError->getMessage());
+                    }
+                }
+
+                try {
+                    mysqli_close($db);
+                } catch (Throwable $closeError) {
+                    error_log('confirmarPrecioPresupuesto cleanup conexion: ' . $closeError->getMessage());
+                }
+            }
+        }
+
+        return is_array($resultadoOperacion)
+            ? $resultadoOperacion
+            : [
+                'ok' => false,
+                'mensaje' => 'No se pudo confirmar la vigencia del precio.',
+                'http_status' => 500,
+            ];
+    }
+}
+
+if (!function_exists('confirmarPrecioCatalogoPresupuestoDinamico')) {
+    function confirmarPrecioCatalogoPresupuestoDinamico(
+        string $tipo,
+        int $idCatalogo,
+        $importe
+    ): array {
+        $db = null;
+        $lockMaterialAdquirido = false;
+        $nombreLockMaterial = '';
+
+        try {
+            $tipo = strtolower(trim($tipo));
+            if (!in_array($tipo, ['material', 'jornal'], true)) {
+                throw new RuntimeException('El tipo de precio es invalido.', 400);
+            }
+            if ($idCatalogo <= 0) {
+                throw new RuntimeException('El identificador de catalogo debe ser un entero positivo.', 400);
+            }
+
+            $importeNormalizado = normalizarImporteConfirmacionPrecioPresupuesto($importe);
+
+            $db = conectDB();
+            if (!mysqli_set_charset($db, 'utf8mb4')) {
+                throw new RuntimeException('No se pudo configurar la conexion de base de datos.');
+            }
+
+            if ($tipo === 'material') {
+                $nombreLockMaterial = 'confirmar_precio_material_' . $idCatalogo;
+                $stmt = mysqli_prepare($db, 'SELECT GET_LOCK(?, 5) AS adquirido');
+                if (!$stmt) {
+                    throw new RuntimeException('No se pudo bloquear el precio del material.');
+                }
+                mysqli_stmt_bind_param($stmt, 's', $nombreLockMaterial);
+                if (!mysqli_stmt_execute($stmt)) {
+                    throw new RuntimeException('No se pudo ejecutar el bloqueo del precio del material.');
+                }
+                $res = mysqli_stmt_get_result($stmt);
+                if ($res === false) {
+                    throw new RuntimeException('No se pudo obtener el resultado del bloqueo del material.');
+                }
+                $lockRow = mysqli_fetch_assoc($res);
+                mysqli_stmt_close($stmt);
+
+                if ((int)($lockRow['adquirido'] ?? 0) !== 1) {
+                    throw new RuntimeException('El precio del material esta siendo actualizado.', 409);
+                }
+                $lockMaterialAdquirido = true;
+            }
+
+            $sqlExiste = $tipo === 'material'
+                ? 'SELECT id_material FROM materiales WHERE id_material = ? LIMIT 1'
+                : 'SELECT jornal_id FROM tipo_jornales WHERE jornal_id = ? LIMIT 1';
+            $stmt = mysqli_prepare($db, $sqlExiste);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo validar el registro de catalogo.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idCatalogo);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la validacion del registro de catalogo.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el resultado del registro de catalogo.');
+            }
+            $catalogoExiste = mysqli_fetch_assoc($res);
+            mysqli_stmt_close($stmt);
+
+            if (!$catalogoExiste) {
+                throw new RuntimeException('El registro de catalogo no existe.', 404);
+            }
+
+            // GET_LOCK coordina solamente consumidores cooperativos; esta operacion modifica un unico catalogo.
+            $sqlUpdate = $tipo === 'material'
+                ? 'UPDATE materiales SET precio_unitario = ?, log_edicion = NOW() WHERE id_material = ?'
+                : 'UPDATE tipo_jornales SET jornal_valor = ?, updated_at = NOW() WHERE jornal_id = ?';
+            $stmt = mysqli_prepare($db, $sqlUpdate);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo preparar la actualizacion del catalogo.');
+            }
+            mysqli_stmt_bind_param($stmt, 'si', $importeNormalizado, $idCatalogo);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo actualizar el precio del catalogo.');
+            }
+            mysqli_stmt_close($stmt);
+
+            $sqlLeer = $tipo === 'material'
+                ? 'SELECT precio_unitario AS importe, log_edicion AS fecha_actualizacion FROM materiales WHERE id_material = ? LIMIT 1'
+                : 'SELECT jornal_valor AS importe, updated_at AS fecha_actualizacion FROM tipo_jornales WHERE jornal_id = ? LIMIT 1';
+            $stmt = mysqli_prepare($db, $sqlLeer);
+            if (!$stmt) {
+                throw new RuntimeException('No se pudo verificar el precio actualizado del catalogo.');
+            }
+            mysqli_stmt_bind_param($stmt, 'i', $idCatalogo);
+            if (!mysqli_stmt_execute($stmt)) {
+                throw new RuntimeException('No se pudo ejecutar la verificacion del catalogo actualizado.');
+            }
+            $res = mysqli_stmt_get_result($stmt);
+            if ($res === false) {
+                throw new RuntimeException('No se pudo obtener el precio actualizado del catalogo.');
+            }
+            $catalogo = mysqli_fetch_assoc($res);
+            mysqli_stmt_close($stmt);
+
+            if (!$catalogo || empty($catalogo['fecha_actualizacion'])) {
+                throw new RuntimeException('No se pudo verificar la actualizacion del catalogo.');
+            }
+
+            $importeCatalogo = (string)$catalogo['importe'];
+            if (
+                decimalPersistidoComparableConfirmacionPrecioPresupuesto($importeCatalogo)
+                !== decimalPersistidoComparableConfirmacionPrecioPresupuesto($importeNormalizado)
+            ) {
+                throw new RuntimeException('El importe persistido en el catalogo no coincide con el solicitado.');
+            }
+
+            return [
+                'ok' => true,
+                'tipo' => $tipo,
+                'id_catalogo' => $idCatalogo,
+                'importe_persistido' => $importeCatalogo,
+                'fecha_actualizacion' => (string)$catalogo['fecha_actualizacion'],
+            ];
+        } catch (Throwable $e) {
+            $codigo = (int)$e->getCode();
+            $esControlado = in_array($codigo, [400, 404, 409], true);
+            if (!$esControlado) {
+                error_log('confirmarPrecioCatalogoPresupuestoDinamico: ' . $e->getMessage());
+            }
+
+            return [
+                'ok' => false,
+                'mensaje' => $esControlado
+                    ? $e->getMessage()
+                    : 'No se pudo confirmar la vigencia del precio.',
+                'http_status' => $esControlado ? $codigo : 500,
+            ];
+        } finally {
+            if ($db instanceof mysqli) {
+                if ($lockMaterialAdquirido) {
+                    try {
+                        $stmtRelease = mysqli_prepare($db, 'SELECT RELEASE_LOCK(?) AS liberado');
+                        if (!$stmtRelease) {
+                            throw new RuntimeException('No se pudo preparar RELEASE_LOCK.');
+                        }
+                        mysqli_stmt_bind_param($stmtRelease, 's', $nombreLockMaterial);
+                        if (!mysqli_stmt_execute($stmtRelease)) {
+                            throw new RuntimeException('No se pudo ejecutar RELEASE_LOCK.');
+                        }
+                        $releaseResult = mysqli_stmt_get_result($stmtRelease);
+                        if ($releaseResult === false) {
+                            throw new RuntimeException('No se pudo obtener el resultado de RELEASE_LOCK.');
+                        }
+                        $releaseRow = mysqli_fetch_assoc($releaseResult);
+                        mysqli_stmt_close($stmtRelease);
+                        if ((int)($releaseRow['liberado'] ?? 0) !== 1) {
+                            error_log('confirmarPrecioCatalogoPresupuestoDinamico: RELEASE_LOCK no devolvio 1.');
+                        }
+                    } catch (Throwable $releaseError) {
+                        error_log('confirmarPrecioCatalogoPresupuestoDinamico cleanup lock: ' . $releaseError->getMessage());
+                    }
+                }
+
+                try {
+                    mysqli_close($db);
+                } catch (Throwable $closeError) {
+                    error_log('confirmarPrecioCatalogoPresupuestoDinamico cleanup conexion: ' . $closeError->getMessage());
+                }
+            }
+        }
+    }
+}
+
 /**
  * Guarda un presupuesto + materiales + MO + fotos.
  *
@@ -202,6 +940,269 @@ if (!function_exists('sanitizarHtmlDetalleTareaPresupuesto')) {
  *
  * @return array ['ok'=>bool, 'id_presupuesto'=>int, 'version'=>int, 'estado'=>string] | ['ok'=>false,'msg'=>...]
  */
+if (!function_exists('decimalComparableGuardarPresupuesto')) {
+    function decimalComparableGuardarPresupuesto($importe): string
+    {
+        if (!is_string($importe) && !is_int($importe) && !is_float($importe)) {
+            return '';
+        }
+
+        $importe = trim((string)$importe);
+        if ($importe === '') {
+            return '';
+        }
+        $importe = str_replace(',', '.', $importe);
+
+        if (!preg_match('/^(\d+)(?:\.(\d+))?$/D', $importe, $coincidencias)) {
+            return '';
+        }
+
+        $entero = ltrim((string)$coincidencias[1], '0');
+        $entero = $entero === '' ? '0' : $entero;
+        $decimal = rtrim((string)($coincidencias[2] ?? ''), '0');
+
+        return $decimal === '' ? $entero : ($entero . '.' . $decimal);
+    }
+}
+
+if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
+    function validarCatalogosPayloadGuardarPresupuesto(mysqli $db, array $tareasPayload, ?int $idPresupuesto): array
+    {
+        if (!is_array($tareasPayload)) {
+            throw new RuntimeException('La estructura de tareas del presupuesto es invalida.', 400);
+        }
+
+        $mensajeCambioPrecio = 'El precio de un material o jornal cambio. Confirma nuevamente los precios antes de guardar.';
+        $validados = [
+            'materiales' => [],
+            'mano_obra' => [],
+        ];
+
+        foreach ($tareasPayload as $indiceTarea => $t) {
+            if (!is_array($t)) {
+                throw new RuntimeException('La estructura de una tarea del presupuesto es invalida.', 400);
+            }
+
+            foreach (($t['materiales'] ?? []) as $indiceMaterial => $m) {
+                if (!is_array($m)) {
+                    throw new RuntimeException('La estructura de un material del presupuesto es invalida.', 400);
+                }
+
+                $idMaterialRaw = $m['id_material'] ?? null;
+                if ($idMaterialRaw === null || $idMaterialRaw === '') {
+                    continue;
+                }
+
+                $idMaterial = filter_var($idMaterialRaw, FILTER_VALIDATE_INT, [
+                    'options' => ['min_range' => 1],
+                ]);
+                if ($idMaterial === false) {
+                    throw new RuntimeException('El identificador de un material es invalido.', 400);
+                }
+
+                $precioPayload = $m['precio_unitario'] ?? null;
+                $idPtmRaw = $m['id_ptm'] ?? null;
+                if ($idPtmRaw !== null && $idPtmRaw !== '') {
+                    $idPtm = filter_var($idPtmRaw, FILTER_VALIDATE_INT, [
+                        'options' => ['min_range' => 1],
+                    ]);
+                    if ($idPtm === false || $idPresupuesto === null || $idPresupuesto <= 0) {
+                        throw new RuntimeException($mensajeCambioPrecio, 409);
+                    }
+
+                    $stmt = mysqli_prepare(
+                        $db,
+                        'SELECT ptm.id_ptm, ptm.id_material, ptm.precio_unitario_usado,
+                                ptm.log_alta, ptm.log_edicion, pt.id_presupuesto
+                         FROM presupuesto_tarea_material AS ptm
+                         INNER JOIN presupuesto_tareas AS pt
+                            ON pt.id_presu_tarea = ptm.id_presu_tarea
+                         WHERE ptm.id_ptm = ?
+                           AND pt.id_presupuesto = ?
+                         LIMIT 1'
+                    );
+                    if (!$stmt) {
+                        throw new RuntimeException('No se pudo validar la linea historica de material.');
+                    }
+                    mysqli_stmt_bind_param($stmt, 'ii', $idPtm, $idPresupuesto);
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('No se pudo ejecutar la validacion de la linea historica de material.');
+                    }
+                    $res = mysqli_stmt_get_result($stmt);
+                    if ($res === false) {
+                        throw new RuntimeException('No se pudo obtener la linea historica de material.');
+                    }
+                    $lineaHistorica = mysqli_fetch_assoc($res);
+                    mysqli_stmt_close($stmt);
+
+                    if (!$lineaHistorica || (int)$lineaHistorica['id_material'] !== $idMaterial) {
+                        throw new RuntimeException($mensajeCambioPrecio, 409);
+                    }
+
+                    if (
+                        decimalComparableGuardarPresupuesto($precioPayload)
+                        === decimalComparableGuardarPresupuesto((string)$lineaHistorica['precio_unitario_usado'])
+                    ) {
+                        $validados['materiales'][$indiceTarea][$indiceMaterial] = [
+                            'precio_unitario' => (string)$lineaHistorica['precio_unitario_usado'],
+                            'log_alta' => $lineaHistorica['log_alta'],
+                            'log_edicion' => $lineaHistorica['log_edicion'],
+                        ];
+                        continue;
+                    }
+                }
+
+                $stmt = mysqli_prepare(
+                    $db,
+                    'SELECT id_material, precio_unitario, log_alta, log_edicion
+                     FROM materiales
+                     WHERE id_material = ?
+                     LIMIT 1'
+                );
+                if (!$stmt) {
+                    throw new RuntimeException('No se pudo validar el catalogo de materiales.');
+                }
+                mysqli_stmt_bind_param($stmt, 'i', $idMaterial);
+                if (!mysqli_stmt_execute($stmt)) {
+                    throw new RuntimeException('No se pudo ejecutar la validacion del catalogo de materiales.');
+                }
+                $res = mysqli_stmt_get_result($stmt);
+                if ($res === false) {
+                    throw new RuntimeException('No se pudo obtener el catalogo de materiales.');
+                }
+                $catalogo = mysqli_fetch_assoc($res);
+                mysqli_stmt_close($stmt);
+
+                if (!$catalogo) {
+                    throw new RuntimeException($mensajeCambioPrecio, 409);
+                }
+
+                if (
+                    decimalComparableGuardarPresupuesto($precioPayload)
+                    !== decimalComparableGuardarPresupuesto((string)$catalogo['precio_unitario'])
+                ) {
+                    throw new RuntimeException($mensajeCambioPrecio, 409);
+                }
+
+                $validados['materiales'][$indiceTarea][$indiceMaterial] = [
+                    'precio_unitario' => (string)$catalogo['precio_unitario'],
+                    'log_alta' => $catalogo['log_alta'],
+                    'log_edicion' => $catalogo['log_edicion'],
+                ];
+            }
+
+            foreach (($t['mano_obra'] ?? []) as $indiceManoObra => $mo) {
+                if (!is_array($mo)) {
+                    throw new RuntimeException('La estructura de un jornal del presupuesto es invalida.', 400);
+                }
+
+                $idJornalRaw = $mo['jornal_id'] ?? null;
+                if ($idJornalRaw === null || $idJornalRaw === '') {
+                    continue;
+                }
+
+                $idJornal = filter_var($idJornalRaw, FILTER_VALIDATE_INT, [
+                    'options' => ['min_range' => 1],
+                ]);
+                if ($idJornal === false) {
+                    throw new RuntimeException('El identificador de un jornal es invalido.', 400);
+                }
+
+                $precioPayload = $mo['jornal_valor'] ?? null;
+                $idPtmoRaw = $mo['id_ptmo'] ?? null;
+                if ($idPtmoRaw !== null && $idPtmoRaw !== '') {
+                    $idPtmo = filter_var($idPtmoRaw, FILTER_VALIDATE_INT, [
+                        'options' => ['min_range' => 1],
+                    ]);
+                    if ($idPtmo === false || $idPresupuesto === null || $idPresupuesto <= 0) {
+                        throw new RuntimeException($mensajeCambioPrecio, 409);
+                    }
+
+                    $stmt = mysqli_prepare(
+                        $db,
+                        'SELECT ptmo.id_ptmo, ptmo.id_jornal, ptmo.valor_jornal_usado,
+                                ptmo.updated_at_origen, pt.id_presupuesto
+                         FROM presupuesto_tarea_mano_obra AS ptmo
+                         INNER JOIN presupuesto_tareas AS pt
+                            ON pt.id_presu_tarea = ptmo.id_presu_tarea
+                         WHERE ptmo.id_ptmo = ?
+                           AND pt.id_presupuesto = ?
+                         LIMIT 1'
+                    );
+                    if (!$stmt) {
+                        throw new RuntimeException('No se pudo validar la linea historica de jornal.');
+                    }
+                    mysqli_stmt_bind_param($stmt, 'ii', $idPtmo, $idPresupuesto);
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('No se pudo ejecutar la validacion de la linea historica de jornal.');
+                    }
+                    $res = mysqli_stmt_get_result($stmt);
+                    if ($res === false) {
+                        throw new RuntimeException('No se pudo obtener la linea historica de jornal.');
+                    }
+                    $lineaHistorica = mysqli_fetch_assoc($res);
+                    mysqli_stmt_close($stmt);
+
+                    if (!$lineaHistorica || (int)$lineaHistorica['id_jornal'] !== $idJornal) {
+                        throw new RuntimeException($mensajeCambioPrecio, 409);
+                    }
+
+                    if (
+                        decimalComparableGuardarPresupuesto($precioPayload)
+                        === decimalComparableGuardarPresupuesto((string)$lineaHistorica['valor_jornal_usado'])
+                    ) {
+                        $validados['mano_obra'][$indiceTarea][$indiceManoObra] = [
+                            'jornal_valor' => (string)$lineaHistorica['valor_jornal_usado'],
+                            'updated_at_origen' => $lineaHistorica['updated_at_origen'],
+                        ];
+                        continue;
+                    }
+                }
+
+                $stmt = mysqli_prepare(
+                    $db,
+                    'SELECT jornal_id, jornal_valor, created_at, updated_at,
+                            COALESCE(updated_at, created_at) AS fecha_origen
+                     FROM tipo_jornales
+                     WHERE jornal_id = ?
+                     LIMIT 1'
+                );
+                if (!$stmt) {
+                    throw new RuntimeException('No se pudo validar el catalogo de jornales.');
+                }
+                mysqli_stmt_bind_param($stmt, 'i', $idJornal);
+                if (!mysqli_stmt_execute($stmt)) {
+                    throw new RuntimeException('No se pudo ejecutar la validacion del catalogo de jornales.');
+                }
+                $res = mysqli_stmt_get_result($stmt);
+                if ($res === false) {
+                    throw new RuntimeException('No se pudo obtener el catalogo de jornales.');
+                }
+                $catalogo = mysqli_fetch_assoc($res);
+                mysqli_stmt_close($stmt);
+
+                if (!$catalogo) {
+                    throw new RuntimeException($mensajeCambioPrecio, 409);
+                }
+
+                if (
+                    decimalComparableGuardarPresupuesto($precioPayload)
+                    !== decimalComparableGuardarPresupuesto((string)$catalogo['jornal_valor'])
+                ) {
+                    throw new RuntimeException($mensajeCambioPrecio, 409);
+                }
+
+                $validados['mano_obra'][$indiceTarea][$indiceManoObra] = [
+                    'jornal_valor' => (string)$catalogo['jornal_valor'],
+                    'updated_at_origen' => $catalogo['fecha_origen'],
+                ];
+            }
+        }
+
+        return $validados;
+    }
+}
+
 function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
 {
     // Config de uploads (ajustá si querés)
@@ -269,6 +1270,8 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 $id_presupuesto = (int)$row['id_presupuesto'];
             }
 
+            $tareasPayload = $payload['tareas'] ?? [];
+            $catalogosValidados = validarCatalogosPayloadGuardarPresupuesto($db, $tareasPayload, $id_presupuesto);
 
             if ($id_presupuesto === null) {
                 // No había uno previo: insertamos cabecera nueva
@@ -326,14 +1329,17 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             }
           
         // === Insertar tareas e hijos desde payload ===
-        $tareasPayload = $payload['tareas'] ?? [];
         $total_mostrado_cab = 0.0;
         $total_base_cab     = 0.0;
         $impuestos_totales  = 0.0;
         $util_real_total    = 0.0;
         $porc_util_total    = null;
+        $lineasInsertadas = [
+            'materiales' => [],
+            'mano_obra' => [],
+        ];
 
-        foreach ($tareasPayload as $t) {
+        foreach ($tareasPayload as $indiceTarea => $t) {
             $nro                = isset($t['nro']) ? (int)$t['nro'] : 0;
             $descripcion        = sanitizarHtmlDetalleTareaPresupuesto((string)($t['descripcion'] ?? ''));
             $incluir_en_total   = !empty($t['incluir_en_total']) ? 1 : 0;
@@ -409,7 +1415,12 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 $id_material       = !empty($m['id_material']) ? (int)$m['id_material'] : null;
                 $nombre_material   = trim((string)($m['nombre'] ?? ''));
                 $cantidad          = isset($m['cantidad']) ? (float)$m['cantidad'] : 0.0;
-                $precio_unitario   = isset($m['precio_unitario']) ? (float)$m['precio_unitario'] : 0.0;
+                $catalogoMaterialValidado = $catalogosValidados['materiales'][$indiceTarea][$indiceMaterial] ?? null;
+                $precio_unitario   = $catalogoMaterialValidado
+                    ? (float)$catalogoMaterialValidado['precio_unitario']
+                    : (isset($m['precio_unitario']) ? (float)$m['precio_unitario'] : 0.0);
+                $log_alta_material = $catalogoMaterialValidado['log_alta'] ?? null;
+                $log_edicion_material = $catalogoMaterialValidado['log_edicion'] ?? null;
                 $porcentaje_extra  = isset($m['porcentaje_extra']) ? (float)$m['porcentaje_extra'] : 0.0;
                 $orden             = isset($m['orden']) ? (int)$m['orden'] : ($indiceMaterial + 1);
                 if ($orden <= 0) {
@@ -428,13 +1439,14 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                         (id_presu_tarea, id_material, orden, nombre_material, unidad_venta, unidad_medida,
                          cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
                          created_at, updated_at)
-                        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NOW(), NOW())
+                        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ");
                     mysqli_stmt_bind_param(
                         $stmt,
-                        "iiisdddd",
+                        "iiisddddss",
                         $id_presu_tarea, $id_material, $orden, $nombre_material,
-                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila
+                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                        $log_alta_material, $log_edicion_material
                     );
                 } else {
                     $stmt = mysqli_prepare($db, "
@@ -442,17 +1454,27 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                         (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
                          cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
                          created_at, updated_at)
-                        VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NOW(), NOW())
+                        VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ");
                     mysqli_stmt_bind_param(
                         $stmt,
-                        "iisdddd",
+                        "iisddddss",
                         $id_presu_tarea, $id_material, $nombre_material,
-                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila
+                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                        $log_alta_material, $log_edicion_material
                     );
                 }
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al insertar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                }
+                $idPtmNuevo = mysqli_insert_id($db);
+                $idPtmAnterior = !empty($m['id_ptm']) ? (int)$m['id_ptm'] : null;
+                if ($idPtmNuevo > 0) {
+                    $lineasInsertadas['materiales'][] = [
+                        'id_ptm_anterior' => $idPtmAnterior,
+                        'id_ptm' => $idPtmNuevo,
+                        'id_material' => $id_material,
+                    ];
                 }
                 mysqli_stmt_close($stmt);
             }
@@ -464,7 +1486,11 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 $jornal_id         = !empty($mo['jornal_id']) ? (int)$mo['jornal_id'] : null;
                 $nombre_jornal     = trim((string)($mo['nombre'] ?? ''));
                 $cantidad          = isset($mo['cantidad']) ? (float)$mo['cantidad'] : 0.0;
-                $valor_jornal      = isset($mo['jornal_valor']) ? (float)$mo['jornal_valor'] : 0.0;
+                $catalogoJornalValidado = $catalogosValidados['mano_obra'][$indiceTarea][$indiceManoObra] ?? null;
+                $valor_jornal      = $catalogoJornalValidado
+                    ? (float)$catalogoJornalValidado['jornal_valor']
+                    : (isset($mo['jornal_valor']) ? (float)$mo['jornal_valor'] : 0.0);
+                $updated_at_origen_jornal = $catalogoJornalValidado['updated_at_origen'] ?? null;
                 $porcentaje_extra  = isset($mo['porcentaje_extra']) ? (float)$mo['porcentaje_extra'] : 0.0;
                 $dias              = isset($mo['dias']) ? (int)$mo['dias'] : 1;
                 $observacion       = isset($mo['observacion']) ? trim((string)$mo['observacion']) : null;
@@ -492,13 +1518,14 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                         (id_presu_tarea, id_jornal, orden, nombre_jornal,
                          cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
                          updated_at_origen, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ");
                     mysqli_stmt_bind_param(
                         $stmt,
-                        "iiisdiddsd",
+                        "iiisdiddsds",
                         $id_presu_tarea, $jornal_id, $orden, $nombre_jornal,
-                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila
+                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila,
+                        $updated_at_origen_jornal
                     );
                 } else {
                     $stmt = mysqli_prepare($db, "
@@ -506,17 +1533,27 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                         (id_presu_tarea, id_jornal, nombre_jornal,
                          cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
                          updated_at_origen, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                     ");
                     mysqli_stmt_bind_param(
                         $stmt,
-                        "iisdiddsd",
+                        "iisdiddsds",
                         $id_presu_tarea, $jornal_id, $nombre_jornal,
-                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila
+                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila,
+                        $updated_at_origen_jornal
                     );
                 }
                 if (!mysqli_stmt_execute($stmt)) {
                     throw new RuntimeException('Error al insertar mano de obra: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                }
+                $idPtmoNuevo = mysqli_insert_id($db);
+                $idPtmoAnterior = !empty($mo['id_ptmo']) ? (int)$mo['id_ptmo'] : null;
+                if ($idPtmoNuevo > 0) {
+                    $lineasInsertadas['mano_obra'][] = [
+                        'id_ptmo_anterior' => $idPtmoAnterior,
+                        'id_ptmo' => $idPtmoNuevo,
+                        'id_jornal' => $jornal_id,
+                    ];
                 }
                 mysqli_stmt_close($stmt);
             }
@@ -721,11 +1758,17 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             'ok'             => true,
             'id_presupuesto' => $id_presupuesto,
             'version'        => $version,
-            'estado'         => $estado
+            'estado'         => $estado,
+            'lineas'         => $lineasInsertadas
         ];
     } catch (Throwable $e) {
         mysqli_rollback($db);
-        return ['ok' => false, 'msg' => $e->getMessage()];
+        $codigo = (int)$e->getCode();
+        $respuesta = ['ok' => false, 'msg' => $e->getMessage()];
+        if (in_array($codigo, [400, 404, 409], true)) {
+            $respuesta['http_status'] = $codigo;
+        }
+        return $respuesta;
     } finally {
         if ($db) { mysqli_close($db); }
     }
