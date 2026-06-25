@@ -1370,6 +1370,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     </div>
 
     <div id="collapse5_PM" class="collapse <?php echo $pedido_materiales_show; ?>"
+         data-pedido-materiales-activo="1"
          aria-labelledby="heading5" 
          data-parent="#accordionExample5">
       <div class="card-body">
@@ -1389,7 +1390,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                     <th>Material</th>
                     <th class="text-center" style="width: 120px;">Autorización</th>
                     <th class="text-center" style="width: 210px;">Inicial / Solicitado</th>
-                    <th class="text-center" style="width: 105px;">Pedido #1</th>
+                    <th class="text-center pedido-materiales-pedido-header pedido-materiales-pedido-header-1" style="width: 105px;" data-pedido-numero="1">Pedido #1</th>
                     <th class="text-center" style="width: 110px;">Acciones</th>
                   </tr>
                 </thead>
@@ -1410,7 +1411,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                         ? $productoMaterial
                         : 'Material #' . $idMaterialPedido;
                     ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>">
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="sin_solicitud">
                       <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
                       <td class="align-middle">
                         <?php if ($tareaNroMaterial > 0): ?>
@@ -1443,8 +1444,8 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                           </span>
                         </div>
                       </td>
-                      <td class="text-center align-middle">
-                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1">
+                      <td class="text-center align-middle pedido-materiales-pedido-celda pedido-materiales-pedido-celda-1" data-pedido-numero="1">
+                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido pedido-materiales-pedido-1" data-pedido-numero="1">
                           <small>Pedido #1</small>
                           <strong><?php echo $cantidadAgregadaMaterialTexto; ?></strong>
                         </span>
@@ -1534,7 +1535,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                     <th>Material</th>
                     <th class="text-center" style="width: 120px;">Autorización</th>
                     <th class="text-center" style="width: 210px;">Inicial / Solicitado</th>
-                    <th class="text-center" style="width: 105px;">Pedido #1</th>
+                    <th class="text-center pedido-materiales-pedido-header pedido-materiales-pedido-header-1" style="width: 105px;" data-pedido-numero="1">Pedido #1</th>
                     <th class="text-center" style="width: 110px;">Acciones</th>
                   </tr>
                 </thead>
@@ -1551,7 +1552,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                         ? $productoMaterial
                         : 'Material #' . $idMaterialPedido;
                     ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>">
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="pendiente">
                       <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
                       <td class="align-middle">
                         <strong>Adicional</strong>
@@ -1578,8 +1579,8 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                           </span>
                         </div>
                       </td>
-                      <td class="text-center align-middle">
-                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1">
+                      <td class="text-center align-middle pedido-materiales-pedido-celda pedido-materiales-pedido-celda-1" data-pedido-numero="1">
+                        <span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido pedido-materiales-pedido-1" data-pedido-numero="1">
                           <small>Pedido #1</small>
                           <strong><?php echo number_format($cantidadInicialAgregada + $cantidadAgregadaMaterial, 0, ',', '.'); ?></strong>
                         </span>
@@ -5552,11 +5553,127 @@ $(document).ready(function() {
       return isFinite(cantidad) ? cantidad : 0;
     }
 
-    function actualizarAgregadoPedidoMaterialEnFila($fila, cantidadSumar) {
-      var cantidadActual = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-agregado', '.pedido-materiales-agregado');
+    function parsearCantidadPedidoMaterial(valor) {
+      var cantidad = parseFloat(String(valor || '0').replace(/\./g, '').replace(',', '.'));
+
+      return isFinite(cantidad) ? cantidad : 0;
+    }
+
+    function obtenerNumeroPedidoMaterialesActivo() {
+      var numeroPedido = parseInt(String($('#collapse5_PM').attr('data-pedido-materiales-activo') || '1'), 10);
+
+      return numeroPedido === 2 ? 2 : 1;
+    }
+
+    function establecerNumeroPedidoMaterialesActivo(numeroPedido) {
+      $('#collapse5_PM').attr('data-pedido-materiales-activo', numeroPedido === 2 ? '2' : '1');
+    }
+
+    function obtenerBadgePedidoMaterialEnFila($fila, numeroPedido) {
+      return $fila.find('.pedido-materiales-pedido[data-pedido-numero="' + numeroPedido + '"]').first();
+    }
+
+    function obtenerCantidadPedidoMaterialEnFila($fila, numeroPedido) {
+      var $badgePedido = obtenerBadgePedidoMaterialEnFila($fila, numeroPedido);
+
+      return parsearCantidadPedidoMaterial($badgePedido.find('strong').first().text());
+    }
+
+    function obtenerCantidadPedidoActivoMaterialEnFila($fila) {
+      return obtenerCantidadPedidoMaterialEnFila($fila, obtenerNumeroPedidoMaterialesActivo());
+    }
+
+    function obtenerCantidadTotalPedidosMaterialEnFila($fila) {
+      var total = 0;
+
+      $fila.find('.pedido-materiales-pedido strong').each(function() {
+        total += parsearCantidadPedidoMaterial($(this).text());
+      });
+
+      return total;
+    }
+
+    function obtenerCantidadPedidosCongeladosMaterialEnFila($fila) {
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
+      var total = 0;
+
+      $fila.find('.pedido-materiales-pedido').each(function() {
+        var numeroPedido = parseInt(String($(this).attr('data-pedido-numero') || '0'), 10);
+
+        if (numeroPedido > 0 && numeroPedido !== numeroPedidoActivo) {
+          total += parsearCantidadPedidoMaterial($(this).find('strong').first().text());
+        }
+      });
+
+      return total;
+    }
+
+    function obtenerCantidadTotalPedidosIncluyendoPropuesta($fila, cantidadPedidoActivoPropuesta) {
+      return obtenerCantidadPedidosCongeladosMaterialEnFila($fila)
+        + Math.max(0, parsearCantidadPedidoMaterial(cantidadPedidoActivoPropuesta));
+    }
+
+    function requiereAutorizacionPedidoMaterial($fila, cantidadPedidoActivoPropuesta) {
+      var totalAcumuladoPropuesto = obtenerCantidadTotalPedidosIncluyendoPropuesta($fila, cantidadPedidoActivoPropuesta);
+
+      if ($fila.closest('#pedidoMaterialesAgregadosTableBody').length > 0) {
+        return totalAcumuladoPropuesto > 0;
+      }
+
       var cantidadInicial = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
-      var esMaterialAgregado = $fila.closest('#pedidoMaterialesAgregadosTableBody').length > 0;
-      var minimoAgregado = esMaterialAgregado ? -cantidadInicial : 0;
+
+      return cantidadInicial > 0 && totalAcumuladoPropuesto > cantidadInicial;
+    }
+
+    function obtenerHtmlCeldaPedidoMaterial(numeroPedido, cantidad) {
+      return ''
+        + '<td class="text-center align-middle pedido-materiales-pedido-celda pedido-materiales-pedido-celda-' + escapeHtmlOrdenCompra(numeroPedido) + '" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '">'
+        + '<span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido pedido-materiales-pedido-' + escapeHtmlOrdenCompra(numeroPedido) + '" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '">'
+        + '<small>Pedido #' + escapeHtmlOrdenCompra(numeroPedido) + '</small>'
+        + '<strong>' + formatearCantidadPedidoMaterial(cantidad) + '</strong>'
+        + '</span>'
+        + '</td>';
+    }
+
+    function actualizarCantidadPedidoMaterialEnFila($fila, numeroPedido, cantidad) {
+      var $badgePedido = obtenerBadgePedidoMaterialEnFila($fila, numeroPedido);
+
+      if (!$badgePedido.length) {
+        return;
+      }
+
+      var cantidadNormalizada = isFinite(cantidad) ? Math.max(0, cantidad) : 0;
+      $badgePedido.find('strong').text(formatearCantidadPedidoMaterial(cantidadNormalizada));
+    }
+
+    function existeColumnaPedidoMaterial(numeroPedido) {
+      return $('.pedido-materiales-pedido-header[data-pedido-numero="' + numeroPedido + '"]').length > 0;
+    }
+
+    function agregarColumnaPedidoMaterial(numeroPedido) {
+      if (existeColumnaPedidoMaterial(numeroPedido)) {
+        return;
+      }
+
+      $('.pedido-materiales-table thead tr').each(function() {
+        $(this).find('th').last().before(
+          '<th class="text-center pedido-materiales-pedido-header pedido-materiales-pedido-header-' + escapeHtmlOrdenCompra(numeroPedido) + '" style="width: 105px;" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '">Pedido #' + escapeHtmlOrdenCompra(numeroPedido) + '</th>'
+        );
+      });
+    }
+
+    function agregarCeldaPedidoMaterialSiFalta($fila, numeroPedido, cantidad) {
+      if (obtenerBadgePedidoMaterialEnFila($fila, numeroPedido).length) {
+        actualizarCantidadPedidoMaterialEnFila($fila, numeroPedido, cantidad);
+        return;
+      }
+
+      $fila.children('td').last().before(obtenerHtmlCeldaPedidoMaterial(numeroPedido, cantidad));
+    }
+
+    function actualizarAgregadoPedidoMaterialEnFila($fila, cantidadSumar) {
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
+      var cantidadActual = obtenerCantidadPedidoActivoMaterialEnFila($fila);
 
       if (!isFinite(cantidadActual)) {
         cantidadActual = 0;
@@ -5564,10 +5681,11 @@ $(document).ready(function() {
 
       var cantidadNueva = cantidadActual + cantidadSumar;
 
-      if (!isFinite(cantidadNueva) || cantidadNueva < minimoAgregado) {
-        cantidadNueva = minimoAgregado;
+      if (!isFinite(cantidadNueva) || cantidadNueva < 0) {
+        cantidadNueva = 0;
       }
 
+      actualizarCantidadPedidoMaterialEnFila($fila, numeroPedidoActivo, cantidadNueva);
       $fila.attr('data-material-agregado', String(cantidadNueva));
       actualizarResumenVisualPedidoMaterialEnFila($fila);
 
@@ -5575,12 +5693,7 @@ $(document).ready(function() {
     }
 
     function obtenerCantidadSolicitadaPedidoMaterialEnFila($fila) {
-      var cantidadInicial = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
-      var cantidadAgregada = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-agregado', '.pedido-materiales-cantidad-solicitada strong');
-      var esMaterialAgregado = $fila.closest('#pedidoMaterialesAgregadosTableBody').length > 0;
-      var cantidadSolicitada = esMaterialAgregado ? cantidadInicial + cantidadAgregada : cantidadAgregada;
-
-      return Math.max(0, cantidadSolicitada);
+      return Math.max(0, obtenerCantidadTotalPedidosMaterialEnFila($fila));
     }
 
     function esMaterialPresupuestadoConAutorizacionPendiente($fila) {
@@ -5637,9 +5750,28 @@ $(document).ready(function() {
       );
     }
 
-    function limpiarTooltipsPedidoMaterialEnFila($fila) {
-      $fila.find('[data-toggle="tooltip"]').tooltip('hide');
+    function destruirTooltipsAccionesPedidoMateriales($contexto) {
+      var $tooltips = $contexto.find('[data-toggle="tooltip"]');
+
+      $tooltips.tooltip('hide');
+      $tooltips.tooltip('dispose');
       $('.tooltip').remove();
+    }
+
+    function inicializarTooltipsAccionesPedidoMateriales($contexto) {
+      var $tooltips = $contexto.find('[data-toggle="tooltip"]');
+
+      $tooltips.tooltip('dispose');
+      $tooltips.tooltip({
+        boundary: 'window',
+        container: 'body',
+        placement: 'top',
+        trigger: 'hover'
+      });
+    }
+
+    function limpiarTooltipsPedidoMaterialEnFila($fila) {
+      destruirTooltipsAccionesPedidoMateriales($fila);
     }
 
     function renderizarAccionesAutorizacionPedidoMaterial($fila, estado) {
@@ -5665,7 +5797,7 @@ $(document).ready(function() {
         '<button type="button" class="btn btn-link p-0 text-success pedido-material-autorizacion-autorizar" data-toggle="tooltip" data-placement="top" title="Autorizar" aria-label="Autorizar"><i class="v-icon-accion fas fa-check-circle" aria-hidden="true"></i></button>'
         + '<button type="button" class="btn btn-link p-0 text-danger pedido-material-autorizacion-rechazar" data-toggle="tooltip" data-placement="top" title="Rechazar" aria-label="Rechazar"><i class="v-icon-accion fas fa-times-circle" aria-hidden="true"></i></button>'
       );
-      $contenedor.find('[data-toggle="tooltip"]').tooltip();
+      inicializarTooltipsAccionesPedidoMateriales($contenedor);
     }
 
     function obtenerAccionesCantidadPedidoMaterialEnFila($fila) {
@@ -5720,18 +5852,7 @@ $(document).ready(function() {
     }
 
     function obtenerCantidadPedidoVisualMaterialEnFila($fila, solicitadoVisual) {
-      var estadoAutorizacion = obtenerEstadoAutorizacionPedidoMaterialEnFila($fila);
-      var conservaAdicionalAutorizacion = estadoAutorizacion === 'pendiente' || estadoAutorizacion === 'autorizada';
-
-      if ($fila.closest('#pedidoMaterialesPresupuestadosTableBody').length === 0 || !conservaAdicionalAutorizacion) {
-        return solicitadoVisual;
-      }
-
-      var cantidadInicial = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
-      var textoAdicional = String($fila.attr('data-material-autorizacion-adicional') || '0');
-      var cantidadAdicional = parseFloat(textoAdicional.replace(/\./g, '').replace(',', '.'));
-
-      return cantidadInicial + (isFinite(cantidadAdicional) ? cantidadAdicional : 0);
+      return obtenerCantidadPedidoActivoMaterialEnFila($fila);
     }
 
     function existeAutorizacionPendientePedidoMateriales() {
@@ -5745,9 +5866,9 @@ $(document).ready(function() {
       }
 
       var tienePedidoMayorACero = false;
-      $('#pedidoMaterialesPresupuestadosTableBody .pedido-materiales-pedido-1 strong, #pedidoMaterialesAgregadosTableBody .pedido-materiales-pedido-1 strong').each(function() {
-        var textoCantidad = String($(this).text() || '0').trim();
-        var cantidadPedido = parseFloat(textoCantidad.replace(/\./g, '').replace(',', '.'));
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
+      $('#pedidoMaterialesPresupuestadosTableBody tr[data-material-id], #pedidoMaterialesAgregadosTableBody tr[data-material-id]').each(function() {
+        var cantidadPedido = obtenerCantidadPedidoMaterialEnFila($(this), numeroPedidoActivo);
 
         if (isFinite(cantidadPedido) && cantidadPedido > 0) {
           tienePedidoMayorACero = true;
@@ -5769,11 +5890,11 @@ $(document).ready(function() {
 
     function obtenerDetallePedidoMaterialesParaDeposito() {
       var detallePedido = [];
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
 
       $('#pedidoMaterialesPresupuestadosTableBody tr[data-material-id], #pedidoMaterialesAgregadosTableBody tr[data-material-id]').each(function() {
         var $fila = $(this);
-        var textoCantidad = String($fila.find('.pedido-materiales-pedido-1 strong').first().text() || '0').trim();
-        var cantidadPedido = parseFloat(textoCantidad.replace(/\./g, '').replace(',', '.'));
+        var cantidadPedido = obtenerCantidadPedidoMaterialEnFila($fila, numeroPedidoActivo);
 
         if (!isFinite(cantidadPedido) || cantidadPedido <= 0) {
           return;
@@ -5787,6 +5908,42 @@ $(document).ready(function() {
       });
 
       return detallePedido;
+    }
+
+    function reiniciarAutorizacionPedidoMaterialParaNuevoCiclo($fila) {
+      $fila
+        .removeAttr('data-material-autorizacion-adicional data-material-autorizacion-pedido-previo')
+        .attr('data-material-autorizacion-estado', 'sin_solicitud');
+
+      renderizarBadgeAutorizacionPedidoMaterial($fila, 'sin_solicitud');
+      renderizarAccionesAutorizacionPedidoMaterial($fila, 'sin_solicitud');
+      actualizarVisibilidadAccionesCantidadPedidoMaterial($fila, false);
+    }
+
+    function iniciarSegundoCicloPedidoMateriales() {
+      if (obtenerNumeroPedidoMaterialesActivo() !== 1) {
+        return;
+      }
+
+      agregarColumnaPedidoMaterial(2);
+
+      $('#pedidoMaterialesPresupuestadosTableBody tr[data-material-id], #pedidoMaterialesAgregadosTableBody tr[data-material-id]').each(function() {
+        var $fila = $(this);
+        var pedidoUno = obtenerCantidadPedidoMaterialEnFila($fila, 1);
+
+        $fila.attr('data-material-pedido-confirmado-1', String(pedidoUno));
+        $fila.attr('data-material-agregado', '0');
+        agregarCeldaPedidoMaterialSiFalta($fila, 2, 0);
+        reiniciarAutorizacionPedidoMaterialParaNuevoCiclo($fila);
+      });
+
+      establecerNumeroPedidoMaterialesActivo(2);
+
+      $('#pedidoMaterialesPresupuestadosTableBody tr[data-material-id], #pedidoMaterialesAgregadosTableBody tr[data-material-id]').each(function() {
+        actualizarResumenVisualPedidoMaterialEnFila($(this));
+      });
+
+      actualizarEstadoBotonRealizarPedido();
     }
 
     function mostrarConfirmacionRealizarPedido() {
@@ -5831,6 +5988,9 @@ $(document).ready(function() {
         reverseButtons: false
       }).then(function(result) {
         if (result && result.isConfirmed) {
+          if (obtenerNumeroPedidoMaterialesActivo() === 1) {
+            iniciarSegundoCicloPedidoMateriales();
+          }
           // TODO: implementar persistencia real del pedido de materiales al deposito.
         }
       });
@@ -5865,7 +6025,7 @@ $(document).ready(function() {
         .addClass(claseSolicitado)
         .find('strong')
         .text(formatearCantidadPedidoMaterial(solicitadoVisual));
-      $fila.find('.pedido-materiales-pedido-1 strong').text(formatearCantidadPedidoMaterial(pedidoVisual));
+      actualizarCantidadPedidoMaterialEnFila($fila, obtenerNumeroPedidoMaterialesActivo(), pedidoVisual);
       var estadoAutorizacion = obtenerEstadoAutorizacionPedidoMaterialEnFila($fila);
       renderizarBadgeAutorizacionPedidoMaterial($fila, estadoAutorizacion);
       renderizarAccionesAutorizacionPedidoMaterial($fila, estadoAutorizacion);
@@ -5875,7 +6035,12 @@ $(document).ready(function() {
     }
 
     function marcarAutorizacionSolicitadaPedidoMaterialEnFila($fila, cantidadSolicitadaAutorizacion) {
+      var pedidoActivoActual = obtenerCantidadPedidoActivoMaterialEnFila($fila);
+      var pedidoActivoPropuesto = pedidoActivoActual + parsearCantidadPedidoMaterial(cantidadSolicitadaAutorizacion);
+
       $fila.attr('data-material-autorizacion-adicional', String(cantidadSolicitadaAutorizacion));
+      $fila.attr('data-material-autorizacion-pedido-previo', String(pedidoActivoActual));
+      actualizarCantidadPedidoMaterialEnFila($fila, obtenerNumeroPedidoMaterialesActivo(), pedidoActivoPropuesto);
       renderizarBadgeAutorizacionPedidoMaterial($fila, 'pendiente');
       renderizarAccionesAutorizacionPedidoMaterial($fila, 'pendiente');
       actualizarResumenVisualPedidoMaterialEnFila($fila);
@@ -5883,18 +6048,33 @@ $(document).ready(function() {
 
     function cambiarEstadoAutorizacionPedidoMaterialEnFila($fila, estado) {
       limpiarTooltipsPedidoMaterialEnFila($fila);
+
+      if (estado === 'rechazada') {
+        var pedidoPrevio = parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'));
+        actualizarCantidadPedidoMaterialEnFila($fila, obtenerNumeroPedidoMaterialesActivo(), pedidoPrevio);
+        $fila.removeAttr('data-material-autorizacion-adicional data-material-autorizacion-pedido-previo');
+      } else if (estado === 'autorizada') {
+        $fila.removeAttr('data-material-autorizacion-pedido-previo');
+      }
+
       renderizarBadgeAutorizacionPedidoMaterial($fila, estado);
       renderizarAccionesAutorizacionPedidoMaterial($fila, estado);
       actualizarResumenVisualPedidoMaterialEnFila($fila);
     }
 
     $(document).on('click', '.pedido-material-autorizacion-autorizar', function() {
-      cambiarEstadoAutorizacionPedidoMaterialEnFila($(this).closest('tr'), 'autorizada');
+      var $boton = $(this);
+      $boton.tooltip('hide');
+      $('.tooltip').remove();
+      cambiarEstadoAutorizacionPedidoMaterialEnFila($boton.closest('tr'), 'autorizada');
       // TODO: persistir autorizacion aprobada cuando exista backend.
     });
 
     $(document).on('click', '.pedido-material-autorizacion-rechazar', function() {
-      cambiarEstadoAutorizacionPedidoMaterialEnFila($(this).closest('tr'), 'rechazada');
+      var $boton = $(this);
+      $boton.tooltip('hide');
+      $('.tooltip').remove();
+      cambiarEstadoAutorizacionPedidoMaterialEnFila($boton.closest('tr'), 'rechazada');
       // TODO: persistir autorizacion rechazada cuando exista backend.
     });
 
@@ -6027,6 +6207,7 @@ $(document).ready(function() {
     $('#pedidoMaterialesPresupuestadosTableBody tr, #pedidoMaterialesAgregadosTableBody tr').each(function() {
       actualizarResumenVisualPedidoMaterialEnFila($(this));
     });
+    inicializarTooltipsAccionesPedidoMateriales($('#collapse5_PM'));
 
     function actualizarCantidadInicialPedidoMaterialEnFila($fila, cantidadSumar) {
       var cantidadActual = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
@@ -6084,9 +6265,17 @@ $(document).ready(function() {
         return;
       }
 
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
+      var celdasPedidosHtml = obtenerHtmlCeldaPedidoMaterial(1, numeroPedidoActivo === 1 ? cantidad : 0);
+
+      if (numeroPedidoActivo === 2) {
+        agregarColumnaPedidoMaterial(2);
+        celdasPedidosHtml += obtenerHtmlCeldaPedidoMaterial(2, cantidad);
+      }
+
       var indice = $tbody.find('tr[data-material-id]').length + 1;
       var html = ''
-        + '<tr data-material-id="' + escapeHtmlOrdenCompra(materialId) + '" data-material-text="' + escapeHtmlOrdenCompra(materialTexto) + '" data-material-cantidad-inicial="' + escapeHtmlOrdenCompra(cantidad) + '" data-material-agregado="0" data-tarea-nro="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.nro) || '') + '" data-tarea-titulo="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.titulo) || '') + '">'
+        + '<tr data-material-id="' + escapeHtmlOrdenCompra(materialId) + '" data-material-text="' + escapeHtmlOrdenCompra(materialTexto) + '" data-material-cantidad-inicial="' + escapeHtmlOrdenCompra(cantidad) + '" data-material-agregado="' + escapeHtmlOrdenCompra(numeroPedidoActivo === 2 ? cantidad : 0) + '" data-material-autorizacion-estado="pendiente" data-tarea-nro="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.nro) || '') + '" data-tarea-titulo="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.titulo) || '') + '">'
         + '<td class="text-center align-middle">' + indice + '</td>'
         + '<td class="align-middle">' + obtenerHtmlTareaPedidoMaterial(tareaSeleccionada) + '</td>'
         + '<td class="align-middle"><strong>' + escapeHtmlOrdenCompra(materialTexto) + '</strong><span class="d-block text-muted small">ID ' + escapeHtmlOrdenCompra(materialId) + '</span></td>'
@@ -6095,7 +6284,7 @@ $(document).ready(function() {
         + '<span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial"><small>Inicial</small><strong>' + formatearCantidadPedidoMaterial(cantidad) + '</strong></span>'
         + '<span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada"><small>Solicitado</small><strong>' + formatearCantidadPedidoMaterial(cantidad) + '</strong></span>'
         + '</div></td>'
-        + '<td class="text-center align-middle"><span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido-1"><small>Pedido #1</small><strong>' + formatearCantidadPedidoMaterial(cantidad) + '</strong></span></td>'
+        + celdasPedidosHtml
         + '<td class="text-center align-middle">'
         + '<button type="button" class="btn btn-link p-0 pedido-material-agregar-unidades" data-material-id="' + escapeHtmlOrdenCompra(materialId) + '" data-material-text="' + escapeHtmlOrdenCompra(materialTexto) + '" data-toggle="tooltip" data-placement="top" title="Agregar" aria-label="Agregar">'
         + '<i class="v-icon-accion fas fa-plus-circle" aria-hidden="true"></i>'
@@ -6113,19 +6302,23 @@ $(document).ready(function() {
       actualizarResumenVisualPedidoMaterialEnFila($tbody.find('tr').last());
       actualizarNumeracionMaterialesAgregados();
       actualizarVisibilidadTablaMaterialesAgregados();
-      $('[data-toggle="tooltip"]').tooltip();
+      inicializarTooltipsAccionesPedidoMateriales($tbody.find('tr').last());
     }
 
     $(document).on('click', '.pedido-material-agregar-unidades', function() {
       var $boton = $(this);
+      $boton.tooltip('hide');
+      $('.tooltip').remove();
+
       var $fila = $boton.closest('tr');
       var materialId = String($boton.data('material-id') || $fila.data('material-id') || '');
       var materialTexto = String($boton.data('material-text') || $fila.data('material-text') || '');
       var cantidadInicial = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
       var cantidadSolicitada = obtenerCantidadSolicitadaPedidoMaterialEnFila($fila);
       var nuevaCantidadSolicitada = cantidadSolicitada + 1;
+      var nuevaCantidadPedidoActivo = obtenerCantidadPedidoActivoMaterialEnFila($fila) + 1;
 
-      if (esMaterialPresupuestadoConAutorizacionPendiente($fila) || esMaterialAgregadoConAutorizacionPendiente($fila)) {
+      if (debeOcultarAccionesCantidadPorEstadoAutorizacion($fila)) {
         return;
       }
 
@@ -6133,7 +6326,7 @@ $(document).ready(function() {
         return;
       }
 
-      if (cantidadInicial > 0 && nuevaCantidadSolicitada > cantidadInicial) {
+      if (requiereAutorizacionPedidoMaterial($fila, nuevaCantidadPedidoActivo)) {
         mostrarModalAutorizacionExcesoPedidoMaterial(
           $fila,
           materialTexto,
@@ -6164,11 +6357,14 @@ $(document).ready(function() {
 
     $(document).on('click', '.pedido-material-quitar-unidad', function() {
       var $boton = $(this);
+      $boton.tooltip('hide');
+      $('.tooltip').remove();
+
       var $fila = $boton.closest('tr');
       var materialId = String($boton.data('material-id') || $fila.data('material-id') || '');
-      var cantidadSolicitada = obtenerCantidadSolicitadaPedidoMaterialEnFila($fila);
+      var cantidadPedidoActivo = obtenerCantidadPedidoActivoMaterialEnFila($fila);
 
-      if (esMaterialPresupuestadoConAutorizacionPendiente($fila) || esMaterialAgregadoConAutorizacionPendiente($fila)) {
+      if (debeOcultarAccionesCantidadPorEstadoAutorizacion($fila)) {
         return;
       }
 
@@ -6176,7 +6372,7 @@ $(document).ready(function() {
         return;
       }
 
-      if (cantidadSolicitada <= 0) {
+      if (cantidadPedidoActivo <= 0) {
         return;
       }
 
@@ -6200,6 +6396,9 @@ $(document).ready(function() {
 
     $(document).on('click', '.pedido-material-eliminar-fila', function() {
       var $boton = $(this);
+      $boton.tooltip('hide');
+      $('.tooltip').remove();
+
       var $fila = $boton.closest('tr');
       var materialId = String($boton.data('material-id') || $fila.data('material-id') || '');
       var materialTexto = String($boton.data('material-text') || $fila.data('material-text') || '');
