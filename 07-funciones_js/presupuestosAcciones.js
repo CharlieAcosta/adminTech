@@ -264,10 +264,301 @@ function construirHtmlCopiasMailDocumentoEmitido(copias) {
     `).join('');
 }
 
+const DocumentoEmitidoAdjuntos = (function () {
+    const extensionesPermitidas = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'jpg', 'jpeg', 'png'];
+    const maximoBytes = 5 * 1024 * 1024;
+    const state = {
+        queued: [],
+        seq: 0
+    };
+
+    function obtenerElementos() {
+        return {
+            $dropzone: $('#documentoEmitidoAdjuntosDropzone'),
+            $input: $('#documentoEmitidoAdjuntosInput'),
+            $lista: $('#documentoEmitidoAdjuntosLista'),
+            $error: $('#documentoEmitidoAdjuntosError')
+        };
+    }
+
+    function extensionDesdeNombre(nombre) {
+        const partes = String(nombre || '').trim().split('.');
+        return partes.length > 1 ? String(partes.pop() || '').toLowerCase() : '';
+    }
+
+    function claseIconoAdjuntoDocumentoEmitido(extension) {
+        switch (String(extension || '').toLowerCase()) {
+            case 'pdf':
+                return 'fas fa-file-pdf text-danger';
+            case 'doc':
+            case 'docx':
+                return 'fas fa-file-word text-primary';
+            case 'xls':
+            case 'xlsx':
+                return 'fas fa-file-excel text-success';
+            case 'jpg':
+            case 'jpeg':
+            case 'png':
+                return 'fas fa-file-image text-info';
+            case 'txt':
+                return 'fas fa-file-alt text-secondary';
+            default:
+                return 'fas fa-file text-muted';
+        }
+    }
+
+    function tamanoLegibleAdjuntoDocumentoEmitido(bytes) {
+        let valor = Number(bytes || 0);
+        if (!Number.isFinite(valor) || valor < 0) {
+            valor = 0;
+        }
+
+        if (valor < 1024) {
+            return `${valor} B`;
+        }
+
+        valor = valor / 1024;
+        if (valor < 1024) {
+            return `${valor >= 10 ? valor.toFixed(1) : valor.toFixed(2)} KB`;
+        }
+
+        valor = valor / 1024;
+        return `${valor >= 10 ? valor.toFixed(1) : valor.toFixed(2)} MB`;
+    }
+
+    function mostrarErroresAdjuntosDocumentoEmitido(errores) {
+        const { $error } = obtenerElementos();
+        if (!$error.length) {
+            return;
+        }
+
+        $error.empty();
+        if (!Array.isArray(errores) || !errores.length) {
+            $error.addClass('d-none');
+            return;
+        }
+
+        errores.forEach((mensaje) => {
+            $('<div>').text(mensaje).appendTo($error);
+        });
+        $error.removeClass('d-none');
+    }
+
+    function validarArchivoAdjuntoDocumentoEmitido(file) {
+        const nombre = String(file && file.name ? file.name : '').trim();
+        if (!nombre) {
+            return 'Uno de los archivos no tiene nombre.';
+        }
+
+        const extension = extensionDesdeNombre(nombre);
+        if (!extension || !extensionesPermitidas.includes(extension)) {
+            return `"${nombre}" no tiene un formato permitido.`;
+        }
+
+        const size = Number(file && file.size ? file.size : 0);
+        if (size <= 0) {
+            return `"${nombre}" esta vacio.`;
+        }
+
+        if (size > maximoBytes) {
+            return `"${nombre}" supera el maximo de 5 MB.`;
+        }
+
+        return '';
+    }
+
+    function renderizarAdjuntosDocumentoEmitido() {
+        const { $lista } = obtenerElementos();
+        if (!$lista.length) {
+            return;
+        }
+
+        $lista.empty();
+        state.queued.forEach((item) => {
+            const file = item.file;
+            const nombre = String(file && file.name ? file.name : 'Archivo');
+            const extension = extensionDesdeNombre(nombre);
+
+            const $col = $('<div>').addClass('col-12 col-md-6 mb-2').attr('data-adjunto-id', item.id);
+            const $card = $('<div>').addClass('border rounded bg-white p-2 d-flex align-items-center');
+            const $icon = $('<i>').addClass(`${claseIconoAdjuntoDocumentoEmitido(extension)} fa-lg mr-2 flex-shrink-0`);
+            const $body = $('<div>')
+                .addClass('flex-grow-1')
+                .css('min-width', '0');
+            const $nombre = $('<div>')
+                .addClass('font-weight-bold small text-truncate')
+                .css({
+                    'max-width': '100%',
+                    'min-width': '0',
+                    'overflow': 'hidden',
+                    'text-overflow': 'ellipsis',
+                    'white-space': 'nowrap'
+                })
+                .text(nombre);
+            const $meta = $('<div>').addClass('text-muted small').text(tamanoLegibleAdjuntoDocumentoEmitido(file ? file.size : 0));
+            const $remove = $('<button>')
+                .attr({
+                    type: 'button',
+                    title: 'Quitar adjunto',
+                    'aria-label': `Quitar ${nombre}`
+                })
+                .addClass('btn btn-link text-danger p-1 ml-2 flex-shrink-0 documento-emitido-adjunto-quitar')
+                .data('adjunto-id', item.id)
+                .append($('<i>').addClass('fas fa-times'));
+
+            $body.append($nombre, $meta);
+            $card.append($icon, $body, $remove);
+            $col.append($card);
+            $lista.append($col);
+
+            if ($nombre[0] && $nombre[0].scrollWidth > $nombre[0].clientWidth) {
+                $nombre.attr('title', nombre);
+            } else {
+                $nombre.removeAttr('title');
+            }
+        });
+    }
+
+    function agregarArchivosAdjuntosDocumentoEmitido(fileList) {
+        const archivos = Array.prototype.slice.call(fileList || []);
+        if (!archivos.length) {
+            return;
+        }
+
+        const errores = [];
+        archivos.forEach((file) => {
+            const error = validarArchivoAdjuntoDocumentoEmitido(file);
+            if (error) {
+                errores.push(error);
+                return;
+            }
+
+            state.seq += 1;
+            state.queued.push({
+                id: `adjunto_${Date.now()}_${state.seq}`,
+                file: file
+            });
+        });
+
+        renderizarAdjuntosDocumentoEmitido();
+        mostrarErroresAdjuntosDocumentoEmitido(errores);
+    }
+
+    function resetearAdjuntosDocumentoEmitido() {
+        const { $input, $lista, $error, $dropzone } = obtenerElementos();
+        state.queued = [];
+        state.seq = 0;
+        if ($input.length) {
+            $input.val('');
+        }
+        if ($lista.length) {
+            $lista.empty();
+        }
+        if ($error.length) {
+            $error.empty().addClass('d-none');
+        }
+        if ($dropzone.length) {
+            $dropzone
+                .removeClass('is-dragover')
+                .css({ 'border-color': '', 'background-color': '', color: '' });
+        }
+    }
+
+    function quitarAdjuntoDocumentoEmitido(id) {
+        state.queued = state.queued.filter((item) => item.id !== id);
+        renderizarAdjuntosDocumentoEmitido();
+        mostrarErroresAdjuntosDocumentoEmitido([]);
+    }
+
+    function inicializarEventosAdjuntosDocumentoEmitido() {
+        $(document)
+            .off('change.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosInput')
+            .on('change.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosInput', function () {
+                agregarArchivosAdjuntosDocumentoEmitido(this.files || []);
+                this.value = '';
+            });
+
+        $(document)
+            .off('dragenter.documentoEmitidoAdjuntos dragover.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosDropzone')
+            .on('dragenter.documentoEmitidoAdjuntos dragover.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosDropzone', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const originalEvent = event.originalEvent || {};
+                if (originalEvent.dataTransfer) {
+                    originalEvent.dataTransfer.dropEffect = 'copy';
+                }
+
+                $(this)
+                    .addClass('is-dragover')
+                    .css({ 'border-color': '#2f6fad', 'background-color': '#eef6ff', color: '#2f6fad' });
+            });
+
+        $(document)
+            .off('dragleave.documentoEmitidoAdjuntos dragend.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosDropzone')
+            .on('dragleave.documentoEmitidoAdjuntos dragend.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosDropzone', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                $(this)
+                    .removeClass('is-dragover')
+                    .css({ 'border-color': '', 'background-color': '', color: '' });
+            });
+
+        $(document)
+            .off('drop.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosDropzone')
+            .on('drop.documentoEmitidoAdjuntos', '#documentoEmitidoAdjuntosDropzone', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                $(this)
+                    .removeClass('is-dragover')
+                    .css({ 'border-color': '', 'background-color': '', color: '' });
+
+                const originalEvent = event.originalEvent || {};
+                const dataTransfer = originalEvent.dataTransfer || {};
+                agregarArchivosAdjuntosDocumentoEmitido(dataTransfer.files || []);
+            });
+
+        $(document)
+            .off('click.documentoEmitidoAdjuntos', '.documento-emitido-adjunto-quitar')
+            .on('click.documentoEmitidoAdjuntos', '.documento-emitido-adjunto-quitar', function () {
+                quitarAdjuntoDocumentoEmitido(String($(this).data('adjunto-id') || ''));
+            });
+    }
+
+    inicializarEventosAdjuntosDocumentoEmitido();
+
+    return {
+        getFiles: function () {
+            return state.queued.map((item) => item.file);
+        },
+        appendToFormData: function (formData) {
+            if (!formData || typeof formData.append !== 'function') {
+                throw new Error('FormData invalido para adjuntos adicionales.');
+            }
+
+            state.queued.forEach((item) => {
+                if (item && item.file) {
+                    formData.append('adjuntos_adicionales[]', item.file, item.file.name);
+                }
+            });
+
+            return state.queued.length;
+        },
+        reset: resetearAdjuntosDocumentoEmitido
+    };
+})();
+
+window.DocumentoEmitidoAdjuntos = DocumentoEmitidoAdjuntos;
+
 function resetearModalEnviarDocumentoEmitido() {
     const form = $('#formEnviarDocumentoEmitidoPresupuesto')[0];
     if (form) {
         form.reset();
+    }
+    if (window.DocumentoEmitidoAdjuntos && typeof window.DocumentoEmitidoAdjuntos.reset === 'function') {
+        window.DocumentoEmitidoAdjuntos.reset();
     }
     $('#mail_id_documento_emitido, #mail_id_presupuesto, #mail_id_previsita').val('');
     $('#modalEnviarDocumentoEmitidoContexto').html('');
@@ -1867,6 +2158,36 @@ $(document).on('submit', '#formEnviarDocumentoEmitidoPresupuesto', function (e) 
         id_usuario: window.ACTIVE_USER_ID || 0
     };
 
+    const formData = new FormData();
+    formData.append('via', payload.via);
+    formData.append('funcion', payload.funcion);
+    formData.append('id_documento_emitido', payload.id_documento_emitido);
+    formData.append('id_presupuesto', payload.id_presupuesto);
+    formData.append('id_previsita', payload.id_previsita);
+    formData.append('para_email', payload.para_email);
+    formData.append('asunto', payload.asunto);
+    formData.append('cuerpo', payload.cuerpo);
+    formData.append('cco_manual', payload.cco_manual);
+    formData.append('id_usuario', payload.id_usuario);
+    ccEmails.forEach(function (email) {
+        formData.append('cc_email[]', email);
+    });
+    ccoEmails.forEach(function (email) {
+        formData.append('cco_email[]', email);
+    });
+
+    try {
+        if (window.DocumentoEmitidoAdjuntos && typeof window.DocumentoEmitidoAdjuntos.appendToFormData === 'function') {
+            window.DocumentoEmitidoAdjuntos.appendToFormData(formData);
+        } else if (window.DocumentoEmitidoAdjuntos && typeof window.DocumentoEmitidoAdjuntos.getFiles === 'function' && window.DocumentoEmitidoAdjuntos.getFiles().length) {
+            renderAlertasModalEnviarDocumento('No se pudieron anexar los adjuntos seleccionados. Recarga la pagina e intenta nuevamente.', 'danger');
+            return;
+        }
+    } catch (error) {
+        renderAlertasModalEnviarDocumento(escapeHtmlDocumentoEmitido(error.message || 'No se pudieron anexar los adjuntos seleccionados.'), 'danger');
+        return;
+    }
+
     $('#btnEnviarDocumentoEmitido').prop('disabled', true);
     renderAlertasModalEnviarDocumento('Procesando envío...', 'info');
 
@@ -1874,8 +2195,9 @@ $(document).on('submit', '#formEnviarDocumentoEmitidoPresupuesto', function (e) 
         url: '../03-controller/presupuestos_guardar.php',
         type: 'POST',
         dataType: 'json',
-        traditional: true,
-        data: payload,
+        data: formData,
+        processData: false,
+        contentType: false,
         success: function (response) {
             $('#btnEnviarDocumentoEmitido').prop('disabled', false);
 

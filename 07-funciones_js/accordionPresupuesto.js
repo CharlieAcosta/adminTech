@@ -521,6 +521,46 @@
     window.alert(mensaje);
   }
 
+  function actualizarEstadoAccionesPresupuestoSilencioso() {
+    const rootSel = '#contenedorPresupuestoGenerado';
+    const hayVencidos = $(`${rootSel} .precio-unitario.bg-danger, ${rootSel} .valor-jornal.bg-danger`).length > 0;
+    const idPresupuesto = Number($(rootSel).data('id_presupuesto')) || null;
+    const presupuestoDirty = !!window.presupuestoDirty;
+    const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
+    const $btnEmitir = $('.btn-emitir-presupuesto');
+
+    if (presupuestoEdicionComercialBloqueada()) {
+      $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
+      $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
+      return;
+    }
+
+    if (hayVencidos) {
+      $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
+      $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
+      return;
+    }
+
+    if (presupuestoDirty) {
+      $btnGuardar.prop('disabled', false).addClass('btn-success').removeClass('btn-secondary');
+      $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
+      return;
+    }
+
+    $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
+    $btnEmitir
+      .prop('disabled', !idPresupuesto)
+      .toggleClass('btn-primary', !!idPresupuesto)
+      .toggleClass('btn-secondary', !idPresupuesto);
+  }
+
+  function marcarPresupuestoComoModificadoSilencioso() {
+    if (!$('#contenedorPresupuestoGenerado').length) return;
+
+    window.presupuestoDirty = true;
+    actualizarEstadoAccionesPresupuestoSilencioso();
+  }
+
   // limpieza por namespace
   $(document)
     .off('click.presu',  '.presu-dropzone')
@@ -575,6 +615,7 @@
         triggerInput: true,
         normalizeEditor: false
       });
+      marcarPresupuestoComoModificadoSilencioso();
     })
     .on('blur.presu-editor', '.tarea-descripcion-editor', function () {
       syncDetalleTareaEditor($(this).closest('.tarea-detalle-editor'), {
@@ -631,8 +672,13 @@
           .on('input.presu change.presu', filaInputs, function () {
             const $tr   = $(this).closest('tr');
             const $card = $(this).closest('.tarea-card');
+            const $inputActual = $(this);
+            const esConfirmacionPrecioVencido = (
+              $inputActual.hasClass('bg-danger')
+              && ($inputActual.hasClass('precio-unitario') || $inputActual.hasClass('valor-jornal'))
+            );
 
-            if (typeof window.marcarPresupuestoComoModificado === 'function') {
+            if (!esConfirmacionPrecioVencido && typeof window.marcarPresupuestoComoModificado === 'function') {
               window.marcarPresupuestoComoModificado();
             }
 
@@ -709,8 +755,337 @@
           .off('input.presu change.presu', `${rootSel} .tarea-card textarea`)
           .on('input.presu change.presu', `${rootSel} .tarea-card textarea`, function () {
             syncTituloCardPresupuesto($(this).closest('.tarea-card'));
+            marcarPresupuestoComoModificadoSilencioso();
           });
     })();
+
+
+  // === Confirmacion de vigencia para precios renderizados por PHP ===
+  (function bindConfirmacionPrecioPresupuestoPHP() {
+    const rootSel = '#contenedorPresupuestoGenerado';
+    const precioSel = `${rootSel} .precio-unitario.bg-danger, ${rootSel} .valor-jornal.bg-danger`;
+    const ENDPOINT_CONFIRMACION = '../03-controller/presupuestos_guardar.php';
+    const MENSAJE_ERROR_CONFIRMACION = 'No se pudo confirmar la vigencia del precio.';
+
+    function mostrarErrorConfirmacionPrecio(mensaje) {
+      const texto = String(mensaje || MENSAJE_ERROR_CONFIRMACION).trim() || MENSAJE_ERROR_CONFIRMACION;
+
+      if (typeof mostrarError === 'function') {
+        mostrarError(texto);
+        return;
+      }
+      if (typeof toastr !== 'undefined' && toastr && typeof toastr.error === 'function') {
+        toastr.error(texto);
+        return;
+      }
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({ icon: 'error', title: 'Error', text: texto });
+        return;
+      }
+
+      window.alert(texto);
+    }
+
+    function presupuestoEdicionBloqueadaParaConfirmar() {
+      if (typeof window.obtenerBloqueoEdicionComercialSeguimiento !== 'function') {
+        return false;
+      }
+
+      const bloqueo = window.obtenerBloqueoEdicionComercialSeguimiento();
+      return !!(bloqueo && bloqueo.bloqueado);
+    }
+
+    function revalidarDatosVencidosPresupuestoPHP() {
+      actualizarEstadoAccionesPresupuestoSilencioso();
+    }
+
+    function normalizarImporteTextoConfirmacionPHP(valor) {
+      const texto = String(valor ?? '').trim();
+      const partes = texto.match(/^(\d+)([\.,])(\d+)$/);
+
+      if (!partes || partes[3].length <= 2) {
+        return texto;
+      }
+
+      const decimalesSinCeros = partes[3].replace(/0+$/g, '');
+      if (decimalesSinCeros.length > 2) {
+        return texto;
+      }
+
+      const decimales = decimalesSinCeros.padEnd(2, '0');
+      return `${partes[1]}${partes[2]}${decimales}`;
+    }
+
+    function leerDatoConfirmacionPrecio($input, nombreAttr) {
+      const nombreData = nombreAttr.replace(/^data-/, '');
+      const valorAttr = $input.attr(nombreAttr);
+      if (valorAttr !== undefined && valorAttr !== null && String(valorAttr).trim() !== '') {
+        return String(valorAttr).trim();
+      }
+
+      const valorData = $input.data(nombreData);
+      return String(valorData ?? '').trim();
+    }
+
+    function formatSubtotalConfirmado(valor) {
+      const normalizado = String(valor ?? '').trim().replace(',', '.');
+      const numero = Number(normalizado);
+
+      if (!Number.isFinite(numero)) {
+        return `$${String(valor ?? '').trim()}`;
+      }
+
+      const partes = numero.toFixed(2).split('.');
+      const entero = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      return `$${entero},${partes[1]}`;
+    }
+
+    function obtenerPayloadConfirmacion($input) {
+      const tipo = leerDatoConfirmacionPrecio($input, 'data-confirmar-precio-tipo');
+      const idPresupuesto = leerDatoConfirmacionPrecio($input, 'data-id-presupuesto')
+        || String($(rootSel).data('id_presupuesto') || '').trim();
+      const idLinea = tipo === 'material'
+        ? leerDatoConfirmacionPrecio($input, 'data-id-ptm')
+        : leerDatoConfirmacionPrecio($input, 'data-id-ptmo');
+      const idCatalogo = tipo === 'material'
+        ? leerDatoConfirmacionPrecio($input, 'data-id-material')
+        : leerDatoConfirmacionPrecio($input, 'data-id-jornal');
+
+      return {
+        via: 'ajax',
+        funcion: 'confirmarPrecioPresupuesto',
+        tipo,
+        id_presupuesto: idPresupuesto,
+        id_linea: idLinea,
+        id_catalogo: idCatalogo,
+        importe: normalizarImporteTextoConfirmacionPHP($input.val())
+      };
+    }
+
+    function payloadConfirmacionCompleto(payload) {
+      return !!(
+        payload.tipo
+        && payload.id_presupuesto
+        && payload.id_linea
+        && payload.id_catalogo
+      );
+    }
+
+    function recalcularDespuesDeConfirmacion($input, respuesta) {
+      const $tr = $input.closest('tr');
+      const $card = $input.closest('.tarea-card');
+
+      if (respuesta && Object.prototype.hasOwnProperty.call(respuesta, 'subtotal_snapshot')) {
+        if ($input.hasClass('precio-unitario')) {
+          $tr.find('.subtotal-material').text(formatSubtotalConfirmado(respuesta.subtotal_snapshot));
+        } else if ($input.hasClass('valor-jornal')) {
+          $tr.find('.subtotal-mano').text(formatSubtotalConfirmado(respuesta.subtotal_snapshot));
+        }
+      }
+
+      if ($tr.find('.cantidad-material').length && typeof window.calcularFilaMaterial === 'function') {
+        window.calcularFilaMaterial($tr);
+      }
+      if ($tr.find('.cantidad-mano-obra').length && typeof window.calcularFilaManoObra === 'function') {
+        window.calcularFilaManoObra($tr);
+      }
+
+      if (respuesta && Object.prototype.hasOwnProperty.call(respuesta, 'subtotal_snapshot')) {
+        if ($input.hasClass('precio-unitario')) {
+          $tr.find('.subtotal-material').text(formatSubtotalConfirmado(respuesta.subtotal_snapshot));
+        } else if ($input.hasClass('valor-jornal')) {
+          $tr.find('.subtotal-mano').text(formatSubtotalConfirmado(respuesta.subtotal_snapshot));
+        }
+      }
+
+      if (typeof window.actualizarSubtotalesBloque === 'function') {
+        _safeActualizarSubtotalesBloque($card, $input[0]);
+      }
+      if (typeof window.actualizarTotalesPorTarea === 'function') {
+        _safeActualizarTotalesPorTarea($card, $input[0]);
+      }
+      if (typeof window.actualizarTotalGeneral === 'function') {
+        _safeActualizarTotalGeneral();
+      }
+    }
+
+    function confirmarPrecioPresupuestoPHP(input) {
+      const $input = $(input);
+
+      if (!$input.length || !$input.hasClass('bg-danger')) return;
+      if ($input.data('confirmacionPrecioPresupuestoPendiente')) return;
+      if (!$input.data('confirmacionPrecioPresupuestoIntervenido')) return;
+
+      if (presupuestoEdicionBloqueadaParaConfirmar()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const payload = obtenerPayloadConfirmacion($input);
+      if (!payloadConfirmacionCompleto(payload)) {
+        mostrarErrorConfirmacionPrecio(MENSAJE_ERROR_CONFIRMACION);
+        return;
+      }
+
+      const dirtyAntes = $input.data('presupuestoDirtyAntesConfirmacion') === undefined
+        ? !!window.presupuestoDirty
+        : !!$input.data('presupuestoDirtyAntesConfirmacion');
+      $input
+        .data('confirmacionPrecioPresupuestoPendiente', true)
+        .data('confirmacionPrecioPresupuestoIntervenido', false)
+        .data('presupuestoDirtyAntesConfirmacion', dirtyAntes)
+        .prop('readonly', true);
+
+      $.ajax({
+        url: ENDPOINT_CONFIRMACION,
+        method: 'POST',
+        dataType: 'json',
+        data: payload
+      })
+      .done(function (respuesta) {
+        if (!respuesta || respuesta.ok !== true) {
+          $input.prop('readonly', false);
+          mostrarErrorConfirmacionPrecio(respuesta && respuesta.mensaje);
+          revalidarDatosVencidosPresupuestoPHP();
+          return;
+        }
+
+        $input
+          .val(String(respuesta.importe_persistido ?? payload.importe))
+          .attr('data-fecha-actualizacion', String(respuesta.fecha_actualizacion ?? ''))
+          .data('fecha-actualizacion', String(respuesta.fecha_actualizacion ?? ''))
+          .removeClass('bg-danger')
+          .addClass('bg-success')
+          .prop('readonly', true)
+          .removeData('confirmacionPrecioPresupuestoPendiente')
+          .removeData('confirmacionPrecioPresupuestoIntervenido');
+
+        recalcularDespuesDeConfirmacion($input, respuesta);
+
+        if ($input.data('presupuestoDirtyAntesConfirmacion') === false) {
+          window.presupuestoDirty = false;
+        }
+
+        revalidarDatosVencidosPresupuestoPHP();
+      })
+      .fail(function (xhr) {
+        let mensaje = MENSAJE_ERROR_CONFIRMACION;
+        const json = xhr && xhr.responseJSON ? xhr.responseJSON : null;
+
+        if (json && typeof json.mensaje === 'string' && json.mensaje.trim()) {
+          mensaje = json.mensaje.trim();
+        } else if (xhr && typeof xhr.responseText === 'string' && xhr.responseText.trim()) {
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed && typeof parsed.mensaje === 'string' && parsed.mensaje.trim()) {
+              mensaje = parsed.mensaje.trim();
+            }
+          } catch (err) {
+            mensaje = MENSAJE_ERROR_CONFIRMACION;
+          }
+        }
+
+        $input.prop('readonly', false);
+        mostrarErrorConfirmacionPrecio(mensaje);
+        revalidarDatosVencidosPresupuestoPHP();
+      })
+      .always(function () {
+        $input.removeData('confirmacionPrecioPresupuestoPendiente');
+      });
+    }
+
+    $(document)
+      .off('focusin.presu-confirmar-precio input.presu-confirmar-precio blur.presu-confirmar-precio keydown.presu-confirmar-precio', precioSel)
+      .on('focusin.presu-confirmar-precio', precioSel, function () {
+        $(this).data('presupuestoDirtyAntesConfirmacion', !!window.presupuestoDirty);
+      })
+      .on('input.presu-confirmar-precio', precioSel, function () {
+        if ($(this).data('confirmacionPrecioPresupuestoPendiente')) return;
+        $(this).data('confirmacionPrecioPresupuestoIntervenido', true);
+      })
+      .on('blur.presu-confirmar-precio', precioSel, function () {
+        confirmarPrecioPresupuestoPHP(this);
+      })
+      .on('keydown.presu-confirmar-precio', precioSel, function (e) {
+        if (e.key !== 'Enter') return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        confirmarPrecioPresupuestoPHP(this);
+      });
+
+    $(function () {
+      if ($(rootSel).length) {
+        revalidarDatosVencidosPresupuestoPHP();
+      }
+    });
+  })();
+
+  (function bindAlertaPreciosVencidosAperturaPresupuestoPHP() {
+    const collapseSel = '#collapsePresupuesto';
+    const preciosVencidosSel = '#contenedorPresupuestoGenerado .precio-unitario.bg-danger, #contenedorPresupuestoGenerado .valor-jornal.bg-danger';
+
+    function hayPreciosVencidosPresupuesto() {
+      return $(preciosVencidosSel).length > 0;
+    }
+
+    function mostrarAlertaPreciosVencidosPresupuesto() {
+      if (!hayPreciosVencidosPresupuesto()) return;
+
+      const alertDanger = [
+        false,
+        '<H3><strong>VALORES DESACTUALIZADOS</H3>',
+        'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.',
+        'OK',
+        false,
+        false,
+        true,
+        '#dc3545',
+        '#fff',
+        '#198754',
+        '#fff'
+      ];
+
+      if (typeof sAlertConfirmV2 === 'function') {
+        sAlertConfirmV2(alertDanger);
+        return;
+      }
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'VALORES DESACTUALIZADOS',
+          text: 'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.',
+          confirmButtonText: 'OK'
+        });
+      }
+    }
+
+    $(document)
+      .off('shown.bs.collapse.presu-alerta-vencidos hidden.bs.collapse.presu-alerta-vencidos', collapseSel)
+      .on('shown.bs.collapse.presu-alerta-vencidos', collapseSel, function () {
+        const $collapse = $(this);
+        if ($collapse.data('alertaPreciosVencidosMostradaEnApertura')) return;
+
+        $collapse.data('alertaPreciosVencidosMostradaEnApertura', true);
+        mostrarAlertaPreciosVencidosPresupuesto();
+      })
+      .on('hidden.bs.collapse.presu-alerta-vencidos', collapseSel, function () {
+        $(this).removeData('alertaPreciosVencidosMostradaEnApertura');
+      });
+
+    $(function () {
+      const $collapse = $(collapseSel);
+      if ($collapse.length && $collapse.hasClass('show')) {
+        window.setTimeout(function () {
+          if ($collapse.data('alertaPreciosVencidosMostradaEnApertura')) return;
+
+          $collapse.data('alertaPreciosVencidosMostradaEnApertura', true);
+          mostrarAlertaPreciosVencidosPresupuesto();
+        }, 0);
+      }
+    });
+  })();
 
 
   // 1) dropzone -> input
@@ -915,7 +1290,6 @@ $(document)
         source_id_presu_tarea: source_tarea_id,
         tarea
       };
-      console.log('Tarea archivable (preview):', window.__tareaArchivadaPreview);
       // === AJAX: enviar al controlador unificado ===
       $.ajax({
         url: '../03-controller/presupuestos_guardar.php',
@@ -993,6 +1367,38 @@ $(document)
   };
 
   // Reemplazo global: ignora la versión vieja de presupuestoGuardar.js
+  function aplicarMapeoLineasPresupuestoGuardado(mapeo) {
+    if (!mapeo || typeof mapeo !== 'object') return;
+
+    (mapeo.materiales || []).forEach((item) => {
+      const idAnterior = item && item.id_ptm_anterior ? String(item.id_ptm_anterior) : '';
+      const idNuevo = item && item.id_ptm ? String(item.id_ptm) : '';
+      if (!idAnterior || !idNuevo) return;
+
+      const $input = $('#contenedorPresupuestoGenerado .precio-unitario').filter(function () {
+        return String($(this).data('id-ptm') || '') === idAnterior;
+      }).first();
+
+      if ($input.length) {
+        $input.attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
+      }
+    });
+
+    (mapeo.mano_obra || []).forEach((item) => {
+      const idAnterior = item && item.id_ptmo_anterior ? String(item.id_ptmo_anterior) : '';
+      const idNuevo = item && item.id_ptmo ? String(item.id_ptmo) : '';
+      if (!idAnterior || !idNuevo) return;
+
+      const $input = $('#contenedorPresupuestoGenerado .valor-jornal').filter(function () {
+        return String($(this).data('id-ptmo') || '') === idAnterior;
+      }).first();
+
+      if ($input.length) {
+        $input.attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
+      }
+    });
+  }
+
   window.presupuestoGuardar = async function (idPresuOpcional) {
     try {
       if (presupuestoEdicionComercialBloqueada()) {
@@ -1041,12 +1447,14 @@ $(document)
           const id_material = $tr.data('material-id');
           if (!id_material) return;
   
+          const id_ptm          = $tr.find('.precio-unitario').data('id-ptm') || null;
           const nombre           = ($tr.find('td').eq(0).text() || '').trim();
           const cantidad         = parseFloat($tr.find('.cantidad-material').val()) || 0;
           const precio_unitario  = parseFloat($tr.find('.precio-unitario').val()) || 0;
           const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
   
           materiales.push({
+            id_ptm: id_ptm ? String(id_ptm) : null,
             id_material: String(id_material),
             nombre,
             cantidad,
@@ -1064,6 +1472,7 @@ $(document)
           const jornal_id = $tr.data('jornal_id');
           if (!jornal_id) return;
         
+          const id_ptmo          = $tr.find('.valor-jornal').data('id-ptmo') || null;
           const nombre           = ($tr.find('td').eq(0).text() || '').trim();
           const cantidad         = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0; // operarios
           const dias             = parseFloat($tr.find('.dias-mano-obra').val()) || 0;
@@ -1072,6 +1481,7 @@ $(document)
           const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
         
           mano_obra.push({
+            id_ptmo: id_ptmo ? String(id_ptmo) : null,
             jornal_id: String(jornal_id),
             nombre,
             cantidad,        // operarios
@@ -1156,6 +1566,8 @@ $(document)
         // limpiar buffers correctos
         window.fotosNuevasPorTarea     = {};
         window.fotosEliminadasPorTarea = {};
+
+        aplicarMapeoLineasPresupuestoGuardado(resp.lineas || null);
 
         if (typeof window.marcarPresupuestoComoGuardado === 'function') {
           window.marcarPresupuestoComoGuardado();

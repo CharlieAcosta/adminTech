@@ -139,6 +139,40 @@ return [
 - `07-funciones_js/accordionVisita.js` genera el PDF emitido desde el frontend y para calle/localidad/partido/provincia debe leer primero el `<select>` real y solo usar Select2 como fallback visual; el detalle de cada tarea respeta formato basico saneado como negrita, cursiva, subrayado y listas.
 - `01-views/seguimiento_form.php` aplica un ajuste estetico local al editor enriquecido del detalle dentro de la card de tarea del presupuesto: en esta vista el interlineado y el espacio entre bloques se comprimen al maximo estetico acordado para mostrar mas texto visible sin afectar ni el HTML guardado ni los estilos usados al generar el PDF.
 - `01-views/seguimiento_form.php` y `07-funciones_js/accordionVisita.js` tambien mantienen coordinado el layout de la card de tarea del presupuesto: desde `md` en adelante, la columna izquierda reparte en mitades el espacio disponible entre el editor de detalle y el bloque de imagenes. La pila vertical de utilidades queda al pie de la columna derecha dentro de `tarea-total`, y `Util real final`, `% Utilidad` y `Subtotal Tarea` comparten el mismo ancho fijo visual que los botones superiores de esa columna para no desalinearse ni desbordar. La barra inferior completa de la card usa todo el ancho con `Guardar tarea` y `Traer tarea` a la izquierda; a la derecha, los impuestos grises viven en una subfila flexible pegada al borde del `Subtotal Tarea`, y ese `Subtotal Tarea` reserva su propia columna fija alineada exactamente debajo de la pila de utilidades, con la misma separacion vertical que existe entre los botones de la pila superior, con la misma altura visual fija que los botones grises de esa fila y con los botones grises apenas mas compactos para conservar aire sin romper la fila. En mobile siguen apilados con altura automatica.
+
+## Actualizacion de precios en Presupuesto
+
+### Circuito PHP de presupuestos existentes
+
+- Los precios vencidos renderizados por PHP se confirman desde `03-controller/presupuestos_guardar.php` con `funcion=confirmarPrecioPresupuesto`.
+- La confirmacion actualiza el catalogo y el snapshot de la linea actual del presupuesto, recalcula `subtotal_fila` y no modifica la cabecera ni el estado comercial.
+- Confirmar el mismo importe tambien renueva la fecha de origen del precio.
+- El guardado completo valida todos los catalogos antes de eliminar lineas: preserva snapshots historicos existentes sin modificacion de importe, valida contra catalogo las lineas nuevas o modificadas y conserva las fechas de origen correspondientes.
+- Como el guardado recrea lineas, la respuesta incluye el mapeo de IDs nuevos y `07-funciones_js/accordionPresupuesto.js` actualiza `data-id-ptm` y `data-id-ptmo` en el DOM.
+
+### Circuito dinamico generado desde Visita
+
+- Los precios vencidos del presupuesto generado dinamicamente se confirman con `funcion=confirmarPrecioCatalogoPresupuestoDinamico`.
+- Este circuito actualiza solo el catalogo porque todavia no existen `id_presupuesto`, `id_ptm` ni `id_ptmo`.
+- Ya no usa `simpleUpdateInDB()` para materiales ni jornales de presupuesto dinamico.
+- El guardado posterior crea los snapshots desde el catalogo validado y persiste las fechas actuales de origen.
+
+### UX y reglas de botones
+
+- Rojo (`bg-danger`) indica precio vencido editable; verde (`bg-success`) indica precio vigente confirmado o vigente por fecha.
+- La advertencia de valores desactualizados se muestra al abrir el accordion Presupuesto o al cargarlo ya abierto, no durante foco, input, Enter, blur ni revalidaciones posteriores.
+- La confirmacion puede ejecutarse con Enter o blur despues de intervencion del usuario; Enter seguido de blur genera una sola solicitud.
+- La revalidacion posterior a una confirmacion es silenciosa: mantiene bloqueado Guardar/Emitir si quedan vencidos y respeta el resto de bloqueos del presupuesto.
+- Guardar queda bloqueado mientras existan precios vencidos o no haya cambios pendientes validos; Generar documento queda disponible solo cuando no hay cambios pendientes ni bloqueos comerciales/workflow.
+
+### Riesgo tecnico
+
+- `materiales` sigue usando motor MyISAM, por lo que no hay atomicidad ACID completa sobre ese catalogo.
+- Para materiales se usa `GET_LOCK()` cooperativo, relectura y compensacion compare-and-set cuando corresponde; el lock solo coordina consumidores que respeten el mismo convenio.
+- `tipo_jornales` y los snapshots de presupuesto operan dentro del comportamiento transaccional disponible para sus tablas.
+- `previsitas` tambien mantiene una ventana residual de concurrencia por su motor actual; los flujos reducen el riesgo con validaciones previas y relecturas.
+- Se recomienda migrar `materiales` y `previsitas` a InnoDB en una etapa futura para cerrar la brecha transaccional.
+
 - `07-funciones_js/presupuestosAcciones.js` concentra el modal `Historial de presupuesto`: consume el endpoint `obtenerHistorialComercialPresupuesto`, renderiza las acciones disponibles en filas separadas como el diseno original del modal, deja la tabla simplificada en `Fecha`, `Usuario`, `Accion` y `Comentarios`, y antes de ejecutar una accion del modal abre un SweetAlert con textarea para capturar el comentario manual de esa accion. La accion `Reabrir` se muestra solo cuando el estado actual queda en `Cancelado` o `Rechazado` y el usuario tiene permisos, mientras que `OC` se muestra solo cuando el estado comercial actual queda en `Aprobado`, se pinta en verde y por ahora solo abre una alerta de funcionalidad en desarrollo, sin registrar movimientos en el historial. Ese mismo archivo tambien mantiene sincronizado el listado: cuando el estado pasa a `Aprobado`, `Rechazado` o `Cancelado`, desaparece el icono `Editar` y el motivo del bloqueo queda en el tooltip de `Visualizar`; al `Reabrir`, `Editar` vuelve a mostrarse. Como ese alert vive encima de un modal Bootstrap, libera temporalmente `focusin.bs.modal` mientras el textarea esta abierto y restaura el focus trap al cerrarlo. Al cerrar el modal principal tambien se limpian los ids cacheados para evitar contexto residual entre aperturas.
 - `01-views/seguimiento_de_obra_listado.php`, `03-controller/presupuestosController.php` y `04-modelo/presupuestosModel.php` hacen que el listado arranque cargando desde SQL solo `30 dias` sobre `Ingreso` y que la botonera de tiempo (`15 dias`, `30 dias`, `Trimestre`, `Semestre`, `Año`) recargue la grilla por AJAX contra backend en lugar de filtrar solo lo ya cargado en memoria; los filtros rapidos de `Visita` y `Presupuesto` corren sobre la instancia actual de DataTables y ahora se mantienen por separado para poder combinarse entre si, mientras que `Todos` deja de bajar toda la base por defecto: la grilla queda vacia hasta que `Buscar` tenga al menos 3 caracteres, momento en que la consulta global pasa a SQL usando ese termino. Si `Todos` sigue activo pero se prende al menos un filtro rapido, la vista ya no sale de ese modo ni vuelve a un rango temporal: recarga por AJAX todo el subconjunto que coincide con esos filtros rapidos, y desde ahi `Buscar` vuelve a comportarse como filtro cliente sobre esa grilla ya acotada; al apagar el ultimo filtro rapido, `Todos` conserva su modo original y `Buscar` vuelve a consultar toda la base. La recarga AJAX del listado tambien invalida respuestas viejas y aborta solicitudes pendientes para que clics rapidos entre rangos o cambios de busqueda no dejen visible un resultado desactualizado, y cada reconstruccion de la grilla vuelve a pasar por una unica rutina que restablece la busqueda cliente y reaplica los filtros rapidos antes del redraw para no perder resultados al cambiar de rango con filtros activos. En modo `Todos`, el input `Buscar` ya no debe vaciarse durante esas reconstrucciones: la vista restaura el valor visible y, si el usuario estaba tipeando, tambien devuelve foco y cursor al nuevo input de DataTables. El aviso para `Todos` ya no usa `SweetAlert`: se inyecta inline dentro del bloque central del toolbar de DataTables, justo entre `Mostrar` y `Buscar`, y se prende o apaga simplemente al activar o desactivar ese modo. Importante: el despacho AJAX directo de `03-controller/presupuestosController.php` debe ejecutarse al final del archivo, despues de que PHP haya corrido los bloques `if (!function_exists(...))` que declaran helpers usados por `poblarDatableAll()`; si se lo deja arriba, los cambios de rango y `Todos + Buscar` fallan con `Fatal error` y el frontend aparenta erróneamente que no hay datos. El listado ahora tambien muestra una alerta visible si una recarga AJAX falla, en vez de vaciar la tabla en silencio.
 - `01-views/seguimiento_de_obra_listado.php`, `03-controller/presupuestosController.php`, `04-modelo/presupuestoGeneradoModel.php` y `dist/css/custom.css` agregan la columna visible `Requerimiento tecnico` del listado de seguimiento alimentada desde `previsitas.requerimiento_tecnico`; el texto visible usa la misma regla corta del presupuesto (primer delimitador entre punto, coma, guion medio, asterisco o dos puntos; si no aparece ninguno, primeras 12 palabras), se muestra en sentence case (todo minusculas salvo la primera letra) solo despues de intentar reparar bytes en `Windows-1252`/`ISO-8859-1` y mojibake clasico para no degradar registros historicos, la busqueda general conserva el texto completo mediante `data-search`, las primeras cuatro columnas del cuerpo de la grilla usan una tipografia apenas mas compacta para recuperar ancho con `ID` en negrita, `ID`/`Ingreso`/`CUIT` tienen tambien menor ancho asignado y padding lateral mas chico con `nowrap`, y `Fecha`/`Hora` quedaron mas compactas con menor ancho asignado, `nowrap` y padding lateral reducido.
@@ -413,6 +447,13 @@ docker compose exec db mysql -uroot -p
 - No se detectaron tests automatizados ni un pipeline de CI documentado dentro del repo.
 - La verificacion hoy parece ser principalmente manual.
 - Existen cambios SQL recientes en `11-migraciones_sql/`, por lo que conviene revisar el estado del working tree antes de hacer merges o deploys.
+
+### Pantalla de modulos
+
+- La vista activa se construye en `01-views/panel.php` con bloques `info-box` de AdminLTE y visibilidad condicionada por el perfil de la sesion.
+- La grilla usa `#modulos-grid` y `modulo-card`: cada card mide `100px` en escritorio y `156px` hasta `1199.98px`, con altura uniforme y estilos acotados a esta pantalla.
+- El sector derecho usa CSS Grid con filas `auto minmax(40px, auto)` y `row-gap: 4px`: titulo arriba y espacio reservado para alertas abajo, incluso cuando esta vacio.
+- Perfiles, navegacion y alertas conservan su logica PHP, orden, colores, textos y cantidades dinamicas.
 
 ## Recomendaciones para seguir mejorando la documentacion
 

@@ -96,6 +96,358 @@ if (!function_exists('renderizarHtmlSeguroMailPresupuestos')) {
     }
 }
 
+if (!function_exists('extensionesPermitidasAdjuntosAdicionalesDocumentoEmitido')) {
+    function extensionesPermitidasAdjuntosAdicionalesDocumentoEmitido(): array
+    {
+        return ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'jpg', 'jpeg', 'png'];
+    }
+}
+
+if (!function_exists('mimePermitidosAdjuntosAdicionalesDocumentoEmitido')) {
+    function mimePermitidosAdjuntosAdicionalesDocumentoEmitido(): array
+    {
+        return [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/plain',
+            'image/jpeg',
+            'image/png',
+            'application/octet-stream',
+            'application/zip',
+        ];
+    }
+}
+
+if (!function_exists('mimePermitidosPorExtensionAdjuntoAdicionalDocumentoEmitido')) {
+    function mimePermitidosPorExtensionAdjuntoAdicionalDocumentoEmitido(string $extension): array
+    {
+        $mapa = [
+            'pdf' => ['application/pdf'],
+            'doc' => ['application/msword', 'application/octet-stream'],
+            'docx' => [
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/zip',
+                'application/octet-stream',
+            ],
+            'xls' => ['application/vnd.ms-excel', 'application/octet-stream'],
+            'xlsx' => [
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/zip',
+                'application/octet-stream',
+            ],
+            'txt' => ['text/plain', 'application/octet-stream'],
+            'jpg' => ['image/jpeg'],
+            'jpeg' => ['image/jpeg'],
+            'png' => ['image/png'],
+        ];
+
+        return $mapa[strtolower(trim($extension))] ?? [];
+    }
+}
+
+if (!function_exists('tamanoMaximoAdjuntoAdicionalDocumentoEmitido')) {
+    function tamanoMaximoAdjuntoAdicionalDocumentoEmitido(): int
+    {
+        return 5 * 1024 * 1024;
+    }
+}
+
+if (!function_exists('normalizarArchivosAdjuntosAdicionalesDocumentoEmitido')) {
+    function normalizarArchivosAdjuntosAdicionalesDocumentoEmitido(array $files): array
+    {
+        if (empty($files) || !isset($files['name'])) {
+            return [];
+        }
+
+        $normalizados = [];
+
+        if (is_array($files['name'])) {
+            $total = count($files['name']);
+            for ($i = 0; $i < $total; $i++) {
+                $error = isset($files['error'][$i]) ? (int)$files['error'][$i] : UPLOAD_ERR_NO_FILE;
+                $name = (string)($files['name'][$i] ?? '');
+                $tmpName = (string)($files['tmp_name'][$i] ?? '');
+
+                if ($error === UPLOAD_ERR_NO_FILE && $name === '' && $tmpName === '') {
+                    continue;
+                }
+
+                $normalizados[] = [
+                    'name' => $name,
+                    'type' => (string)($files['type'][$i] ?? ''),
+                    'tmp_name' => $tmpName,
+                    'error' => $error,
+                    'size' => (int)($files['size'][$i] ?? 0),
+                ];
+            }
+
+            return $normalizados;
+        }
+
+        $error = isset($files['error']) ? (int)$files['error'] : UPLOAD_ERR_NO_FILE;
+        $name = (string)($files['name'] ?? '');
+        $tmpName = (string)($files['tmp_name'] ?? '');
+        if ($error === UPLOAD_ERR_NO_FILE && $name === '' && $tmpName === '') {
+            return [];
+        }
+
+        return [[
+            'name' => $name,
+            'type' => (string)($files['type'] ?? ''),
+            'tmp_name' => $tmpName,
+            'error' => $error,
+            'size' => (int)($files['size'] ?? 0),
+        ]];
+    }
+}
+
+if (!function_exists('sanitizarNombreVisibleAdjuntoAdicionalDocumentoEmitido')) {
+    function sanitizarNombreVisibleAdjuntoAdicionalDocumentoEmitido(string $nombreOriginal, string $extension): string
+    {
+        $nombre = str_replace('\\', '/', trim($nombreOriginal));
+        $nombre = basename($nombre);
+        $nombre = preg_replace('/[\x00-\x1F\x7F]+/', ' ', $nombre);
+        $nombre = trim((string)$nombre);
+
+        $extension = strtolower(trim($extension));
+        $base = trim((string)pathinfo($nombre, PATHINFO_FILENAME));
+        if ($base === '') {
+            $base = 'adjunto';
+        }
+
+        if (function_exists('iconv')) {
+            $convertido = @iconv('UTF-8', 'ASCII//TRANSLIT', $base);
+            if ($convertido !== false && $convertido !== '') {
+                $base = $convertido;
+            }
+        }
+
+        $base = preg_replace('/[\\\\\/:*?"<>|]+/', ' ', $base);
+        $base = preg_replace('/\s+/', ' ', (string)$base);
+        $base = trim((string)$base, " .\t\n\r\0\x0B");
+        $base = preg_replace('/[^A-Za-z0-9._ -]+/', '', (string)$base);
+        $base = preg_replace('/[ ]+/', '_', (string)$base);
+        $base = preg_replace('/_+/', '_', (string)$base);
+        $base = trim((string)$base, '._- ');
+
+        if ($base === '' || $base === '.' || $base === '..') {
+            $base = 'adjunto';
+        }
+
+        $maxBase = 255 - strlen($extension) - 1;
+        if ($maxBase < 1) {
+            throw new RuntimeException('La extension de uno de los adjuntos adicionales es demasiado larga.');
+        }
+
+        if (strlen($base) > $maxBase) {
+            $base = substr($base, 0, $maxBase);
+            $base = trim($base, '._- ');
+            if ($base === '') {
+                $base = 'adjunto';
+            }
+        }
+
+        $nombreFinal = $base . '.' . $extension;
+        if ($nombreFinal === '' || strlen($nombreFinal) > 255) {
+            throw new RuntimeException('El nombre final de uno de los adjuntos adicionales no es valido.');
+        }
+
+        return $nombreFinal;
+    }
+}
+
+if (!function_exists('construirNombreAdjuntoAdicionalDocumentoEmitidoConSufijo')) {
+    function construirNombreAdjuntoAdicionalDocumentoEmitidoConSufijo(string $nombreArchivo, int $contador): string
+    {
+        $extension = strtolower((string)pathinfo($nombreArchivo, PATHINFO_EXTENSION));
+        $base = trim((string)pathinfo($nombreArchivo, PATHINFO_FILENAME), '._- ');
+        if ($base === '') {
+            $base = 'adjunto';
+        }
+
+        $sufijo = sprintf('_%02d', max(2, $contador));
+        $maxBase = 255 - strlen($extension) - 1 - strlen($sufijo);
+        if ($maxBase < 1) {
+            throw new RuntimeException('No se pudo resolver un nombre duplicado de adjunto adicional.');
+        }
+
+        if (strlen($base) > $maxBase) {
+            $base = substr($base, 0, $maxBase);
+            $base = trim($base, '._- ');
+            if ($base === '') {
+                $base = 'adjunto';
+            }
+        }
+
+        return $base . $sufijo . '.' . $extension;
+    }
+}
+
+if (!function_exists('resolverNombresDuplicadosAdjuntosAdicionalesDocumentoEmitido')) {
+    function resolverNombresDuplicadosAdjuntosAdicionalesDocumentoEmitido(array $adjuntos): array
+    {
+        $vistos = [];
+
+        foreach ($adjuntos as $idx => $adjunto) {
+            $nombreBase = (string)($adjunto['nombre_archivo'] ?? '');
+            if ($nombreBase === '') {
+                throw new RuntimeException('El nombre final de uno de los adjuntos adicionales no es valido.');
+            }
+
+            $nombreFinal = $nombreBase;
+            $contador = 1;
+            while (isset($vistos[strtolower($nombreFinal)])) {
+                $contador++;
+                $nombreFinal = construirNombreAdjuntoAdicionalDocumentoEmitidoConSufijo($nombreBase, $contador);
+            }
+
+            $vistos[strtolower($nombreFinal)] = true;
+            $adjuntos[$idx]['nombre_archivo'] = $nombreFinal;
+        }
+
+        return $adjuntos;
+    }
+}
+
+if (!function_exists('validarArchivoAdjuntoAdicionalDocumentoEmitido')) {
+    function validarArchivoAdjuntoAdicionalDocumentoEmitido(array $archivo): array
+    {
+        if (empty($archivo) || !isset($archivo['tmp_name'])) {
+            throw new RuntimeException('No se recibio uno de los adjuntos adicionales.');
+        }
+
+        $error = (int)($archivo['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($error !== UPLOAD_ERR_OK) {
+            throw new RuntimeException('Error al recibir uno de los adjuntos adicionales.');
+        }
+
+        $tmp = (string)($archivo['tmp_name'] ?? '');
+        if ($tmp === '' || !file_exists($tmp) || !is_uploaded_file($tmp)) {
+            throw new RuntimeException('Uno de los adjuntos adicionales no es valido.');
+        }
+
+        $size = (int)($archivo['size'] ?? 0);
+        if ($size <= 0) {
+            throw new RuntimeException('Uno de los adjuntos adicionales esta vacio.');
+        }
+
+        if ($size > tamanoMaximoAdjuntoAdicionalDocumentoEmitido()) {
+            throw new RuntimeException('Cada adjunto adicional debe pesar como maximo 5 MB.');
+        }
+
+        $nombreOriginal = trim((string)($archivo['name'] ?? ''));
+        if ($nombreOriginal === '') {
+            throw new RuntimeException('Uno de los adjuntos adicionales no tiene nombre de archivo.');
+        }
+
+        $nombreParaExtension = basename(str_replace('\\', '/', $nombreOriginal));
+        $extension = strtolower((string)pathinfo($nombreParaExtension, PATHINFO_EXTENSION));
+        if ($extension === '' || !in_array($extension, extensionesPermitidasAdjuntosAdicionalesDocumentoEmitido(), true)) {
+            throw new RuntimeException('Solo se permiten adjuntos PDF, Word, Excel, JPG, PNG o texto.');
+        }
+
+        if (!function_exists('finfo_open')) {
+            throw new RuntimeException('El servidor no tiene fileinfo disponible para validar adjuntos adicionales.');
+        }
+
+        $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+        if (!$finfo) {
+            throw new RuntimeException('No se pudo inicializar fileinfo para validar adjuntos adicionales.');
+        }
+
+        $mimeDetectado = @finfo_file($finfo, $tmp);
+        @finfo_close($finfo);
+        $mimeType = is_string($mimeDetectado) && $mimeDetectado !== ''
+            ? $mimeDetectado
+            : 'application/octet-stream';
+
+        if (!in_array($mimeType, mimePermitidosAdjuntosAdicionalesDocumentoEmitido(), true)) {
+            throw new RuntimeException('Uno de los adjuntos adicionales no tiene un formato permitido.');
+        }
+
+        $mimePorExtension = mimePermitidosPorExtensionAdjuntoAdicionalDocumentoEmitido($extension);
+        if ($mimePorExtension && !in_array($mimeType, $mimePorExtension, true)) {
+            throw new RuntimeException('Uno de los adjuntos adicionales no coincide con la extension indicada.');
+        }
+
+        $nombreArchivo = sanitizarNombreVisibleAdjuntoAdicionalDocumentoEmitido($nombreOriginal, $extension);
+
+        return [
+            'tmp_name' => $tmp,
+            'nombre_archivo' => $nombreArchivo,
+            'size' => $size,
+            'mime_type' => $mimeType,
+            'extension' => $extension,
+            'original_name' => $nombreOriginal,
+        ];
+    }
+}
+
+if (!function_exists('validarAdjuntosAdicionalesDocumentoEmitido')) {
+    function validarAdjuntosAdicionalesDocumentoEmitido(array $files): array
+    {
+        $normalizados = normalizarArchivosAdjuntosAdicionalesDocumentoEmitido($files);
+        if (!$normalizados) {
+            return [];
+        }
+
+        $validados = [];
+        foreach ($normalizados as $archivo) {
+            $validados[] = validarArchivoAdjuntoAdicionalDocumentoEmitido($archivo);
+        }
+
+        return resolverNombresDuplicadosAdjuntosAdicionalesDocumentoEmitido($validados);
+    }
+}
+
+if (!function_exists('adjuntosAdicionalesSmtpValidadosDocumentoEmitido')) {
+    function adjuntosAdicionalesSmtpValidadosDocumentoEmitido(array $adjuntosAdicionales): array
+    {
+        if (!$adjuntosAdicionales) {
+            return [];
+        }
+
+        $validados = [];
+        foreach ($adjuntosAdicionales as $adjunto) {
+            if (!is_array($adjunto)) {
+                throw new RuntimeException('Uno de los adjuntos adicionales no tiene una estructura valida.');
+            }
+
+            $tmpName = trim((string)($adjunto['tmp_name'] ?? ''));
+            $nombreArchivo = trim((string)($adjunto['nombre_archivo'] ?? ''));
+
+            if ($tmpName === '' || $nombreArchivo === '') {
+                throw new RuntimeException('Uno de los adjuntos adicionales no tiene archivo temporal o nombre visible.');
+            }
+
+            if (!is_file($tmpName) || !is_readable($tmpName)) {
+                throw new RuntimeException('Uno de los adjuntos adicionales no esta disponible para adjuntar.');
+            }
+
+            $validados[] = [
+                'tmp_name' => $tmpName,
+                'nombre_archivo' => $nombreArchivo,
+            ];
+        }
+
+        return $validados;
+    }
+}
+
+if (!function_exists('agregarAdjuntosAdicionalesSmtpDocumentoEmitido')) {
+    function agregarAdjuntosAdicionalesSmtpDocumentoEmitido($mail, array $adjuntosAdicionales): void
+    {
+        $adjuntosValidados = adjuntosAdicionalesSmtpValidadosDocumentoEmitido($adjuntosAdicionales);
+
+        foreach ($adjuntosValidados as $adjunto) {
+            $mail->addAttachment($adjunto['tmp_name'], $adjunto['nombre_archivo']);
+        }
+    }
+}
+
 if (!function_exists('sanitizarMensajeErrorTransporteSmtpMailPresupuestos')) {
     function sanitizarMensajeErrorTransporteSmtpMailPresupuestos(string $mensaje, array $config = []): string
     {
@@ -564,6 +916,76 @@ if (!function_exists('registrarEnvioDocumentoEmitidoPresupuestoEnConexion')) {
     }
 }
 
+if (!function_exists('validarNombresAdjuntosAdicionalesEnvioDocumentoEmitido')) {
+    function validarNombresAdjuntosAdicionalesEnvioDocumentoEmitido(array $adjuntosAdicionales): array
+    {
+        $nombres = [];
+
+        foreach ($adjuntosAdicionales as $adjunto) {
+            if (!is_array($adjunto)) {
+                throw new RuntimeException('Uno de los adjuntos adicionales no tiene una estructura valida para registrar.');
+            }
+
+            $nombreArchivo = (string)($adjunto['nombre_archivo'] ?? '');
+            if (trim($nombreArchivo) === '') {
+                throw new RuntimeException('Uno de los adjuntos adicionales no tiene nombre para registrar.');
+            }
+
+            $longitud = function_exists('mb_strlen')
+                ? mb_strlen($nombreArchivo, 'UTF-8')
+                : strlen($nombreArchivo);
+            if ($longitud > 255) {
+                throw new RuntimeException('El nombre de uno de los adjuntos adicionales supera el maximo permitido.');
+            }
+
+            $nombres[] = $nombreArchivo;
+        }
+
+        return $nombres;
+    }
+}
+
+if (!function_exists('registrarAdjuntosAdicionalesEnvioDocumentoEmitidoEnConexion')) {
+    function registrarAdjuntosAdicionalesEnvioDocumentoEmitidoEnConexion(mysqli $db, int $idEnvio, array $adjuntosAdicionales): int
+    {
+        if (!$adjuntosAdicionales) {
+            return 0;
+        }
+
+        if ($idEnvio <= 0) {
+            throw new RuntimeException('Envio invalido para registrar adjuntos adicionales.');
+        }
+
+        if (!tabla_existe($db, 'presupuesto_documentos_emitidos_envios_adjuntos')) {
+            throw new RuntimeException('La tabla de adjuntos adicionales de envios no existe en la base de datos.');
+        }
+
+        $nombres = validarNombresAdjuntosAdicionalesEnvioDocumentoEmitido($adjuntosAdicionales);
+        if (!$nombres) {
+            return 0;
+        }
+
+        $sql = "
+            INSERT INTO presupuesto_documentos_emitidos_envios_adjuntos
+                (id_envio, nombre_archivo)
+            VALUES
+                (?, ?)
+        ";
+        $stmt = stmt_or_throw($db, $sql);
+        $insertados = 0;
+
+        foreach ($nombres as $nombreArchivo) {
+            mysqli_stmt_bind_param($stmt, 'is', $idEnvio, $nombreArchivo);
+            mysqli_stmt_execute($stmt);
+            $insertados++;
+        }
+
+        mysqli_stmt_close($stmt);
+
+        return $insertados;
+    }
+}
+
 if (!function_exists('registrarEnvioDocumentoEmitidoPresupuestoDB')) {
     function registrarEnvioDocumentoEmitidoPresupuestoDB(array $data): array
     {
@@ -671,7 +1093,7 @@ if (!function_exists('actualizarEstadoPresupuestoEnviado')) {
 }
 
 if (!function_exists('enviarDocumentoEmitidoPorSmtpPresupuesto')) {
-    function enviarDocumentoEmitidoPorSmtpPresupuesto(array $config, array $detalle, array $payload): array
+    function enviarDocumentoEmitidoPorSmtpPresupuesto(array $config, array $detalle, array $payload, array $adjuntosAdicionales = []): array
     {
         if (!cargarComposerAutoloadMailPresupuestos()) {
             return [
@@ -734,6 +1156,7 @@ if (!function_exists('enviarDocumentoEmitidoPorSmtpPresupuesto')) {
             $mail->Body = renderizarHtmlSeguroMailPresupuestos((string)$payload['cuerpo']);
             $mail->AltBody = sanitizarCuerpoTextoPlanoMailPresupuestos((string)$payload['cuerpo']);
             $mail->addAttachment((string)$detalle['ruta_absoluta'], (string)$detalle['nombre_archivo']);
+            agregarAdjuntosAdicionalesSmtpDocumentoEmitido($mail, $adjuntosAdicionales);
             $mail->send();
 
             return ['ok' => true, 'respuesta' => 'SMTP OK'];
@@ -892,7 +1315,7 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuesto')) {
 }
 
 if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
-    function procesarEnvioDocumentoEmitidoPresupuestoModoActivo(array $input, int $idUsuario): array
+    function procesarEnvioDocumentoEmitidoPresupuestoModoActivo(array $input, int $idUsuario, array $archivosAdjuntosAdicionales = []): array
     {
         $idDocumentoEmitido = (int)($input['id_documento_emitido'] ?? 0);
         if ($idDocumentoEmitido <= 0 || $idUsuario <= 0) {
@@ -937,6 +1360,12 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
             $cuerpo = construirCuerpoDocumentoEmitidoPresupuesto($detalle);
         }
 
+        try {
+            $adjuntosAdicionales = validarAdjuntosAdicionalesDocumentoEmitido($archivosAdjuntosAdicionales);
+        } catch (Throwable $e) {
+            return ['ok' => false, 'msg' => $e->getMessage()];
+        }
+
         $resultadoTransporte = [];
         $estadoEnvio = 'fallido';
         $mensajeError = '';
@@ -955,7 +1384,7 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
                 'cco_emails' => $ccoEmails,
                 'asunto' => $asunto,
                 'cuerpo' => $cuerpo,
-            ]);
+            ], $adjuntosAdicionales);
 
             if (!empty($resultadoTransporte['ok'])) {
                 $estadoEnvio = 'enviado';
@@ -1010,6 +1439,7 @@ if (!function_exists('procesarEnvioDocumentoEmitidoPresupuestoModoActivo')) {
                 'mensaje_error' => $estadoEnvio === 'fallido' ? $mensajeError : '',
                 'respuesta_transporte' => (string)($resultadoTransporte['respuesta'] ?? ''),
             ]);
+            registrarAdjuntosAdicionalesEnvioDocumentoEmitidoEnConexion($db, $idEnvio, $adjuntosAdicionales);
 
             $estadoActualizado = false;
             if ($debeImpactarCircuitoComercial) {
