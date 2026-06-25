@@ -11,6 +11,7 @@ require_once $BASE . '/../04-modelo/presupuestoDocumentosEmitidosEnviosModel.php
 require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
 require_once $BASE . '/../04-modelo/presupuestoComercialLockModel.php';
 require_once $BASE . '/../04-modelo/previsitaWorkflowModel.php';
+require_once $BASE . '/../04-modelo/ordenCompraWorkflowModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -63,6 +64,154 @@ try {
     $funcion = $_POST['funcion'] ?? '';
 
     switch ($funcion) {
+        case 'confirmarPrecioPresupuesto':
+            $idUsuarioSesion = isset($_SESSION['usuario']['id_usuario'])
+                ? (int)$_SESSION['usuario']['id_usuario']
+                : 0;
+            $perfilSesion = obtenerPerfilUsuarioSolicitudPresupuesto();
+
+            if ($idUsuarioSesion <= 0 || $perfilSesion === '') {
+                http_response_code(401);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'No hay sesion de usuario activa.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            if (!perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion)) {
+                http_response_code(403);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'El perfil no tiene permiso para confirmar precios del presupuesto.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $leerEnteroPositivo = static function (string $campo): ?int {
+                $valor = $_POST[$campo] ?? null;
+                if (!is_string($valor) && !is_int($valor)) {
+                    return null;
+                }
+                $valor = trim((string)$valor);
+                if (!preg_match('/^[1-9]\d*$/D', $valor)) {
+                    return null;
+                }
+                $entero = filter_var($valor, FILTER_VALIDATE_INT, [
+                    'options' => ['min_range' => 1],
+                ]);
+
+                return $entero === false ? null : (int)$entero;
+            };
+
+            $idPresupuesto = $leerEnteroPositivo('id_presupuesto');
+            $idLinea = $leerEnteroPositivo('id_linea');
+            $idCatalogo = $leerEnteroPositivo('id_catalogo');
+            $tipo = is_string($_POST['tipo'] ?? null) ? trim((string)$_POST['tipo']) : '';
+            $importe = $_POST['importe'] ?? null;
+
+            if ($idPresupuesto === null || $idLinea === null || $idCatalogo === null) {
+                http_response_code(400);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'Los identificadores deben ser enteros positivos.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            try {
+                $resultado = confirmarPrecioPresupuesto(
+                    $tipo,
+                    $idPresupuesto,
+                    $idLinea,
+                    $idCatalogo,
+                    $importe
+                );
+            } catch (Throwable $e) {
+                error_log('confirmarPrecioPresupuesto controller: ' . $e->getMessage());
+                http_response_code(500);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'No se pudo confirmar la vigencia del precio.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $httpStatus = isset($resultado['http_status']) ? (int)$resultado['http_status'] : 200;
+            unset($resultado['http_status']);
+            http_response_code($httpStatus);
+            echo json_encode($resultado, JSON_UNESCAPED_UNICODE);
+            exit;
+
+        case 'confirmarPrecioCatalogoPresupuestoDinamico':
+            $idUsuarioSesion = isset($_SESSION['usuario']['id_usuario'])
+                ? (int)$_SESSION['usuario']['id_usuario']
+                : 0;
+            $perfilSesion = obtenerPerfilUsuarioSolicitudPresupuesto();
+
+            if ($idUsuarioSesion <= 0 || $perfilSesion === '') {
+                http_response_code(401);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'No hay sesion de usuario activa.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            if (!perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion)) {
+                http_response_code(403);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'El perfil no tiene permiso para confirmar precios del presupuesto.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $valorIdCatalogo = $_POST['id_catalogo'] ?? null;
+            if (!is_string($valorIdCatalogo) && !is_int($valorIdCatalogo)) {
+                $idCatalogo = null;
+            } else {
+                $valorIdCatalogo = trim((string)$valorIdCatalogo);
+                $idCatalogo = preg_match('/^[1-9]\d*$/D', $valorIdCatalogo)
+                    ? filter_var($valorIdCatalogo, FILTER_VALIDATE_INT, [
+                        'options' => ['min_range' => 1],
+                    ])
+                    : null;
+            }
+
+            $tipo = is_string($_POST['tipo'] ?? null) ? trim((string)$_POST['tipo']) : '';
+            $importe = $_POST['importe'] ?? null;
+
+            if ($idCatalogo === null || $idCatalogo === false) {
+                http_response_code(400);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'El identificador de catalogo debe ser un entero positivo.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            try {
+                $resultado = confirmarPrecioCatalogoPresupuestoDinamico(
+                    $tipo,
+                    (int)$idCatalogo,
+                    $importe
+                );
+            } catch (Throwable $e) {
+                error_log('confirmarPrecioCatalogoPresupuestoDinamico controller: ' . $e->getMessage());
+                http_response_code(500);
+                echo json_encode([
+                    'ok' => false,
+                    'mensaje' => 'No se pudo confirmar la vigencia del precio.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $httpStatus = isset($resultado['http_status']) ? (int)$resultado['http_status'] : 200;
+            unset($resultado['http_status']);
+            http_response_code($httpStatus);
+            echo json_encode($resultado, JSON_UNESCAPED_UNICODE);
+            exit;
+
         case 'listar_tareas_archivadas':
             // === NUEVO: listado de plantillas ===
             require_once $BASE . '/../04-modelo/tareasArchivadasListarModel.php';
@@ -262,7 +411,11 @@ try {
                 }
 
                 echo json_encode(
-                    procesarEnvioDocumentoEmitidoPresupuestoModoActivo($_POST, $idUsuario),
+                    procesarEnvioDocumentoEmitidoPresupuestoModoActivo(
+                        $_POST,
+                        $idUsuario,
+                        $_FILES['adjuntos_adicionales'] ?? []
+                    ),
                     JSON_UNESCAPED_UNICODE
                 );
                 exit;
@@ -525,6 +678,14 @@ foreach ($_POST as $key => $val) {
 
 // 3) Llamada al modelo
 $resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea);
+
+    if (empty($resultado['ok']) && isset($resultado['http_status'])) {
+        $httpStatusGuardar = (int)$resultado['http_status'];
+        if ($httpStatusGuardar >= 400 && $httpStatusGuardar <= 599) {
+            http_response_code($httpStatusGuardar);
+        }
+        unset($resultado['http_status']);
+    }
 
     if (!empty($resultado['ok'])) {
         $idPresupuestoGuardado = isset($resultado['id_presupuesto']) ? (int)$resultado['id_presupuesto'] : 0;
