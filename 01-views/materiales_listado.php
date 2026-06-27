@@ -7,6 +7,17 @@ include_once '../03-controller/materialesController.php'; //conecta a la base de
 
 // poblarDatableAll(columnas de la tablas, php o ajax, filtro); [reference] 
 $filas = poblarDatableAll(array('id_material', 'producto', 'marca', 'descripcion_corta', 'unidad_venta', 'contenido', 'unidad_medida', 'rendimiento', 'unidad_rendimiento', 'precio_unidad_venta','estado_material'), 'php', 'todos');
+
+$vigenciaValoresPermitidos = ['desactualizada', 'proxima_vencer', 'vigente'];
+$vigenciaParam = (isset($_GET['vigencia']) && in_array($_GET['vigencia'], $vigenciaValoresPermitidos, true))
+    ? $_GET['vigencia']
+    : '';
+$vigenciaTextoMap = [
+    'desactualizada' => 'Desactualizada',
+    'proxima_vencer' => 'Próxima a vencer',
+    'vigente'        => 'Vigente',
+];
+$vigenciaTexto = $vigenciaParam !== '' ? $vigenciaTextoMap[$vigenciaParam] : '';
 ?>
 
 <!DOCTYPE html>
@@ -32,6 +43,78 @@ $filas = poblarDatableAll(array('id_material', 'producto', 'marca', 'descripcion
   <!-- Agregar SweetAlert2 CSS -->
   <link rel="stylesheet" href="../05-plugins/sweetalert2/sweetalert2.min.css">
 
+  <style>
+    #current_table tbody td {
+      vertical-align: middle !important;
+    }
+
+    #current_table thead th.materiales-col-actualizacion,
+    #current_table tbody td.materiales-col-actualizacion {
+      text-align: left !important;
+    }
+
+    #current_table thead th.materiales-col-vigencia,
+    #current_table tbody td.materiales-col-vigencia {
+      text-align: center !important;
+    }
+
+    #current_table tbody td.materiales-col-vigencia {
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      vertical-align: middle !important;
+    }
+
+    #current_table .materiales-actualizacion-fecha {
+      white-space: nowrap;
+    }
+
+    #current_table .materiales-vigencia-minicard {
+      display: inline-flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      width: 120px;
+      height: 34px;
+      padding: .15rem .65rem;
+      border-radius: .32rem;
+      gap: .14rem;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    #current_table .materiales-vigencia-minicard-titulo {
+      font-size: .64rem;
+    }
+
+    #current_table .materiales-vigencia-minicard-dias {
+      font-size: .78rem;
+      font-weight: 600;
+    }
+
+    #current_table .materiales-vigencia-export-separador {
+      display: none;
+    }
+
+    #current_table_wrapper .dataTables_filter {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    #current_table_wrapper .dataTables_filter label {
+      margin-bottom: 0;
+    }
+
+    #current_table_wrapper .quitar-filtro-vigencia {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+  </style>
 
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
@@ -78,15 +161,12 @@ $filas = poblarDatableAll(array('id_material', 'producto', 'marca', 'descripcion
                   <tr>
                     <th>ID</th>
                     <th>Producto</th>
-                    <th>Marca</th>
-                    <th>Descripción</th>
-                    <th>Unidad de venta</th>
-                    <th>contenido</th>
-                    <th>unidad</th>
-                    <th>Rendimiento</th>
-                    <th>unidades</th>
+                    <th>Contenido</th>
+                    <th>Unidades</th>
                     <th>Precio U.V.</th>
                     <th>Estado</th>
+                    <th class="materiales-col-actualizacion">Fecha de referencia</th>
+                    <th class="materiales-col-vigencia">Vigencia</th>
                     <th>Acciones</th>
                   </tr>
                   </thead>
@@ -145,28 +225,86 @@ $filas = poblarDatableAll(array('id_material', 'producto', 'marca', 'descripcion
 <script src="../07-funciones_js/funciones.js"></script>
 
 <script>
+  var vigenciaFiltroParam = <?php echo json_encode($vigenciaParam); ?>;
+  var vigenciaTexto = <?php echo json_encode($vigenciaTexto); ?>;
+  var vigenciaIdx = 7;
+
+  if (vigenciaFiltroParam) {
+    $.fn.dataTable.ext.search.push(function (settings, searchData) {
+      if (settings.nTable.id !== 'current_table') return true;
+      if (!vigenciaFiltroParam) return true;
+      return searchData[vigenciaIdx] === vigenciaFiltroParam;
+    });
+  }
+
+  function configurarFiltroInicialVigencia(api) {
+    var $filterContainer = $('#current_table_wrapper .dataTables_filter');
+    var $searchInput = $filterContainer.find('input[type="search"]');
+    if (!$searchInput.length) return;
+    if ($filterContainer.find('.quitar-filtro-vigencia').length) return;
+
+    $searchInput.val(vigenciaTexto);
+
+    var $btnQuitarFiltro = $('<button>', {
+      type: 'button',
+      'class': 'btn btn-sm btn-outline-secondary quitar-filtro-vigencia',
+      title: 'Quitar filtro de vigencia',
+      'aria-label': 'Quitar filtro de vigencia',
+      html: '<i class="fas fa-times mr-1" aria-hidden="true"></i>Quitar filtro'
+    });
+    $filterContainer.append($btnQuitarFiltro);
+
+    var searchEl = $searchInput[0];
+
+    var cleanupFiltroVigencia = function () {
+      vigenciaFiltroParam = null;
+      searchEl.removeEventListener('input', cleanupFiltroVigencia, true);
+      var url = new URL(window.location.href);
+      url.searchParams.delete('vigencia');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      $btnQuitarFiltro.remove();
+    };
+
+    searchEl.addEventListener('input', cleanupFiltroVigencia, true);
+
+    $btnQuitarFiltro.on('click', function () {
+      cleanupFiltroVigencia();
+      $searchInput.val('');
+      api.search('').page('first').draw();
+    });
+  }
+
   $(function () {
     $("#current_table").DataTable({
       "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
       "responsive": true, "lengthChange": true, "autoWidth": false,
+      "pageLength": 100, "lengthMenu": [10, 25, 50, 100],
       "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
-      "language": {"url": "//cdn.datatables.net/plug-ins/1.12.1/i18n/es-ES.json"},
+      "language": {"url": "../05-plugins/datatables/es-ES.json"},
+      "columnDefs": [
+        { "responsivePriority": 1, "targets": 1 },
+        { "responsivePriority": 2, "targets": [6, 7, 8] }
+      ],
       "columns": [
-          { "width": "1%" },    // id 
-          null,    // producto
-          null,   // marca
-          null,   // descripción 
-          { "width": "1%" },    // unidad de venta
-          { "width": "1%" },    // contenido
-          { "width": "1%" },    // unidad
-          { "width": "1%" },    // rendimiento
-          { "width": "1%" },    // unidades
-          { "width": "1%" },    // precio uv
-          { "width": "1%" },    // estado
-          null     // acciones
-        ], 
-       "order": [[4, "desc"], [5, "asc"], [6, "asc"]] // Ordenar por sexta columna y luego por séptima columna (ambas de forma ascendente)
-    }).buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+          { "width": "4%" },    // ID
+          { "width": "30%" },   // Producto
+          { "width": "6%" },    // Contenido
+          { "width": "8%" },    // Unidades
+          { "width": "10%" },   // Precio U.V.
+          { "width": "8%" },    // Estado
+          { "width": "15%" },   // Fecha de referencia
+          { "width": "12%" },   // Vigencia
+          { "width": "7%" }     // Acciones
+        ],
+      "order": [[6, "asc"]],
+      "initComplete": function () {
+        var api = this.api();
+        api.buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+        if (vigenciaFiltroParam) {
+          configurarFiltroInicialVigencia(api);
+        }
+      }
+    });
   });
 </script>
 </body>
