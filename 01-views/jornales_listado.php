@@ -8,7 +8,18 @@ include_once '../03-controller/jornalesController.php'; // conecta a la base de 
 include_once '../06-funciones_php/auditoria.php';
 registrarNavegacion('TIPO JORNALES - Listado');
 
-$filas = poblarDatableAll(array('jornal_id', 'jornal_descripcion', 'jornal_codigo', 'jornal_valor', 'jornal_estado'), 'php', 'sinEliminados');
+$filas = poblarDatableAll(array('jornal_id', 'jornal_descripcion', 'jornal_codigo', 'jornal_valor', 'updated_at', 'jornal_estado'), 'php', 'sinEliminados');
+
+$vigenciaValoresPermitidos = ['desactualizada', 'proxima_vencer', 'vigente'];
+$vigenciaParam = (isset($_GET['vigencia']) && in_array($_GET['vigencia'], $vigenciaValoresPermitidos, true))
+    ? $_GET['vigencia']
+    : '';
+$vigenciaTextoMap = [
+    'desactualizada' => 'Desactualizada',
+    'proxima_vencer' => 'Próxima a vencer',
+    'vigente'        => 'Vigente',
+];
+$vigenciaTexto = $vigenciaParam !== '' ? $vigenciaTextoMap[$vigenciaParam] : '';
 ?>
 
 <!DOCTYPE html>
@@ -28,6 +39,86 @@ $filas = poblarDatableAll(array('jornal_id', 'jornal_descripcion', 'jornal_codig
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/custom.css">
   <link rel="stylesheet" href="../05-plugins/sweetalert2/sweetalert2.min.css">
+
+  <style>
+    #current_table tbody td {
+      vertical-align: middle !important;
+    }
+
+    #current_table thead th.jornales-col-actualizacion,
+    #current_table tbody td.jornales-col-actualizacion {
+      text-align: left !important;
+    }
+
+    #current_table thead th.jornales-col-vigencia,
+    #current_table tbody td.jornales-col-vigencia {
+      text-align: center !important;
+    }
+
+    #current_table tbody td.jornales-col-vigencia {
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      vertical-align: middle !important;
+    }
+
+    #current_table .jornales-actualizacion-fecha {
+      white-space: nowrap;
+    }
+
+    #current_table .jornales-vigencia-minicard {
+      display: inline-flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      width: 120px;
+      height: 34px;
+      padding: .15rem .65rem;
+      border-radius: .32rem;
+      gap: .14rem;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    #current_table .jornales-vigencia-minicard-titulo {
+      font-size: .64rem;
+    }
+
+    #current_table .jornales-vigencia-minicard-dias {
+      font-size: .78rem;
+      font-weight: 600;
+    }
+
+    #current_table .jornales-vigencia-export-separador {
+      display: none;
+    }
+
+    #current_table tbody td.jornales-col-acciones {
+      padding-left: .65rem !important;
+      padding-right: .65rem !important;
+      font-size: inherit;
+      white-space: normal;
+    }
+
+    #current_table_wrapper .dataTables_filter {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    #current_table_wrapper .dataTables_filter label {
+      margin-bottom: 0;
+    }
+
+    #current_table_wrapper .quitar-filtro-vigencia {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+  </style>
 
   <script src='../05-plugins/pdfmake/pdfmake.min.js'></script>
   <script src='../05-plugins/pdfmake/vfs_fonts.js'></script>
@@ -66,6 +157,8 @@ $filas = poblarDatableAll(array('jornal_id', 'jornal_descripcion', 'jornal_codig
                       <th>Código</th>
                       <th>Valor</th>
                       <th>Estado</th>
+                      <th class="jornales-col-actualizacion">Última actualización</th>
+                      <th class="jornales-col-vigencia">Vigencia</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
@@ -105,22 +198,81 @@ $filas = poblarDatableAll(array('jornal_id', 'jornal_descripcion', 'jornal_codig
 <script src="../07-funciones_js/funciones.js"></script>
 
 <script>
+  var vigenciaFiltroParam = <?php echo json_encode($vigenciaParam); ?>;
+  var vigenciaTexto = <?php echo json_encode($vigenciaTexto); ?>;
+  var vigenciaIdx = 6;
+
+  if (vigenciaFiltroParam) {
+    $.fn.dataTable.ext.search.push(function (settings, searchData) {
+      if (settings.nTable.id !== 'current_table') return true;
+      if (!vigenciaFiltroParam) return true;
+      return searchData[vigenciaIdx] === vigenciaFiltroParam;
+    });
+  }
+
+  function configurarFiltroInicialVigencia(api) {
+    var $filterContainer = $('#current_table_wrapper .dataTables_filter');
+    var $searchInput = $filterContainer.find('input[type="search"]');
+    if (!$searchInput.length) return;
+    if ($filterContainer.find('.quitar-filtro-vigencia').length) return;
+
+    $searchInput.val(vigenciaTexto);
+
+    var $btnQuitarFiltro = $('<button>', {
+      type: 'button',
+      'class': 'btn btn-sm btn-outline-secondary quitar-filtro-vigencia',
+      title: 'Quitar filtro de vigencia',
+      'aria-label': 'Quitar filtro de vigencia',
+      html: '<i class="fas fa-times mr-1" aria-hidden="true"></i>Quitar filtro'
+    });
+    $filterContainer.append($btnQuitarFiltro);
+
+    var searchEl = $searchInput[0];
+
+    var cleanupFiltroVigencia = function () {
+      vigenciaFiltroParam = null;
+      searchEl.removeEventListener('input', cleanupFiltroVigencia, true);
+      var url = new URL(window.location.href);
+      url.searchParams.delete('vigencia');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      $btnQuitarFiltro.remove();
+    };
+
+    searchEl.addEventListener('input', cleanupFiltroVigencia, true);
+
+    $btnQuitarFiltro.on('click', function () {
+      cleanupFiltroVigencia();
+      $searchInput.val('');
+      api.search('').page('first').draw();
+    });
+  }
+
   $(function () {
     $("#current_table").DataTable({
       "dom": '<"dt-top-container"<l><"dt-center-in-div"B><f>r>t<ip>',
       "responsive": true, "lengthChange": true, "autoWidth": false,
+      "pageLength": 100, "lengthMenu": [10, 25, 50, 100],
       "buttons": ["copy", "csv", "excel", "pdf", "print", "colvis"],
       "language": {"url": "../05-plugins/datatables/es-ES.json"},
       "columns": [
         { "width": "5%" },   // ID
-        { "width": "30%" },  // Descripción
-        { "width": "15%" },  // Código
-        { "width": "15%" },  // Valor
-        { "width": "15%" },  // Estado
+        { "width": "29%" },  // Descripción
+        { "width": "14%" },  // Código
+        { "width": "10%" },  // Valor
+        { "width": "10%" },  // Estado
+        { "width": "14%" },  // Última actualización
+        { "width": "8%" },   // Vigencia
         { "width": "10%" }   // Acciones
       ],
-      "order": [[1, "asc"]]
-    }).buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+      "order": [[5, "asc"]],
+      "initComplete": function () {
+        var api = this.api();
+        api.buttons().container().appendTo('#current_table_wrapper .col-md-6:eq(0)');
+        if (vigenciaFiltroParam) {
+          configurarFiltroInicialVigencia(api);
+        }
+      }
+    });
   });
 </script>
 <script src="../07-funciones_js/jornalesAcciones.js"></script>

@@ -1,11 +1,12 @@
 <?php
 include_once '../06-funciones_php/funciones.php';
-include_once '../04-modelo/conectDB.php'; 
+include_once '../04-modelo/conectDB.php';
+
 function modGetAllRegistros($filtro = 'todos') {
     $conexion = conectDB(); // usa mysqli procedural
     $registros = [];
 
-    $sql = "SELECT jornal_id, jornal_descripcion, jornal_codigo, jornal_valor, jornal_estado FROM tipo_jornales";
+    $sql = "SELECT jornal_id, jornal_descripcion, jornal_codigo, jornal_valor, updated_at, jornal_estado FROM tipo_jornales";
 
     if ($filtro === 'sinEliminados') {
         $sql .= " WHERE jornal_estado != 'eliminado'";
@@ -29,4 +30,3 @@ function modGetAllRegistros($filtro = 'todos') {
     return $registros;
 }
 ?>
-
