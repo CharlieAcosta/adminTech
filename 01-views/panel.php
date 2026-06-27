@@ -2,6 +2,7 @@
 session_start();
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
+include_once '../04-modelo/vigenciaCatalogosModel.php';
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 sesion(); //Verifica si hay usuario sesionado
 
@@ -28,6 +29,8 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
+$totalesVigenciaJornales = in_array($perfil, $tipoJornales, true) ? modGetTotalesVigenciaJornales() : null;
+$totalesVigenciaMateriales = in_array($perfil, $materiales, true) ? modGetTotalesVigenciaMateriales() : null;
 $ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
 $ocHabilitadasBandejaAdministrativa = $esPanelOrdenCompraAdministrativa
   ? contarOrdenesCompraHabilitadasBandejaAdministrativa()
@@ -115,6 +118,20 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
 
     #modulos-grid .modulo-card__alertas > small:first-child .badge {
       margin-left: 0 !important;
+    }
+
+    #modulos-grid .modulo-vigencia-indicador {
+      width: 5rem;
+      text-align: center;
+      box-sizing: border-box;
+    }
+
+    #modulos-grid .modulo-vigencia-indicador[data-vigencia-href] {
+      cursor: pointer;
+    }
+
+    #modulos-grid .modulo-vigencia-indicador[data-vigencia-href]:hover {
+      opacity: 0.85;
     }
 
     @media (max-width: 1199.98px) {
@@ -277,7 +294,42 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                   <!-- .info-box-content -->
                   <div class="info-box-content">
                     <h3 class="info-box-text modulo-card__titulo">Materiales</h3>
-                    <div class="modulo-card__alertas"></div>
+                    <div class="modulo-card__alertas">
+                      <?php if ($totalesVigenciaMateriales !== null): ?>
+                        <?php
+                          $md = $totalesVigenciaMateriales['desactualizados'];
+                          $mp = $totalesVigenciaMateriales['proximos_vencer'];
+                          $mv = $totalesVigenciaMateriales['vigentes'];
+                        ?>
+                        <?php if ($md > 0): ?>
+                          <?php $ariaDesact = 'Mostrar ' . $md . ' material' . ($md !== 1 ? 'es' : '') . ' desactualizado' . ($md !== 1 ? 's' : ''); ?>
+                          <small><span class="badge badge-danger ml-2 modulo-vigencia-indicador"
+                            data-vigencia-href="../01-views/materiales_listado.php?vigencia=desactualizada"
+                            tabindex="0" role="button"
+                            title="Mostrar materiales desactualizados"
+                            aria-label="<?php echo htmlspecialchars($ariaDesact, ENT_QUOTES, 'UTF-8'); ?>"
+                          ><?php echo $md; ?><small><small><br>Desact.</small></small></span></small>
+                        <?php endif; ?>
+                        <?php if ($mp > 0): ?>
+                          <?php $ariaProx = 'Mostrar ' . $mp . ' material' . ($mp !== 1 ? 'es' : '') . ' próximo' . ($mp !== 1 ? 's' : '') . ' a vencer'; ?>
+                          <small><span class="badge badge-warning ml-2 modulo-vigencia-indicador"
+                            data-vigencia-href="../01-views/materiales_listado.php?vigencia=proxima_vencer"
+                            tabindex="0" role="button"
+                            title="Mostrar materiales próximos a vencer"
+                            aria-label="<?php echo htmlspecialchars($ariaProx, ENT_QUOTES, 'UTF-8'); ?>"
+                          ><?php echo $mp; ?><small><small><br>Próx. venc.</small></small></span></small>
+                        <?php endif; ?>
+                        <?php if ($mv > 0): ?>
+                          <?php $ariaVig = 'Mostrar ' . $mv . ' material' . ($mv !== 1 ? 'es' : '') . ' vigente' . ($mv !== 1 ? 's' : ''); ?>
+                          <small><span class="badge badge-success ml-2 modulo-vigencia-indicador"
+                            data-vigencia-href="../01-views/materiales_listado.php?vigencia=vigente"
+                            tabindex="0" role="button"
+                            title="Mostrar materiales vigentes"
+                            aria-label="<?php echo htmlspecialchars($ariaVig, ENT_QUOTES, 'UTF-8'); ?>"
+                          ><?php echo $mv; ?><small><small><br>Vigentes</small></small></span></small>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                    </div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -331,7 +383,42 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
                   <!-- .info-box-content -->
                   <div class="info-box-content">
                     <h3 class="info-box-text modulo-card__titulo">Tipos de Jornales</h3>
-                    <div class="modulo-card__alertas"></div>
+                    <div class="modulo-card__alertas">
+                      <?php if ($totalesVigenciaJornales !== null): ?>
+                        <?php
+                          $jd = $totalesVigenciaJornales['desactualizadas'];
+                          $jp = $totalesVigenciaJornales['proximas_vencer'];
+                          $jv = $totalesVigenciaJornales['vigentes'];
+                        ?>
+                        <?php if ($jd > 0): ?>
+                          <?php $ariaDesact = 'Mostrar ' . $jd . ' jornal' . ($jd !== 1 ? 'es' : '') . ' desactualizado' . ($jd !== 1 ? 's' : ''); ?>
+                          <small><span class="badge badge-danger ml-2 modulo-vigencia-indicador"
+                            data-vigencia-href="../01-views/jornales_listado.php?vigencia=desactualizada"
+                            tabindex="0" role="button"
+                            title="Mostrar jornales desactualizados"
+                            aria-label="<?php echo htmlspecialchars($ariaDesact, ENT_QUOTES, 'UTF-8'); ?>"
+                          ><?php echo $jd; ?><small><small><br>Desact.</small></small></span></small>
+                        <?php endif; ?>
+                        <?php if ($jp > 0): ?>
+                          <?php $ariaProx = 'Mostrar ' . $jp . ' jornal' . ($jp !== 1 ? 'es' : '') . ' próximo' . ($jp !== 1 ? 's' : '') . ' a vencer'; ?>
+                          <small><span class="badge badge-warning ml-2 modulo-vigencia-indicador"
+                            data-vigencia-href="../01-views/jornales_listado.php?vigencia=proxima_vencer"
+                            tabindex="0" role="button"
+                            title="Mostrar jornales próximos a vencer"
+                            aria-label="<?php echo htmlspecialchars($ariaProx, ENT_QUOTES, 'UTF-8'); ?>"
+                          ><?php echo $jp; ?><small><small><br>Próx. venc.</small></small></span></small>
+                        <?php endif; ?>
+                        <?php if ($jv > 0): ?>
+                          <?php $ariaVig = 'Mostrar ' . $jv . ' jornal' . ($jv !== 1 ? 'es' : '') . ' vigente' . ($jv !== 1 ? 's' : ''); ?>
+                          <small><span class="badge badge-success ml-2 modulo-vigencia-indicador"
+                            data-vigencia-href="../01-views/jornales_listado.php?vigencia=vigente"
+                            tabindex="0" role="button"
+                            title="Mostrar jornales vigentes"
+                            aria-label="<?php echo htmlspecialchars($ariaVig, ENT_QUOTES, 'UTF-8'); ?>"
+                          ><?php echo $jv; ?><small><small><br>Vigentes</small></small></span></small>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                    </div>
                   </div>
                 <!-- /.info-box-content -->
               </div>
@@ -377,6 +464,28 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
 <!-- AdminLTE App -->
 <script src="../dist/js/adminlte.min.js"></script>
 <!-- Page specific script -->
+
+<script>
+  $(function () {
+    $('[data-vigencia-href]').on('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var destino = this.getAttribute('data-vigencia-href');
+      if (destino) {
+        window.location.assign(destino);
+      }
+    }).on('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        var destino = this.getAttribute('data-vigencia-href');
+        if (destino) {
+          window.location.assign(destino);
+        }
+      }
+    });
+  });
+</script>
 
 </body>
 </html>

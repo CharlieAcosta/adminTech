@@ -144,6 +144,64 @@ return [
 
 ## Actualizacion de precios en Presupuesto
 
+### Indicadores de vigencia en el panel de modulos
+
+- El boton `Tipos de Jornales` en `01-views/panel.php` muestra tres minicards con los totales actuales de jornales clasificados por vigencia, calculados dinamicamente al cargar la pantalla.
+- Los totales se obtienen con una sola consulta agregada sobre `tipo_jornales` usando `UNIX_TIMESTAMP` para garantizar el mismo criterio de dias completos de 24 horas que usa el listado.
+- Universo: registros con `jornal_estado != 'eliminado'`, identico al filtro `sinEliminados` del listado.
+- Rangos: `0-22 dias completos` → Vigentes (verde), `23-30 dias completos` → Proximas a vencer (amarillo), `31+ dias completos` → Desactualizadas (rojo). Fechas nulas, futuras o con `updated_at IS NULL` quedan excluidas de los tres totales.
+- Origen del dato: `tipo_jornales.updated_at`, renovado por MySQL `ON UPDATE CURRENT_TIMESTAMP` y por los circuitos de confirmacion de precios desde Presupuesto.
+- Cada indicador se muestra unicamente cuando su total es mayor que cero; los indicadores con total cero no se renderizan. Si los tres totales son cero, la segunda fila queda vacia sin elementos visibles ni espacios reservados.
+- La funcion `modGetTotalesVigenciaJornales()` vive en `04-modelo/vigenciaCatalogosModel.php` y es invocada desde `panel.php` solo para los perfiles que tienen acceso al modulo.
+
+### Indicadores de vigencia en el panel — minicards clickeables
+
+- El boton `Materiales` y el boton `Tipos de Jornales` en `01-views/panel.php` muestran indicadores de vigencia clickeables que abren el listado correspondiente con el filtro ya aplicado.
+- Los totales se obtienen con una sola consulta agregada usando `UNIX_TIMESTAMP`. Cada indicador se muestra solo cuando su total es mayor que cero.
+- **Minicards clickeables:** al hacer clic sobre un indicador de vigencia del panel, el listado se abre filtrado exclusivamente por esa categoría de vigencia. El clic sobre el resto del botón (título, ícono) abre el listado completo sin filtro.
+- **Parámetro de URL:** `vigencia`. Valores aceptados: `desactualizada`, `proxima_vencer`, `vigente`. Cualquier otro valor (ausente, vacío, manipulado) abre el listado sin filtro.
+- **URLs filtradas — Materiales:**
+  - `materiales_listado.php?vigencia=desactualizada`
+  - `materiales_listado.php?vigencia=proxima_vencer`
+  - `materiales_listado.php?vigencia=vigente`
+- **URLs filtradas — Jornales:**
+  - `jornales_listado.php?vigencia=desactualizada`
+  - `jornales_listado.php?vigencia=proxima_vencer`
+  - `jornales_listado.php?vigencia=vigente`
+- La funcion `modGetTotalesVigenciaMateriales()` vive en `04-modelo/vigenciaCatalogosModel.php`; usa `COALESCE(log_edicion, log_alta)` para clasificar todos los materiales no eliminados. La funcion `modGetTotalesVigenciaJornales()` vive en el mismo archivo.
+- El CSS de ancho fijo usa la clase `modulo-vigencia-indicador`; los indicadores clickeables agregan `cursor: pointer` y `opacity: 0.85` al pasar el mouse (via `[data-vigencia-href]`). No hay subrayados, bordes ni animaciones adicionales.
+
+### Filtro de vigencia en los listados
+
+- Los listados `jornales_listado.php` y `materiales_listado.php` aceptan el parámetro GET `vigencia` para filtrar la columna Vigencia al cargar.
+- El parámetro se valida en PHP contra la lista blanca `['desactualizada', 'proxima_vencer', 'vigente']`. Un valor inválido o ausente no aplica ningún filtro.
+- El filtro actúa exclusivamente sobre la columna Vigencia mediante `$.fn.dataTable.ext.search` (DataTables orthogonal data `data-search` en el `<td>`). No afecta otras columnas ni la búsqueda global.
+- El campo `Buscar` visible muestra el texto del estado al cargar con filtro (`Desactualizada`, `Próxima a vencer`, `Vigente`).
+- **Quitar el filtro:** cuando el filtro está activo aparece el botón `Quitar filtro` junto al buscador. Al pulsarlo: se elimina el filtro interno, se limpia el buscador, se muestran todos los registros desde la página 1 y se elimina `?vigencia=...` de la URL mediante `history.replaceState`. Una recarga posterior carga el listado completo.
+- **Edición manual del buscador:** al escribir o borrar en el campo `Buscar`, un listener de captura desactiva el filtro de vigencia, elimina `?vigencia=...` de la URL y remueve el botón `Quitar filtro`, antes de que DataTables procese el input como búsqueda global normal. Borrar todo muestra todos los registros.
+- Cuando no hay parámetro `vigencia` (o es inválido): no se muestra el botón, el buscador funciona normalmente y la URL no se modifica.
+- Las exportaciones (CSV, Excel, PDF, etc.) respetan el filtro activo y exportan solo las filas visibles.
+
+### Fecha de actualizacion de jornales
+
+- El listado `01-views/jornales_listado.php` muestra `tipo_jornales.updated_at` como `Última actualización`, después de `Estado`, con formato `d/m/Y H:i:s` y `-` cuando el dato es nulo o inválido. La columna contiene solamente la fecha y DataTables inicia ordenándola en forma cronológica ascendente, de la fecha más antigua a la más reciente.
+- `updated_at` representa la última modificación del registro: MySQL lo renueva mediante `ON UPDATE CURRENT_TIMESTAMP` en la edición general del jornal y los circuitos de confirmación de precios desde Presupuesto lo escriben explícitamente con `NOW()` al renovar `jornal_valor`.
+- La celda conserva el valor SQL `Y-m-d H:i:s` en `data-order` para que DataTables ordene cronológicamente aunque presente la fecha en formato local.
+- La columna independiente `Vigencia`, ubicada entre `Última actualización` y `Acciones`, muestra una minicard de dos líneas para toda fecha válida no futura: verde `Vigente` entre 0 y 22 días completos, amarilla `Próxima a vencer` entre 23 y 30, y roja `Desactualizada` desde 31 días. Fechas futuras, nulas, vacías o inválidas dejan Vigencia vacía. Las tres minicards comparten estructura y altura compacta para no modificar la altura normal de la fila; el cálculo mantiene segundos transcurridos divididos por 86400 en la zona `America/Argentina/Buenos_Aires`. Las exportaciones mantienen la fecha y la vigencia en columnas separadas.
+
+### Fecha de referencia de materiales
+
+- El listado `01-views/materiales_listado.php` muestra la columna `Fecha de referencia` después de `Estado`. Formato `d/m/Y H:i:s`; muestra `-` cuando ninguna fecha disponible es válida. DataTables ordena por esta columna cronológicamente ascendente, de la más antigua a la más reciente.
+- El listado presenta 9 columnas visibles: `ID`, `Producto`, `Contenido`, `Unidades`, `Precio U.V.`, `Estado`, `Fecha de referencia`, `Vigencia`, `Acciones`. Las columnas `Marca`, `Unidad de venta`, `Unidad`, `Rendimiento` y `Descripción` fueron retiradas de la presentación visual; esos campos siguen disponibles en la base de datos y en los formularios.
+- **Prioridad de fecha de referencia:** 1) `log_edicion` si es válida y no futura; 2) `log_alta` como respaldo cuando `log_edicion` es NULL. Materiales nunca editados usan su fecha de alta. Si ambas son nulas o inválidas, la celda muestra `-` y Vigencia queda vacía sin minicard.
+- `log_alta` es `TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP`: MySQL lo completa automáticamente en el INSERT. Nunca se modifica en ediciones ni por el circuito de confirmación de precios.
+- `log_edicion` es `TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP`: se actualiza en cada edición del registro y el circuito de confirmación de precios lo escribe explícitamente con `NOW()`.
+- La celda conserva el valor SQL `Y-m-d H:i:s` en `data-order` para que DataTables ordene cronológicamente aunque presente la fecha en formato local.
+- La columna `Vigencia` muestra minicard de dos líneas: verde `Vigente` (0-22 dias), amarilla `Próxima a vencer` (23-30 dias), roja `Desactualizada` (31+ dias). La minicard se calcula sobre la misma fecha de referencia.
+- Los indicadores del botón Materiales en el panel usan `COALESCE(log_edicion, log_alta)` en la consulta de `modGetTotalesVigenciaMateriales()` (`04-modelo/vigenciaCatalogosModel.php`), garantizando consistencia exacta entre listado y panel: la fecha mostrada en el listado es la misma usada para contabilizar el indicador.
+- La lógica de selección de fecha de referencia y construcción de celdas vive en `construirCeldaActualizacionMaterial()` dentro de `03-controller/materialesController.php`.
+- Materiales sin ninguna fecha válida: no se clasifican ni se contabilizan en el panel.
+
 ### Circuito PHP de presupuestos existentes
 
 - Los precios vencidos renderizados por PHP se confirman desde `03-controller/presupuestos_guardar.php` con `funcion=confirmarPrecioPresupuesto`.

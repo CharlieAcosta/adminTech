@@ -1,4 +1,4 @@
-<?php  
+<?php
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/materialesModel.php'; //conecta a la base de datos
 
@@ -7,55 +7,98 @@ if( isset($_POST['ajax']) && $_POST['ajax']=='on'){
 	poblarDatableAll($_POST['tds'], 'ajax', $_POST['filtro']);
 }
 
-//////// function poblarDatableAll(columnas de la base, php o ajax, filtro){  
+function construirCeldaActualizacionMaterial($logEdicion, $logAlta, DateTimeImmutable $ahoraServidor): array {
+	$fechaFormateada = '-';
+	$fechaOrden = '';
+	$minicardVigencia = '';
+	$dataSearchVigencia = '';
 
-function poblarDatableAll($tds, $via, $filtro){     
-
-   $all_registros = modGetAllRegistros($filtro); 		
-	//var_dump($all_registros); die(); //[DEBUG PERMANENTE]
-
-   $filas = "";
-   		foreach ($all_registros as $key_all_registros => $value_all_registros) {
-
-   		  // en el row el id de la entidad 
-   		  $filas .= '<tr data-id="'.$value_all_registros['id_material'].'">';		
-
-   		  // columnas
-     		  $filas .= '<td>'.$value_all_registros['id_material'].'</td>';
-   		  $filas .= '<td>'.$value_all_registros['producto'].'</td>';
-   		  $filas .= '<td>'.$value_all_registros['marca'].'</td>';
-   		  $filas .= '<td>'.$value_all_registros['descripcion_corta'].'</td>';
-   		  $filas .= '<td class="text-center">'.$value_all_registros['unidad_venta'].'</td>';
-   		  $filas .= '<td class="text-right">'.$value_all_registros['contenido'].'</td>';
-   		  $filas .= '<td class="text-left">'.$value_all_registros['unidad_medida'].'</td>';
-   		  $filas .= '<td class="text-right">'.$value_all_registros['rendimiento'].'</td>';
-   		  $filas .= '<td class="text-left">'.$value_all_registros['unidad_rendimiento'].'</td>';
-   		  $filas .= '<td class="text-left">'.$value_all_registros['precio_unidad_venta'].'</td>';
-   		  $filas .= '<td class="text-center">'.$value_all_registros['estado_material'].'</td>';
-
-   		  // columnas de relleno
-	   	  //$filas .='<td></td>';	  //para relleno en el caso de datos futuros
-
-	   	  // columna de acciones
-   		  $filas .= '<td class="text-center">';
-   		  $filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i>';
-   		  $filas .= '<i class="v-icon-accion p-1 fas fa-edit" data-accion="editar"></i>';
-   		  //$filas .= '<i class="v-icon-accion p-1 fas fa-print" data-accion="pdf"></i>';
-   		  //$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-trash-alt" data-accion="delete" data-id="'.$value_all_registros['id_material'].'"></i>';
-   		  $filas .= '</td>'; 
-
-   		  // cierre de la fila (row)
-			  $filas .='</tr>'; 
-   		}	
-   		//var_dump($filas); die(); //[DEBUG PERMANENTE]
-
-	if($via != 'ajax'){
-		return $filas;
-	}else{
-		echo json_encode($filas, JSON_UNESCAPED_UNICODE);
+	// Prioridad: log_edicion → log_alta → sin fecha
+	$fechaRaw = null;
+	if (is_string($logEdicion) && trim($logEdicion) !== '') {
+		$fechaRaw = trim($logEdicion);
+	} elseif (is_string($logAlta) && trim($logAlta) !== '') {
+		$fechaRaw = trim($logAlta);
 	}
 
+	if ($fechaRaw !== null) {
+		$fechaObjeto = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $fechaRaw);
+		$errores = DateTimeImmutable::getLastErrors();
+		$fechaValida = $fechaObjeto !== false
+			&& ($errores === false
+				|| ($errores['warning_count'] === 0 && $errores['error_count'] === 0));
+
+		if ($fechaValida) {
+			$fechaFormateada = $fechaObjeto->format('d/m/Y H:i:s');
+			$fechaOrden = $fechaObjeto->format('Y-m-d H:i:s');
+			$segundosTranscurridos = $ahoraServidor->getTimestamp() - $fechaObjeto->getTimestamp();
+			if ($segundosTranscurridos >= 0) {
+				$diasTranscurridos = intdiv($segundosTranscurridos, 86400);
+				if ($diasTranscurridos <= 22) {
+					$tituloVigencia = 'Vigente';
+					$clasesColorVigencia = 'bg-success text-white';
+					$dataSearchVigencia = 'vigente';
+				} elseif ($diasTranscurridos <= 30) {
+					$tituloVigencia = 'Próxima a vencer';
+					$clasesColorVigencia = 'bg-warning text-dark';
+					$dataSearchVigencia = 'proxima_vencer';
+				} else {
+					$tituloVigencia = 'Desactualizada';
+					$clasesColorVigencia = 'bg-danger text-white';
+					$dataSearchVigencia = 'desactualizada';
+				}
+
+				$minicardVigencia = '<span class="materiales-vigencia-minicard ' . $clasesColorVigencia . '">'
+					. '<span class="materiales-vigencia-minicard-titulo">' . $tituloVigencia . '</span>'
+					. '<span class="materiales-vigencia-minicard-dias"><span class="materiales-vigencia-export-separador"> - </span>'
+					. $diasTranscurridos . ' días</span>'
+					. '</span>';
+			}
+		}
+	}
+
+	return [
+		'celda_actualizacion' => '<td class="materiales-col-actualizacion" data-order="'
+			. htmlspecialchars($fechaOrden, ENT_QUOTES, 'UTF-8') . '">'
+			. '<span class="materiales-actualizacion-fecha">'
+			. htmlspecialchars($fechaFormateada, ENT_QUOTES, 'UTF-8')
+			. '</span></td>',
+		'celda_vigencia' => '<td class="materiales-col-vigencia" data-search="' . $dataSearchVigencia . '">' . $minicardVigencia . '</td>',
+	];
+}
+
+function poblarDatableAll($tds, $via, $filtro) {
+	$all_registros = modGetAllRegistros($filtro);
+	$ahoraServidor = new DateTimeImmutable('now');
+	$filas = "";
+	foreach ($all_registros as $value_all_registros) {
+
+		$filas .= '<tr data-id="' . $value_all_registros['id_material'] . '">';
+
+		$filas .= '<td>' . $value_all_registros['id_material'] . '</td>';
+		$filas .= '<td>' . htmlspecialchars($value_all_registros['producto'] ?? '', ENT_QUOTES, 'UTF-8') . '</td>';
+		$filas .= '<td class="text-right">' . $value_all_registros['contenido'] . '</td>';
+		$filas .= '<td class="text-left">' . htmlspecialchars($value_all_registros['unidad_rendimiento'] ?? '', ENT_QUOTES, 'UTF-8') . '</td>';
+		$filas .= '<td class="text-right">' . $value_all_registros['precio_unidad_venta'] . '</td>';
+		$filas .= '<td class="text-center">' . htmlspecialchars($value_all_registros['estado_material'] ?? '', ENT_QUOTES, 'UTF-8') . '</td>';
+
+		$celdasActualizacion = construirCeldaActualizacionMaterial($value_all_registros['log_edicion'] ?? null, $value_all_registros['log_alta'] ?? null, $ahoraServidor);
+		$filas .= $celdasActualizacion['celda_actualizacion'];
+		$filas .= $celdasActualizacion['celda_vigencia'];
+
+		$filas .= '<td class="text-center">';
+		$filas .= '<i class="v-icon-accion p-1 fas fa-solid fa-eye" data-accion="visual"></i>';
+		$filas .= '<i class="v-icon-accion p-1 fas fa-edit" data-accion="editar"></i>';
+		$filas .= '</td>';
+
+		$filas .= '</tr>';
+	}
+
+	if ($via != 'ajax') {
+		return $filas;
+	} else {
+		echo json_encode($filas, JSON_UNESCAPED_UNICODE);
+	}
 }
 
 ?>
-
