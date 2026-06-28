@@ -535,23 +535,16 @@
       return;
     }
 
-    if (hayVencidos) {
-      $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
-      $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
-      return;
-    }
+    $btnGuardar
+      .prop('disabled', !presupuestoDirty)
+      .toggleClass('btn-success', presupuestoDirty)
+      .toggleClass('btn-secondary', !presupuestoDirty);
 
-    if (presupuestoDirty) {
-      $btnGuardar.prop('disabled', false).addClass('btn-success').removeClass('btn-secondary');
-      $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
-      return;
-    }
-
-    $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
+    const puedeEmitir = !!idPresupuesto && !presupuestoDirty && !hayVencidos;
     $btnEmitir
-      .prop('disabled', !idPresupuesto)
-      .toggleClass('btn-primary', !!idPresupuesto)
-      .toggleClass('btn-secondary', !idPresupuesto);
+      .prop('disabled', !puedeEmitir)
+      .toggleClass('btn-primary', puedeEmitir)
+      .toggleClass('btn-secondary', !puedeEmitir);
   }
 
   function marcarPresupuestoComoModificadoSilencioso() {
@@ -560,6 +553,48 @@
     window.presupuestoDirty = true;
     actualizarEstadoAccionesPresupuestoSilencioso();
   }
+  window.marcarPresupuestoComoModificadoSilencioso = marcarPresupuestoComoModificadoSilencioso;
+
+  function obtenerResumenPreciosVencidosPresupuesto() {
+    const $root = $('#contenedorPresupuestoGenerado');
+    const contarLineas = function (selector) {
+      const lineas = new Set();
+      $root.find(selector).each(function () {
+        if (String(this.type || '').toLowerCase() === 'hidden') return;
+        const fila = $(this).closest('tr').get(0);
+        lineas.add(fila || this);
+      });
+      return lineas.size;
+    };
+
+    const cantidadMaterialesVencidos = contarLineas('.precio-unitario.bg-danger');
+    const cantidadJornalesVencidos = contarLineas('.valor-jornal.bg-danger');
+    const cantidadTotalVencidos = cantidadMaterialesVencidos + cantidadJornalesVencidos;
+    const categorias = [];
+
+    if (cantidadMaterialesVencidos > 0) {
+      categorias.push(`${cantidadMaterialesVencidos} ${cantidadMaterialesVencidos === 1 ? 'material' : 'materiales'}`);
+    }
+    if (cantidadJornalesVencidos > 0) {
+      categorias.push(`${cantidadJornalesVencidos} ${cantidadJornalesVencidos === 1 ? 'jornal' : 'jornales'}`);
+    }
+
+    const introduccion = cantidadTotalVencidos === 1
+      ? 'Se detectó 1 valor desactualizado:'
+      : `Se detectaron ${cantidadTotalVencidos} valores desactualizados:`;
+    const html = cantidadTotalVencidos > 0
+      ? `<p>${introduccion}<br><strong>${categorias.join(' y ')}</strong>.</p>`
+        + '<p>Puede guardar el borrador, pero deberá actualizar todos los valores antes de generar el documento.</p>'
+      : '';
+
+    return {
+      cantidadMaterialesVencidos,
+      cantidadJornalesVencidos,
+      cantidadTotalVencidos,
+      html
+    };
+  }
+  window.obtenerResumenPreciosVencidosPresupuesto = obtenerResumenPreciosVencidosPresupuesto;
 
   // limpieza por namespace
   $(document)
@@ -678,8 +713,8 @@
               && ($inputActual.hasClass('precio-unitario') || $inputActual.hasClass('valor-jornal'))
             );
 
-            if (!esConfirmacionPrecioVencido && typeof window.marcarPresupuestoComoModificado === 'function') {
-              window.marcarPresupuestoComoModificado();
+            if (!esConfirmacionPrecioVencido) {
+              marcarPresupuestoComoModificadoSilencioso();
             }
 
             // Recalcular la fila que cambió
@@ -718,9 +753,7 @@
           .on('input.presu change.presu', bloqueInputs, function () {
             const $card = $(this).closest('.tarea-card');
 
-            if (typeof window.marcarPresupuestoComoModificado === 'function') {
-              window.marcarPresupuestoComoModificado();
-            }
+            marcarPresupuestoComoModificadoSilencioso();
 
             if (typeof window.actualizarSubtotalesBloque === 'function') {
               window.actualizarSubtotalesBloque($card);
@@ -739,9 +772,7 @@
           .on('change.presu', `${rootSel} .incluir-en-total`, function () {
             const $card = $(this).closest('.tarea-card');
 
-            if (typeof window.marcarPresupuestoComoModificado === 'function') {
-              window.marcarPresupuestoComoModificado();
-            }
+            marcarPresupuestoComoModificadoSilencioso();
 
             if (typeof window.actualizarTotalesPorTarea === 'function') {
               _safeActualizarTotalesPorTarea($card, this);
@@ -763,9 +794,13 @@
   // === Confirmacion de vigencia para precios renderizados por PHP ===
   (function bindConfirmacionPrecioPresupuestoPHP() {
     const rootSel = '#contenedorPresupuestoGenerado';
-    const precioSel = `${rootSel} .precio-unitario.bg-danger, ${rootSel} .valor-jornal.bg-danger`;
+    const precioSel = [
+      `${rootSel} .precio-unitario.bg-danger[data-confirmar-precio-tipo="material"][data-id-presupuesto][data-id-ptm][data-id-material]`,
+      `${rootSel} .valor-jornal.bg-danger[data-confirmar-precio-tipo="jornal"][data-id-presupuesto][data-id-ptmo][data-id-jornal]`
+    ].join(',');
     const ENDPOINT_CONFIRMACION = '../03-controller/presupuestos_guardar.php';
     const MENSAJE_ERROR_CONFIRMACION = 'No se pudo confirmar la vigencia del precio.';
+    let sweetContextualActivo = false;
 
     function mostrarErrorConfirmacionPrecio(mensaje) {
       const texto = String(mensaje || MENSAJE_ERROR_CONFIRMACION).trim() || MENSAJE_ERROR_CONFIRMACION;
@@ -799,23 +834,6 @@
       actualizarEstadoAccionesPresupuestoSilencioso();
     }
 
-    function normalizarImporteTextoConfirmacionPHP(valor) {
-      const texto = String(valor ?? '').trim();
-      const partes = texto.match(/^(\d+)([\.,])(\d+)$/);
-
-      if (!partes || partes[3].length <= 2) {
-        return texto;
-      }
-
-      const decimalesSinCeros = partes[3].replace(/0+$/g, '');
-      if (decimalesSinCeros.length > 2) {
-        return texto;
-      }
-
-      const decimales = decimalesSinCeros.padEnd(2, '0');
-      return `${partes[1]}${partes[2]}${decimales}`;
-    }
-
     function leerDatoConfirmacionPrecio($input, nombreAttr) {
       const nombreData = nombreAttr.replace(/^data-/, '');
       const valorAttr = $input.attr(nombreAttr);
@@ -840,7 +858,7 @@
       return `$${entero},${partes[1]}`;
     }
 
-    function obtenerPayloadConfirmacion($input) {
+    function obtenerIdentidadPrecio($input) {
       const tipo = leerDatoConfirmacionPrecio($input, 'data-confirmar-precio-tipo');
       const idPresupuesto = leerDatoConfirmacionPrecio($input, 'data-id-presupuesto')
         || String($(rootSel).data('id_presupuesto') || '').trim();
@@ -853,12 +871,10 @@
 
       return {
         via: 'ajax',
-        funcion: 'confirmarPrecioPresupuesto',
         tipo,
         id_presupuesto: idPresupuesto,
         id_linea: idLinea,
-        id_catalogo: idCatalogo,
-        importe: normalizarImporteTextoConfirmacionPHP($input.val())
+        id_catalogo: idCatalogo
       };
     }
 
@@ -909,109 +925,210 @@
       }
     }
 
-    function confirmarPrecioPresupuestoPHP(input) {
-      const $input = $(input);
-
-      if (!$input.length || !$input.hasClass('bg-danger')) return;
-      if ($input.data('confirmacionPrecioPresupuestoPendiente')) return;
-      if (!$input.data('confirmacionPrecioPresupuestoIntervenido')) return;
-
-      if (presupuestoEdicionBloqueadaParaConfirmar()) {
-        mostrarBloqueoEdicionComercialPresupuesto();
-        return;
-      }
-
-      const payload = obtenerPayloadConfirmacion($input);
-      if (!payloadConfirmacionCompleto(payload)) {
-        mostrarErrorConfirmacionPrecio(MENSAJE_ERROR_CONFIRMACION);
-        return;
-      }
-
-      const dirtyAntes = $input.data('presupuestoDirtyAntesConfirmacion') === undefined
-        ? !!window.presupuestoDirty
-        : !!$input.data('presupuestoDirtyAntesConfirmacion');
-      $input
-        .data('confirmacionPrecioPresupuestoPendiente', true)
-        .data('confirmacionPrecioPresupuestoIntervenido', false)
-        .data('presupuestoDirtyAntesConfirmacion', dirtyAntes)
-        .prop('readonly', true);
-
-      $.ajax({
-        url: ENDPOINT_CONFIRMACION,
-        method: 'POST',
-        dataType: 'json',
-        data: payload
-      })
-      .done(function (respuesta) {
-        if (!respuesta || respuesta.ok !== true) {
-          $input.prop('readonly', false);
-          mostrarErrorConfirmacionPrecio(respuesta && respuesta.mensaje);
-          revalidarDatosVencidosPresupuestoPHP();
-          return;
-        }
-
-        $input
-          .val(String(respuesta.importe_persistido ?? payload.importe))
-          .attr('data-fecha-actualizacion', String(respuesta.fecha_actualizacion ?? ''))
-          .data('fecha-actualizacion', String(respuesta.fecha_actualizacion ?? ''))
-          .removeClass('bg-danger')
-          .addClass('bg-success')
-          .prop('readonly', true)
-          .removeData('confirmacionPrecioPresupuestoPendiente')
-          .removeData('confirmacionPrecioPresupuestoIntervenido');
-
-        recalcularDespuesDeConfirmacion($input, respuesta);
-
-        if ($input.data('presupuestoDirtyAntesConfirmacion') === false) {
-          window.presupuestoDirty = false;
-        }
-
-        revalidarDatosVencidosPresupuestoPHP();
-      })
-      .fail(function (xhr) {
-        let mensaje = MENSAJE_ERROR_CONFIRMACION;
-        const json = xhr && xhr.responseJSON ? xhr.responseJSON : null;
-
-        if (json && typeof json.mensaje === 'string' && json.mensaje.trim()) {
-          mensaje = json.mensaje.trim();
-        } else if (xhr && typeof xhr.responseText === 'string' && xhr.responseText.trim()) {
-          try {
-            const parsed = JSON.parse(xhr.responseText);
-            if (parsed && typeof parsed.mensaje === 'string' && parsed.mensaje.trim()) {
-              mensaje = parsed.mensaje.trim();
-            }
-          } catch (err) {
-            mensaje = MENSAJE_ERROR_CONFIRMACION;
-          }
-        }
-
-        $input.prop('readonly', false);
-        mostrarErrorConfirmacionPrecio(mensaje);
-        revalidarDatosVencidosPresupuestoPHP();
-      })
-      .always(function () {
-        $input.removeData('confirmacionPrecioPresupuestoPendiente');
+    function solicitarPrecioPresupuesto(data) {
+      return new Promise((resolve, reject) => {
+        $.ajax({ url: ENDPOINT_CONFIRMACION, method: 'POST', dataType: 'json', data })
+          .done((respuesta) => respuesta && respuesta.ok === true
+            ? resolve(respuesta)
+            : reject(new Error((respuesta && respuesta.mensaje) || MENSAJE_ERROR_CONFIRMACION)))
+          .fail((xhr) => reject(new Error(
+            (xhr && xhr.responseJSON && xhr.responseJSON.mensaje) || MENSAJE_ERROR_CONFIRMACION
+          )));
       });
     }
 
-    $(document)
-      .off('focusin.presu-confirmar-precio input.presu-confirmar-precio blur.presu-confirmar-precio keydown.presu-confirmar-precio', precioSel)
-      .on('focusin.presu-confirmar-precio', precioSel, function () {
-        $(this).data('presupuestoDirtyAntesConfirmacion', !!window.presupuestoDirty);
-      })
-      .on('input.presu-confirmar-precio', precioSel, function () {
-        if ($(this).data('confirmacionPrecioPresupuestoPendiente')) return;
-        $(this).data('confirmacionPrecioPresupuestoIntervenido', true);
-      })
-      .on('blur.presu-confirmar-precio', precioSel, function () {
-        confirmarPrecioPresupuestoPHP(this);
-      })
-      .on('keydown.presu-confirmar-precio', precioSel, function (e) {
-        if (e.key !== 'Enter') return;
+    function monedaPrecio(valor) {
+      const numero = Number(String(valor ?? '').replace(',', '.'));
+      return Number.isFinite(numero)
+        ? numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : String(valor ?? '');
+    }
 
-        e.preventDefault();
-        e.stopPropagation();
-        confirmarPrecioPresupuestoPHP(this);
+    function escaparHtmlPrecio(valor) {
+      return $('<div>').text(String(valor ?? '')).html();
+    }
+
+    function activarSupresionFocoPrecio($input) {
+      if (!$input || !$input.length) return;
+      $input
+        .data('precioSwalSuppressFocus', true)
+        .attr('data-precio-swal-suppress-focus', 'true');
+      $input[0].blur();
+    }
+
+    function liberarSupresionFocoPrecioCuandoCorresponda($input) {
+      if (!$input || !$input.length) return;
+      const input = $input[0];
+      const siguienteFrame = window.requestAnimationFrame
+        ? window.requestAnimationFrame.bind(window)
+        : (callback) => window.setTimeout(callback, 0);
+
+      const verificarSinFoco = function () {
+        if (document.activeElement === input) {
+          input.blur();
+          window.setTimeout(verificarSinFoco, 0);
+          return;
+        }
+
+        siguienteFrame(function () {
+          if (document.activeElement === input) {
+            input.blur();
+            window.setTimeout(verificarSinFoco, 0);
+            return;
+          }
+
+          $input
+            .removeData('precioSwalSuppressFocus')
+            .removeAttr('data-precio-swal-suppress-focus');
+        });
+      };
+
+      window.setTimeout(verificarSinFoco, 0);
+    }
+
+    async function pedirNuevoPrecioCatalogo(contexto, $input) {
+      const resultado = await Swal.fire({
+        icon: 'warning',
+        title: 'Modificar precio maestro',
+        html: `<p>Precio actual del catálogo: <strong>$${monedaPrecio(contexto.precio_catalogo)}</strong></p>`
+          + '<p>Esta acción modificará el catálogo utilizado por futuras visitas y presupuestos.</p>'
+          + '<p>Los demás presupuestos existentes no serán modificados.</p>',
+        input: 'text',
+        inputLabel: 'Nuevo precio',
+        inputAttributes: { inputmode: 'decimal', autocomplete: 'off' },
+        showCancelButton: true,
+        confirmButtonText: 'Actualizar catálogo y presupuesto',
+        cancelButtonText: 'Volver',
+        confirmButtonColor: '#198754',
+        returnFocus: false,
+        willClose: () => activarSupresionFocoPrecio($input),
+        inputValidator: (valor) => {
+          const texto = String(valor ?? '').trim();
+          if (!/^\d+(?:[\.,]\d{1,2})?$/.test(texto)) return 'Ingresá un importe positivo con hasta dos decimales.';
+          const normalizado = texto.replace(',', '.');
+          const partes = normalizado.split('.');
+          const entero = partes[0].replace(/^0+(?=\d)/, '');
+          if (entero.length > 8 || Number(normalizado) <= 0) return 'El importe debe ser mayor que cero y no superar 99999999,99.';
+          return undefined;
+        }
+      });
+      return resultado.isConfirmed ? String(resultado.value).trim() : null;
+    }
+
+    async function decidirResolucionPrecio(contexto, $input) {
+      const descripcion = escaparHtmlPrecio(contexto.descripcion);
+      const snapshot = monedaPrecio(contexto.precio_snapshot);
+      const catalogo = monedaPrecio(contexto.precio_catalogo);
+      const comun = `<p><strong>${contexto.tipo === 'material' ? 'Material' : 'Jornal'}:</strong> ${descripcion}</p>`;
+      let config;
+      if (contexto.escenario === 'MISMO_PRECIO_CATALOGO_VIGENTE') {
+        config = {
+          icon: 'info', title: 'Actualizar vigencia del presupuesto',
+          html: `${comun}<p>Precio del presupuesto: <strong>$${snapshot}</strong><br>Precio vigente del catálogo: <strong>$${catalogo}</strong></p><p>El importe coincide con el catálogo vigente.<br>Se actualizará únicamente esta línea del presupuesto.</p>`,
+          confirmButtonText: 'Actualizar presupuesto', showCancelButton: true, cancelButtonText: 'Cancelar'
+        };
+      } else if (contexto.escenario === 'MISMO_PRECIO_CATALOGO_VENCIDO') {
+        config = {
+          icon: 'warning', title: 'Confirmar vigencia del precio',
+          html: `${comun}<p>Precio del presupuesto: <strong>$${snapshot}</strong><br>Precio del catálogo: <strong>$${catalogo}</strong></p><p>El catálogo también está desactualizado.</p>`,
+          confirmButtonText: 'Confirmar vigencia', showDenyButton: true, denyButtonText: 'Ingresar otro precio', showCancelButton: true, cancelButtonText: 'Cancelar'
+        };
+      } else if (contexto.escenario === 'DISTINTO_PRECIO_CATALOGO_VIGENTE') {
+        config = {
+          icon: 'warning', title: 'El catálogo tiene un precio más reciente',
+          html: `${comun}<p>Precio del presupuesto: <strong>$${snapshot}</strong><br>Precio vigente del catálogo: <strong>$${catalogo}</strong></p>`,
+          confirmButtonText: `Aplicar $${catalogo} al presupuesto`, showDenyButton: true, denyButtonText: 'Modificar catálogo y presupuesto', showCancelButton: true, cancelButtonText: 'Cancelar'
+        };
+      } else {
+        config = {
+          icon: 'warning', title: 'Presupuesto y catálogo desactualizados',
+          html: `${comun}<p>Precio del presupuesto: <strong>$${snapshot}</strong><br>Precio del catálogo: <strong>$${catalogo}</strong></p><p>El catálogo también superó el período de vigencia.</p>`,
+          confirmButtonText: `Confirmar $${catalogo} y aplicarlo`, showDenyButton: true, denyButtonText: 'Ingresar otro precio', showCancelButton: true, cancelButtonText: 'Cancelar'
+        };
+      }
+      config.confirmButtonColor = '#198754';
+      config.returnFocus = false;
+      config.willClose = () => activarSupresionFocoPrecio($input);
+      const eleccion = await Swal.fire(config);
+      if (eleccion.isDismissed) return null;
+      if (eleccion.isDenied) {
+        const importe = await pedirNuevoPrecioCatalogo(contexto, $input);
+        return importe === null ? null : { accion: 'ACTUALIZAR_CATALOGO_Y_SNAPSHOT', importe };
+      }
+      const acciones = {
+        MISMO_PRECIO_CATALOGO_VIGENTE: 'SINCRONIZAR_SNAPSHOT_DESDE_CATALOGO',
+        MISMO_PRECIO_CATALOGO_VENCIDO: 'CONFIRMAR_CATALOGO_Y_SINCRONIZAR',
+        DISTINTO_PRECIO_CATALOGO_VIGENTE: 'APLICAR_CATALOGO_AL_SNAPSHOT',
+        DISTINTO_PRECIO_CATALOGO_VENCIDO: 'CONFIRMAR_CATALOGO_Y_SINCRONIZAR'
+      };
+      return { accion: acciones[contexto.escenario], importe: contexto.precio_catalogo };
+    }
+
+    async function resolverPrecioPresupuestoPHP(input) {
+      const $input = $(input);
+      if (!$input.hasClass('bg-danger') || $input.data('confirmacionPrecioPresupuestoPendiente') || sweetContextualActivo) return;
+      if (presupuestoEdicionBloqueadaParaConfirmar()) {
+        $input.blur();
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+      const identidad = obtenerIdentidadPrecio($input);
+      if (!payloadConfirmacionCompleto(identidad)) {
+        $input.blur();
+        mostrarErrorConfirmacionPrecio(MENSAJE_ERROR_CONFIRMACION);
+        return;
+      }
+      const dirtyAntes = !!window.presupuestoDirty;
+      sweetContextualActivo = true;
+      $input.data('confirmacionPrecioPresupuestoPendiente', true).prop('readonly', true);
+      try {
+        const contexto = await solicitarPrecioPresupuesto({ ...identidad, funcion: 'obtenerContextoPrecioPresupuesto' });
+        if (contexto.snapshot_vencido !== true) {
+          $input
+            .val(String(contexto.precio_snapshot))
+            .attr('data-fecha-actualizacion', String(contexto.fecha_snapshot || ''))
+            .data('fecha-actualizacion', String(contexto.fecha_snapshot || ''))
+            .removeClass('bg-danger').addClass('bg-success').prop('readonly', true);
+          recalcularDespuesDeConfirmacion($input, null);
+          revalidarDatosVencidosPresupuestoPHP();
+          return;
+        }
+        const decision = await decidirResolucionPrecio(contexto, $input);
+        if (!decision) return;
+        const respuesta = await solicitarPrecioPresupuesto({
+          ...identidad,
+          funcion: 'confirmarPrecioPresupuesto',
+          accion_resolucion: decision.accion,
+          importe: decision.importe,
+          precio_snapshot_esperado: contexto.precio_snapshot,
+          fecha_snapshot_esperada: contexto.fecha_snapshot,
+          precio_catalogo_esperado: contexto.precio_catalogo,
+          fecha_catalogo_esperada: contexto.fecha_catalogo
+        });
+        $input
+          .val(String(respuesta.importe_snapshot))
+          .attr('data-fecha-actualizacion', String(respuesta.fecha_origen_snapshot || ''))
+          .data('fecha-actualizacion', String(respuesta.fecha_origen_snapshot || ''))
+          .removeClass('bg-danger').addClass('bg-success').prop('readonly', true);
+        recalcularDespuesDeConfirmacion($input, respuesta);
+        if (!dirtyAntes) window.presupuestoDirty = false;
+        revalidarDatosVencidosPresupuestoPHP();
+      } catch (error) {
+        mostrarErrorConfirmacionPrecio(error && error.message);
+        revalidarDatosVencidosPresupuestoPHP();
+      } finally {
+        $input.removeData('confirmacionPrecioPresupuestoPendiente');
+        activarSupresionFocoPrecio($input);
+        sweetContextualActivo = false;
+        liberarSupresionFocoPrecioCuandoCorresponda($input);
+      }
+    }
+
+    $(document)
+      .off('.presu-confirmar-precio')
+      .on('focusin.presu-confirmar-precio', precioSel, function () {
+        if ($(this).data('precioSwalSuppressFocus')) return;
+        resolverPrecioPresupuestoPHP(this);
       });
 
     $(function () {
@@ -1023,19 +1140,15 @@
 
   (function bindAlertaPreciosVencidosAperturaPresupuestoPHP() {
     const collapseSel = '#collapsePresupuesto';
-    const preciosVencidosSel = '#contenedorPresupuestoGenerado .precio-unitario.bg-danger, #contenedorPresupuestoGenerado .valor-jornal.bg-danger';
-
-    function hayPreciosVencidosPresupuesto() {
-      return $(preciosVencidosSel).length > 0;
-    }
 
     function mostrarAlertaPreciosVencidosPresupuesto() {
-      if (!hayPreciosVencidosPresupuesto()) return;
+      const resumen = obtenerResumenPreciosVencidosPresupuesto();
+      if (resumen.cantidadTotalVencidos === 0) return false;
 
       const alertDanger = [
         false,
         '<H3><strong>VALORES DESACTUALIZADOS</H3>',
-        'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.',
+        resumen.html,
         'OK',
         false,
         false,
@@ -1048,18 +1161,22 @@
 
       if (typeof sAlertConfirmV2 === 'function') {
         sAlertConfirmV2(alertDanger);
-        return;
+        return true;
       }
 
       if (window.Swal && typeof Swal.fire === 'function') {
         Swal.fire({
           icon: 'warning',
           title: 'VALORES DESACTUALIZADOS',
-          text: 'Los campos en color rojo presentan precios desactualizados, para poder guardar el presupuesto deberá actualizar los valores.',
+          html: resumen.html,
           confirmButtonText: 'OK'
         });
+        return true;
       }
+
+      return false;
     }
+    window.mostrarAlertaPreciosVencidosPresupuesto = mostrarAlertaPreciosVencidosPresupuesto;
 
     $(document)
       .off('shown.bs.collapse.presu-alerta-vencidos hidden.bs.collapse.presu-alerta-vencidos', collapseSel)
@@ -1067,8 +1184,9 @@
         const $collapse = $(this);
         if ($collapse.data('alertaPreciosVencidosMostradaEnApertura')) return;
 
-        $collapse.data('alertaPreciosVencidosMostradaEnApertura', true);
-        mostrarAlertaPreciosVencidosPresupuesto();
+        if (mostrarAlertaPreciosVencidosPresupuesto()) {
+          $collapse.data('alertaPreciosVencidosMostradaEnApertura', true);
+        }
       })
       .on('hidden.bs.collapse.presu-alerta-vencidos', collapseSel, function () {
         $(this).removeData('alertaPreciosVencidosMostradaEnApertura');
@@ -1080,8 +1198,9 @@
         window.setTimeout(function () {
           if ($collapse.data('alertaPreciosVencidosMostradaEnApertura')) return;
 
-          $collapse.data('alertaPreciosVencidosMostradaEnApertura', true);
-          mostrarAlertaPreciosVencidosPresupuesto();
+          if (mostrarAlertaPreciosVencidosPresupuesto()) {
+            $collapse.data('alertaPreciosVencidosMostradaEnApertura', true);
+          }
         }, 0);
       }
     });
@@ -1119,9 +1238,7 @@
          </div>`
       );
     });
-    if (typeof window.marcarPresupuestoComoModificado === 'function') {
-      window.marcarPresupuestoComoModificado();
-    }
+    marcarPresupuestoComoModificadoSilencioso();
 
     this.value = '';
   });
@@ -1140,9 +1257,7 @@
       window.fotosEliminadasPorTarea[idx].push(nombre);
       $wrap.remove();
 
-      if (typeof window.marcarPresupuestoComoModificado === 'function') {
-        window.marcarPresupuestoComoModificado();
-      }
+      marcarPresupuestoComoModificadoSilencioso();
       return;
     }
 
@@ -1151,9 +1266,7 @@
       window.fotosNuevasPorTarea[idx] = window.fotosNuevasPorTarea[idx].filter(x => x.tempId !== tempId);
       $wrap.remove();
 
-      if (typeof window.marcarPresupuestoComoModificado === 'function') {
-        window.marcarPresupuestoComoModificado();
-      }
+      marcarPresupuestoComoModificadoSilencioso();
     }
   });
 
@@ -1370,28 +1483,34 @@ $(document)
   function aplicarMapeoLineasPresupuestoGuardado(mapeo) {
     if (!mapeo || typeof mapeo !== 'object') return;
 
-    (mapeo.materiales || []).forEach((item) => {
+    const $materialesDom = $('#contenedorPresupuestoGenerado .precio-unitario');
+    (mapeo.materiales || []).forEach((item, indice) => {
       const idAnterior = item && item.id_ptm_anterior ? String(item.id_ptm_anterior) : '';
       const idNuevo = item && item.id_ptm ? String(item.id_ptm) : '';
-      if (!idAnterior || !idNuevo) return;
+      if (!idNuevo) return;
 
-      const $input = $('#contenedorPresupuestoGenerado .precio-unitario').filter(function () {
-        return String($(this).data('id-ptm') || '') === idAnterior;
-      }).first();
+      const $input = idAnterior
+        ? $materialesDom.filter(function () {
+            return String($(this).data('id-ptm') || '') === idAnterior;
+          }).first()
+        : $materialesDom.eq(indice);
 
       if ($input.length) {
         $input.attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
       }
     });
 
-    (mapeo.mano_obra || []).forEach((item) => {
+    const $jornalesDom = $('#contenedorPresupuestoGenerado .valor-jornal');
+    (mapeo.mano_obra || []).forEach((item, indice) => {
       const idAnterior = item && item.id_ptmo_anterior ? String(item.id_ptmo_anterior) : '';
       const idNuevo = item && item.id_ptmo ? String(item.id_ptmo) : '';
-      if (!idAnterior || !idNuevo) return;
+      if (!idNuevo) return;
 
-      const $input = $('#contenedorPresupuestoGenerado .valor-jornal').filter(function () {
-        return String($(this).data('id-ptmo') || '') === idAnterior;
-      }).first();
+      const $input = idAnterior
+        ? $jornalesDom.filter(function () {
+            return String($(this).data('id-ptmo') || '') === idAnterior;
+          }).first()
+        : $jornalesDom.eq(indice);
 
       if ($input.length) {
         $input.attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
@@ -1569,9 +1688,8 @@ $(document)
 
         aplicarMapeoLineasPresupuestoGuardado(resp.lineas || null);
 
-        if (typeof window.marcarPresupuestoComoGuardado === 'function') {
-          window.marcarPresupuestoComoGuardado();
-        }
+        window.presupuestoDirty = false;
+        actualizarEstadoAccionesPresupuestoSilencioso();
 
         if (resp?.intervino && typeof window.actualizarIntervinoPresupuestoUI === 'function') {
           window.actualizarIntervinoPresupuestoUI(resp.intervino);
@@ -1587,9 +1705,7 @@ $(document)
       if (typeof mostrarError === 'function') mostrarError('Error al guardar el presupuesto.');
       else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: 'Error al guardar el presupuesto.' });
     } finally {
-      if (!presupuestoEdicionComercialBloqueada()) {
-        $('#btn-guardar-presupuesto').prop('disabled', false);
-      }
+      actualizarEstadoAccionesPresupuestoSilencioso();
     }
   };
   
@@ -2052,8 +2168,8 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
     _safeActualizarTotalGeneral();
   }
 
-  if (typeof window.marcarPresupuestoComoModificado === 'function') {
-    window.marcarPresupuestoComoModificado();
+  if (typeof window.marcarPresupuestoComoModificadoSilencioso === 'function') {
+    window.marcarPresupuestoComoModificadoSilencioso();
   }
 
   if (window.mostrarExito) {
