@@ -64,6 +64,51 @@ try {
     $funcion = $_POST['funcion'] ?? '';
 
     switch ($funcion) {
+        case 'obtenerContextoPrecioPresupuesto':
+        case 'obtenerContextoPrecioCatalogoPresupuestoDinamico':
+            $idUsuarioSesion = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;
+            $perfilSesion = obtenerPerfilUsuarioSolicitudPresupuesto();
+            if ($idUsuarioSesion <= 0 || $perfilSesion === '') {
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'mensaje' => 'No hay sesion de usuario activa.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            if (!perfilPuedeVerSeguimientoCompletoOrdenCompra($perfilSesion)) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'mensaje' => 'El perfil no tiene permiso para consultar precios del presupuesto.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            $leerIdContexto = static function (string $campo): ?int {
+                $valor = trim((string)($_POST[$campo] ?? ''));
+                if (!preg_match('/^[1-9]\d*$/D', $valor)) return null;
+                $id = filter_var($valor, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+                return $id === false ? null : (int)$id;
+            };
+            $tipo = is_string($_POST['tipo'] ?? null) ? trim((string)$_POST['tipo']) : '';
+            $idCatalogo = $leerIdContexto('id_catalogo');
+            if ($idCatalogo === null) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'mensaje' => 'El identificador de catalogo debe ser un entero positivo.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            if ($funcion === 'obtenerContextoPrecioPresupuesto') {
+                $idPresupuesto = $leerIdContexto('id_presupuesto');
+                $idLinea = $leerIdContexto('id_linea');
+                if ($idPresupuesto === null || $idLinea === null) {
+                    http_response_code(400);
+                    echo json_encode(['ok' => false, 'mensaje' => 'Los identificadores deben ser enteros positivos.'], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+                $resultado = obtenerContextoPrecioPresupuesto($tipo, $idPresupuesto, $idLinea, $idCatalogo);
+            } else {
+                $resultado = obtenerContextoPrecioCatalogoPresupuestoDinamico($tipo, $idCatalogo);
+            }
+            $httpStatus = isset($resultado['http_status']) ? (int)$resultado['http_status'] : 200;
+            unset($resultado['http_status']);
+            http_response_code($httpStatus);
+            echo json_encode($resultado, JSON_UNESCAPED_UNICODE);
+            exit;
+
         case 'confirmarPrecioPresupuesto':
             $idUsuarioSesion = isset($_SESSION['usuario']['id_usuario'])
                 ? (int)$_SESSION['usuario']['id_usuario']
@@ -108,6 +153,7 @@ try {
             $idLinea = $leerEnteroPositivo('id_linea');
             $idCatalogo = $leerEnteroPositivo('id_catalogo');
             $tipo = is_string($_POST['tipo'] ?? null) ? trim((string)$_POST['tipo']) : '';
+            $accionResolucion = is_string($_POST['accion_resolucion'] ?? null) ? trim((string)$_POST['accion_resolucion']) : '';
             $importe = $_POST['importe'] ?? null;
 
             if ($idPresupuesto === null || $idLinea === null || $idCatalogo === null) {
@@ -125,7 +171,12 @@ try {
                     $idPresupuesto,
                     $idLinea,
                     $idCatalogo,
-                    $importe
+                    $accionResolucion,
+                    $importe,
+                    $_POST['precio_snapshot_esperado'] ?? null,
+                    $_POST['fecha_snapshot_esperada'] ?? null,
+                    $_POST['precio_catalogo_esperado'] ?? null,
+                    $_POST['fecha_catalogo_esperada'] ?? null
                 );
             } catch (Throwable $e) {
                 error_log('confirmarPrecioPresupuesto controller: ' . $e->getMessage());
@@ -179,6 +230,7 @@ try {
             }
 
             $tipo = is_string($_POST['tipo'] ?? null) ? trim((string)$_POST['tipo']) : '';
+            $accionResolucion = is_string($_POST['accion_resolucion'] ?? null) ? trim((string)$_POST['accion_resolucion']) : '';
             $importe = $_POST['importe'] ?? null;
 
             if ($idCatalogo === null || $idCatalogo === false) {
@@ -194,7 +246,10 @@ try {
                 $resultado = confirmarPrecioCatalogoPresupuestoDinamico(
                     $tipo,
                     (int)$idCatalogo,
-                    $importe
+                    $accionResolucion,
+                    $importe,
+                    $_POST['precio_catalogo_esperado'] ?? null,
+                    $_POST['fecha_catalogo_esperada'] ?? null
                 );
             } catch (Throwable $e) {
                 error_log('confirmarPrecioCatalogoPresupuestoDinamico controller: ' . $e->getMessage());
