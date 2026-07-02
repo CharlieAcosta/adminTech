@@ -91,13 +91,15 @@ Referencias de implementacion:
 - **BRP-002:** Cuando el BRP esta habilitado y el usuario hace clic, se muestra un SweetAlert normal de confirmacion con icono success. El modal incluye una tabla con las columnas **Descripcion** y **Cantidad**, listando solo materiales con cantidad de Pedido mayor que `0`. La descripcion se muestra solo hasta el primer caracter `|`. El modal incluye botones **Confirmar** y **Cancelar**. En esta etapa, confirmar no ejecuta backend ni modifica datos.
 - **BRP-002-B:** El titulo del SweetAlert del BRP mantiene el mismo tamaño visual que el titulo del SweetAlert de autorizacion, para conservar consistencia visual entre modales.
 - **BRP-003:** Si el pedido llega a una instancia de autorizacion, ya sea por un material presupuestado o por un material agregado, el BRP vuelve a estado gris y deshabilitado hasta que la autorizacion quede aprobada. Esta regla tiene prioridad sobre BRP-001: aunque existan cantidades de Pedido mayores a `0`, el BRP no se habilita mientras haya autorizacion pendiente.
-- **BRP-004 / PM-PED-001:** Al confirmar el **Pedido #1**, este queda congelado e inmutable y se crea una nueva columna **Pedido #2**, que inicia en `0` para todas las filas. Desde ese momento, `+` y `-` operan exclusivamente sobre Pedido #2, mientras Pedido #1 permanece historico. **Inicial** no se reinicia y **Solicitado** continua siendo acumulativo. BRP, el SweetAlert y las reglas de autorizacion pasan a trabajar con el pedido activo Pedido #2. Al iniciar el nuevo ciclo se restablece la autorizacion visual a `Sin solicitud`, se limpian datos temporales del ciclo anterior y se habilitan nuevamente las acciones de cantidad. En esta etapa la transicion es solo frontend, sin persistencia, y no se crea Pedido #3.
+- **BRP-004 / PM-PED-001:** Al confirmar un pedido, su columna queda congelada e inmutable y, mientras no sea el Pedido #5, se crea la siguiente columna en `0`. **Inicial** no se reinicia y **Solicitado** continua siendo la suma acumulada de todas las columnas Pedido. BRP, el SweetAlert y las reglas de autorizacion trabajan exclusivamente con el pedido activo. Al iniciar cada nuevo ciclo se restablece la autorizacion visual a `Sin solicitud`, se limpian datos temporales del ciclo anterior y se habilitan nuevamente las acciones de cantidad. En esta etapa el flujo es solo frontend, sin persistencia.
 - **PM-AUT-001:** En Materiales presupuestados, cuando una fila entra en autorizacion pendiente, la columna **Pedido** muestra la suma de la cantidad presupuestada/inicial mas la cantidad adicional solicitada a autorizar. Mientras la autorizacion este pendiente, los botones/iconos `+` y `-` de esa fila quedan deshabilitados y no ejecutan acciones hasta que la autorizacion sea aprobada o rechazada. Esta regla convive con **BRP-003**, por lo que el BRP permanece deshabilitado mientras exista autorizacion pendiente.
 - **PM-AUT-002:** En Materiales agregados, cuando una fila esta en autorizacion pendiente, se bloquean las acciones de modificacion de cantidad y sus handlers no ejecutan acciones. A diferencia de Materiales presupuestados, el icono/boton de eliminar permanece habilitado y operativo. Esta regla convive con **BRP-003**, por lo que el BRP permanece deshabilitado mientras exista autorizacion pendiente.
 - **PM-AUT-003:** Toda fila de material que entre en autorizacion pendiente muestra controles de decision **Autorizar** y **Rechazar** en la columna **Acciones**. La columna **Autorizacion** queda reservada solo para el badge de estado: `Sin solicitud`, `Solicitada`, `Autorizada` o `Rechazada`. En esta etapa la decision es visual/frontend y no persiste datos. No existe accion de revertir: si se autoriza, queda `Autorizada`; si se rechaza, queda `Rechazada`. El diseño mantiene el estado temporal `data-material-autorizacion-estado` preparado para futura persistencia.
-- **PM-AUT-004:** Mientras una fila de material este en autorizacion pendiente, los iconos/botones de agregar y quitar cantidad (`+` y `-`) desaparecen de la columna **Acciones**. En ese estado se muestran **Autorizar** y **Rechazar**. Una vez que la fila queda **Autorizada** o **Rechazada**, **Autorizar/Rechazar** desaparecen y `+`/`-` permanecen ocultos hasta el inicio del siguiente pedido activo. Con **BRP-004 / PM-PED-001**, Pedido #2 representa ese siguiente ciclo y por eso las acciones de cantidad vuelven a estar disponibles al crearlo. En Materiales agregados, el icono/boton eliminar permanece visible, habilitado y operativo. No existe accion de revertir.
+- **PM-AUT-004:** Mientras una fila de material este en autorizacion pendiente, los iconos/botones de agregar y quitar cantidad (`+` y `-`) desaparecen de la columna **Acciones**. En ese estado se muestran **Autorizar** y **Rechazar**. Una vez que la fila queda **Autorizada** o **Rechazada**, **Autorizar/Rechazar** desaparecen y `+`/`-` permanecen ocultos hasta el inicio del siguiente pedido activo, cuando las acciones vuelven a estar disponibles. En Materiales agregados, el icono/boton eliminar permanece visible, habilitado y operativo. No existe accion de revertir.
 - **PM-AUT-005:** Los tooltips de los iconos de acciones del Pedido de Materiales (`+`, `-`, eliminar, Autorizar y Rechazar) deben usar el patron de tooltip vigente del sistema y mostrarse arriba o abajo, no lateralmente. Los controles **Autorizar/Rechazar** deben quedar alineados visualmente como los demas iconos de accion, conservando color semantico: **Autorizar** en verde y **Rechazar** en rojo. Los tooltips de acciones deben conservar el patron visual del sistema, pero nunca deben bloquear el clic: los tooltips dinamicos se inicializan una sola vez, se ocultan al ejecutar una accion y se eliminan correctamente antes de reemplazar controles.
 - **PM-AUT-006 / PM-PED-002:** Las reglas de autorizacion se aplican al pedido activo utilizando como limite el total acumulado de todas las columnas Pedido. En Materiales presupuestados, si la suma de pedidos confirmados mas el pedido activo supera la cantidad Inicial, el pedido activo requiere autorizacion. En Materiales agregados, cuyo Inicial de referencia es `0`, cualquier cantidad positiva del pedido activo requiere autorizacion. La autorizacion modifica unicamente el pedido activo y nunca altera pedidos historicos congelados.
+- **PM-PED-003 / BRP-005:** El flujo de Pedido de Materiales permite hasta cinco columnas de pedido: **Pedido #1** a **Pedido #5**. Al confirmar un pedido del #1 al #4, la columna confirmada queda congelada e inmutable y se crea la siguiente columna en `0`, que pasa a ser el pedido activo y hereda todas las reglas de cantidades, autorizacion, BRP, SweetAlert, materiales agregados y tooltips. Al confirmar **Pedido #5**, no se crea Pedido #6, el flujo queda finalizado y el BRP permanece visible, gris y deshabilitado. Cada confirmacion pasa por un punto central preparado para incorporar acciones y eventos adicionales en una etapa posterior. En esta instancia todo continua siendo frontend, sin persistencia.
+- **PM-PED-004:** Los cards de la columna de pedido activa se diferencian mediante el color cian del sistema, mientras los pedidos historicos conservan el gris original. Los encabezados mantienen siempre su estilo estandar de fondo gris claro y texto oscuro. La columna activa se delimita ademas mediante un contorno gris claro, moderado y con esquinas redondeadas alrededor del encabezado y sus celdas en ambas tablas. Al cambiar de pedido, el contorno pasa a la nueva columna activa. Al finalizar Pedido #5, todas las columnas quedan grises y sin contorno activo.
 
 - Cuando la OC queda lista para carga (`pendiente`) y el perfil puede editar (`Administrativo`, `Administrador` o `Super Administrador`), `collapse4_OC` debe mostrarse expandido inicialmente y tambien reabrirse al recalcular el estado desde backend; los perfiles tecnicos conservan solo lectura y no fuerzan apertura editable.
 - Una OC `anulada` no cuenta como activa y no bloquea una nueva carga: si el presupuesto sigue `APROBADO` y no hay otra OC activa, el backend vuelve a calcular estado `pendiente` y el formulario queda disponible para perfiles con edicion. El bloqueo de edicion por pedido de materiales queda pendiente hasta que exista una regla formal del circuito; por ahora `materiales_visita` no bloquea la OC.
@@ -144,33 +146,101 @@ return [
 
 ## Actualizacion de precios en Presupuesto
 
+### Indicadores de vigencia en el panel de modulos
+
+- El boton `Tipos de Jornales` en `01-views/panel.php` muestra tres minicards con los totales actuales de jornales clasificados por vigencia, calculados dinamicamente al cargar la pantalla.
+- Los totales se obtienen con una sola consulta agregada sobre `tipo_jornales` usando `UNIX_TIMESTAMP` para garantizar el mismo criterio de dias completos de 24 horas que usa el listado.
+- Universo: registros con `jornal_estado != 'eliminado'`, identico al filtro `sinEliminados` del listado.
+- Rangos: `0-22 dias completos` → Vigentes (verde), `23-30 dias completos` → Proximas a vencer (amarillo), `31+ dias completos` → Desactualizadas (rojo). Fechas nulas, futuras o con `updated_at IS NULL` quedan excluidas de los tres totales.
+- Origen del dato: `tipo_jornales.updated_at`, renovado por MySQL `ON UPDATE CURRENT_TIMESTAMP` y por los circuitos de confirmacion de precios desde Presupuesto.
+- Cada indicador se muestra unicamente cuando su total es mayor que cero; los indicadores con total cero no se renderizan. Si los tres totales son cero, la segunda fila queda vacia sin elementos visibles ni espacios reservados.
+- La funcion `modGetTotalesVigenciaJornales()` vive en `04-modelo/vigenciaCatalogosModel.php` y es invocada desde `panel.php` solo para los perfiles que tienen acceso al modulo.
+
+### Indicadores de vigencia en el panel — minicards clickeables
+
+- El boton `Materiales` y el boton `Tipos de Jornales` en `01-views/panel.php` muestran indicadores de vigencia clickeables que abren el listado correspondiente con el filtro ya aplicado.
+- Los totales se obtienen con una sola consulta agregada usando `UNIX_TIMESTAMP`. Cada indicador se muestra solo cuando su total es mayor que cero.
+- **Minicards clickeables:** al hacer clic sobre un indicador de vigencia del panel, el listado se abre filtrado exclusivamente por esa categoría de vigencia. El clic sobre el resto del botón (título, ícono) abre el listado completo sin filtro.
+- **Parámetro de URL:** `vigencia`. Valores aceptados: `desactualizada`, `proxima_vencer`, `vigente`. Cualquier otro valor (ausente, vacío, manipulado) abre el listado sin filtro.
+- **URLs filtradas — Materiales:**
+  - `materiales_listado.php?vigencia=desactualizada`
+  - `materiales_listado.php?vigencia=proxima_vencer`
+  - `materiales_listado.php?vigencia=vigente`
+- **URLs filtradas — Jornales:**
+  - `jornales_listado.php?vigencia=desactualizada`
+  - `jornales_listado.php?vigencia=proxima_vencer`
+  - `jornales_listado.php?vigencia=vigente`
+- La funcion `modGetTotalesVigenciaMateriales()` vive en `04-modelo/vigenciaCatalogosModel.php`; usa `COALESCE(log_edicion, log_alta)` para clasificar todos los materiales no eliminados. La funcion `modGetTotalesVigenciaJornales()` vive en el mismo archivo.
+- El CSS de ancho fijo usa la clase `modulo-vigencia-indicador`; los indicadores clickeables agregan `cursor: pointer` y `opacity: 0.85` al pasar el mouse (via `[data-vigencia-href]`). No hay subrayados, bordes ni animaciones adicionales.
+
+### Filtro de vigencia en los listados
+
+- Los listados `jornales_listado.php` y `materiales_listado.php` aceptan el parámetro GET `vigencia` para filtrar la columna Vigencia al cargar.
+- El parámetro se valida en PHP contra la lista blanca `['desactualizada', 'proxima_vencer', 'vigente']`. Un valor inválido o ausente no aplica ningún filtro.
+- El filtro actúa exclusivamente sobre la columna Vigencia mediante `$.fn.dataTable.ext.search` (DataTables orthogonal data `data-search` en el `<td>`). No afecta otras columnas ni la búsqueda global.
+- El campo `Buscar` visible muestra el texto del estado al cargar con filtro (`Desactualizada`, `Próxima a vencer`, `Vigente`).
+- **Quitar el filtro:** cuando el filtro está activo aparece el botón `Quitar filtro` junto al buscador. Al pulsarlo: se elimina el filtro interno, se limpia el buscador, se muestran todos los registros desde la página 1 y se elimina `?vigencia=...` de la URL mediante `history.replaceState`. Una recarga posterior carga el listado completo.
+- **Edición manual del buscador:** al escribir o borrar en el campo `Buscar`, un listener de captura desactiva el filtro de vigencia, elimina `?vigencia=...` de la URL y remueve el botón `Quitar filtro`, antes de que DataTables procese el input como búsqueda global normal. Borrar todo muestra todos los registros.
+- Cuando no hay parámetro `vigencia` (o es inválido): no se muestra el botón, el buscador funciona normalmente y la URL no se modifica.
+- Las exportaciones (CSV, Excel, PDF, etc.) respetan el filtro activo y exportan solo las filas visibles.
+
+### Fecha de actualizacion de jornales
+
+- El listado `01-views/jornales_listado.php` muestra `tipo_jornales.updated_at` como `Última actualización`, después de `Estado`, con formato `d/m/Y H:i:s` y `-` cuando el dato es nulo o inválido. La columna contiene solamente la fecha y DataTables inicia ordenándola en forma cronológica ascendente, de la fecha más antigua a la más reciente.
+- `updated_at` representa la última modificación del registro: MySQL lo renueva mediante `ON UPDATE CURRENT_TIMESTAMP` en la edición general del jornal y los circuitos de confirmación de precios desde Presupuesto lo escriben explícitamente con `NOW()` al renovar `jornal_valor`.
+- La celda conserva el valor SQL `Y-m-d H:i:s` en `data-order` para que DataTables ordene cronológicamente aunque presente la fecha en formato local.
+- La columna independiente `Vigencia`, ubicada entre `Última actualización` y `Acciones`, muestra una minicard de dos líneas para toda fecha válida no futura: verde `Vigente` entre 0 y 22 días completos, amarilla `Próxima a vencer` entre 23 y 30, y roja `Desactualizada` desde 31 días. Fechas futuras, nulas, vacías o inválidas dejan Vigencia vacía. Las tres minicards comparten estructura y altura compacta para no modificar la altura normal de la fila; el cálculo mantiene segundos transcurridos divididos por 86400 en la zona `America/Argentina/Buenos_Aires`. Las exportaciones mantienen la fecha y la vigencia en columnas separadas.
+
+### Fecha de referencia de materiales
+
+- El listado `01-views/materiales_listado.php` muestra la columna `Fecha de referencia` después de `Estado`. Formato `d/m/Y H:i:s`; muestra `-` cuando ninguna fecha disponible es válida. DataTables ordena por esta columna cronológicamente ascendente, de la más antigua a la más reciente.
+- El listado presenta 9 columnas visibles: `ID`, `Producto`, `Contenido`, `Unidades`, `Precio U.V.`, `Estado`, `Fecha de referencia`, `Vigencia`, `Acciones`. Las columnas `Marca`, `Unidad de venta`, `Unidad`, `Rendimiento` y `Descripción` fueron retiradas de la presentación visual; esos campos siguen disponibles en la base de datos y en los formularios.
+- **Prioridad de fecha de referencia:** 1) `log_edicion` si es válida y no futura; 2) `log_alta` como respaldo cuando `log_edicion` es NULL. Materiales nunca editados usan su fecha de alta. Si ambas son nulas o inválidas, la celda muestra `-` y Vigencia queda vacía sin minicard.
+- `log_alta` es `TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP`: MySQL lo completa automáticamente en el INSERT. Nunca se modifica en ediciones ni por el circuito de confirmación de precios.
+- `log_edicion` es `TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP`: se actualiza en cada edición del registro y el circuito de confirmación de precios lo escribe explícitamente con `NOW()`.
+- La celda conserva el valor SQL `Y-m-d H:i:s` en `data-order` para que DataTables ordene cronológicamente aunque presente la fecha en formato local.
+- La columna `Vigencia` muestra minicard de dos líneas: verde `Vigente` (0-22 dias), amarilla `Próxima a vencer` (23-30 dias), roja `Desactualizada` (31+ dias). La minicard se calcula sobre la misma fecha de referencia.
+- Los indicadores del botón Materiales en el panel usan `COALESCE(log_edicion, log_alta)` en la consulta de `modGetTotalesVigenciaMateriales()` (`04-modelo/vigenciaCatalogosModel.php`), garantizando consistencia exacta entre listado y panel: la fecha mostrada en el listado es la misma usada para contabilizar el indicador.
+- La lógica de selección de fecha de referencia y construcción de celdas vive en `construirCeldaActualizacionMaterial()` dentro de `03-controller/materialesController.php`.
+- Materiales sin ninguna fecha válida: no se clasifican ni se contabilizan en el panel.
+
 ### Circuito PHP de presupuestos existentes
 
-- Los precios vencidos renderizados por PHP se confirman desde `03-controller/presupuestos_guardar.php` con `funcion=confirmarPrecioPresupuesto`.
-- La confirmacion actualiza el catalogo y el snapshot de la linea actual del presupuesto, recalcula `subtotal_fila` y no modifica la cabecera ni el estado comercial.
-- Confirmar el mismo importe tambien renueva la fecha de origen del precio.
+- Cada linea conserva un snapshot historico independiente: materiales usan `precio_unitario_usado` y `log_edicion`; jornales usan `valor_jornal_usado` y `updated_at_origen`. El catalogo maestro mantiene por separado `materiales.precio_unitario`/`COALESCE(log_edicion, log_alta)` y `tipo_jornales.jornal_valor`/`updated_at`.
+- El SweetAlert rojo general se mantiene al abrir el accordion. La resolucion individual comienza con `focusin` sobre un precio rojo y `readonly`: primero consulta `funcion=obtenerContextoPrecioPresupuesto` y luego presenta un SweetAlert2 contextual, sin persistir por foco, Enter ni blur.
+- El backend clasifica cuatro escenarios: mismo precio/catalogo vigente, mismo precio/catalogo vencido, distinto precio/catalogo vigente y distinto precio/catalogo vencido. Segun la eleccion ejecuta `SINCRONIZAR_SNAPSHOT_DESDE_CATALOGO`, `APLICAR_CATALOGO_AL_SNAPSHOT`, `CONFIRMAR_CATALOGO_Y_SINCRONIZAR` o `ACTUALIZAR_CATALOGO_Y_SNAPSHOT` mediante `funcion=confirmarPrecioPresupuesto`.
+- Sincronizar o aplicar un catalogo vigente modifica exclusivamente el snapshot de la linea intervenida. Confirmar vigencia o ingresar un precio nuevo modifica explicitamente el catalogo y despues esa unica linea; nunca renueva en bloque otras apariciones del mismo material o jornal.
+- La operacion recalcula `subtotal_fila`, no modifica la cabecera ni el estado comercial y solo cambia rojo a verde despues de releer los valores persistidos.
+- La escritura recibe precio y fecha esperados de snapshot y catalogo, vuelve a leerlos bajo las protecciones disponibles y responde HTTP `409` si otro usuario los modifico desde que se abrio el SweetAlert.
 - El guardado completo valida todos los catalogos antes de eliminar lineas: preserva snapshots historicos existentes sin modificacion de importe, valida contra catalogo las lineas nuevas o modificadas y conserva las fechas de origen correspondientes.
-- Como el guardado recrea lineas, la respuesta incluye el mapeo de IDs nuevos y `07-funciones_js/accordionPresupuesto.js` actualiza `data-id-ptm` y `data-id-ptmo` en el DOM.
+- Como el guardado recrea lineas, la respuesta incluye el mapeo de IDs nuevos y `07-funciones_js/accordionPresupuesto.js` actualiza `data-id-ptm` y `data-id-ptmo` en el DOM; para el primer guardado dinamico, sin IDs anteriores, usa el orden estable de la respuesta y de las filas como fallback.
 
 ### Circuito dinamico generado desde Visita
 
-- Los precios vencidos del presupuesto generado dinamicamente se confirman con `funcion=confirmarPrecioCatalogoPresupuestoDinamico`.
-- Este circuito actualiza solo el catalogo porque todavia no existen `id_presupuesto`, `id_ptm` ni `id_ptmo`.
+- Los precios vencidos del presupuesto generado dinamicamente se consultan con `funcion=obtenerContextoPrecioCatalogoPresupuestoDinamico` al recibir foco y se resuelven con `funcion=confirmarPrecioCatalogoPresupuestoDinamico` desde un SweetAlert2.
+- Este circuito actualiza solo el catalogo porque todavia no existen `id_presupuesto`, `id_ptm` ni `id_ptmo`: permite confirmar el importe actual o ingresar expresamente uno nuevo y valida precio/fecha esperados antes de escribir.
+- Al terminar cada generacion explicita, el circuito dinamico reutiliza el resumen y el Sweet general compartidos y consume el aviso inmediatamente, antes de que pueda quedar pendiente un `shown.bs.collapse`. Un token local por generacion impide duplicados; las aperturas manuales posteriores conservan su aviso normal.
+- En mano de obra, el porcentaje de utilidad global es independiente del `% Extra` de cada jornal. Si el campo de utilidad queda vacio, el calculo historico aplica el valor por defecto de `100%`: el subtotal visible de Mano de Obra incluye la suma base de las lineas, la utilidad calculada y `Otros`. La utilidad tambien alimenta `Subtotal Util. MO.`, el total de tarea y sus indicadores comerciales.
+- El boton Guardar dinamico delega en `window.presupuestoGuardar()` cuando esta disponible. El handler antiguo queda solo como fallback y ya no puede ejecutar un segundo guardado ni reactivar el boton desde su `finally`; el estado final se resuelve con la rutina central de dirty/vencidos.
 - Ya no usa `simpleUpdateInDB()` para materiales ni jornales de presupuesto dinamico.
 - El guardado posterior crea los snapshots desde el catalogo validado y persiste las fechas actuales de origen.
 
 ### UX y reglas de botones
 
-- Rojo (`bg-danger`) indica precio vencido editable; verde (`bg-success`) indica precio vigente confirmado o vigente por fecha.
+- Rojo (`bg-danger`) indica precio vencido resoluble por SweetAlert2; el input permanece `readonly`. Verde (`bg-success`) indica precio vigente confirmado o vigente por fecha.
 - La advertencia de valores desactualizados se muestra al abrir el accordion Presupuesto o al cargarlo ya abierto, no durante foco, input, Enter, blur ni revalidaciones posteriores.
-- La confirmacion puede ejecutarse con Enter o blur despues de intervencion del usuario; Enter seguido de blur genera una sola solicitud.
-- La revalidacion posterior a una confirmacion es silenciosa: mantiene bloqueado Guardar/Emitir si quedan vencidos y respeta el resto de bloqueos del presupuesto.
-- Guardar queda bloqueado mientras existan precios vencidos o no haya cambios pendientes validos; Generar documento queda disponible solo cuando no hay cambios pendientes ni bloqueos comerciales/workflow.
+- En cada apertura, el aviso vuelve a contar en el DOM solamente las filas que conservan `precio-unitario bg-danger` o `valor-jornal bg-danger`, informa materiales, jornales y total con singular/plural, y no aparece cuando el total es cero.
+- Los handlers individuales usan `focusin` con namespace y bloquean SweetAlerts y solicitudes duplicadas. Cancelar quita el foco y evita la reapertura inmediata.
+- El handler `focusin` del presupuesto PHP exige los atributos reales de snapshot (`data-id-presupuesto` y `data-id-ptm`/`data-id-ptmo`); de ese modo no intercepta precios del circuito dinamico ni abre una inconsistencia antes de su Sweet contextual.
+- La revalidacion posterior al aviso inicial es silenciosa: editar detalle, cantidades, porcentajes o imagenes, resolver/cancelar un precio y recalcular no vuelven a mostrar el SweetAlert rojo general.
+- Guardar depende del estado dirty y de los bloqueos comerciales/workflow, no de la vigencia: con cambios locales puede persistir parcialmente el borrador aunque queden precios rojos. Generar documento exige presupuesto limpio, todos los precios vigentes y ausencia de bloqueos adicionales.
+- La matriz de acciones es unica para ambos circuitos: sin cambios y con vencidos, ambos botones quedan deshabilitados; con cambios, Guardar queda habilitado y Generar documento deshabilitado, haya o no vencidos; sin cambios ni vencidos, Guardar queda deshabilitado y Generar documento habilitado. Los bloqueos comerciales o de workflow tienen prioridad y deshabilitan ambas acciones.
 
 ### Riesgo tecnico
 
 - `materiales` sigue usando motor MyISAM, por lo que no hay atomicidad ACID completa sobre ese catalogo.
 - Para materiales se usa `GET_LOCK()` cooperativo, relectura y compensacion compare-and-set cuando corresponde; el lock solo coordina consumidores que respeten el mismo convenio.
+- Una caida abrupta o un escritor que ignore el advisory lock conserva riesgo residual: la compensacion compare-and-set es de mejor esfuerzo, no atomicidad ACID completa.
 - `tipo_jornales` y los snapshots de presupuesto operan dentro del comportamiento transaccional disponible para sus tablas.
 - `previsitas` tambien mantiene una ventana residual de concurrencia por su motor actual; los flujos reducen el riesgo con validaciones previas y relecturas.
 - Se recomienda migrar `materiales` y `previsitas` a InnoDB en una etapa futura para cerrar la brecha transaccional.

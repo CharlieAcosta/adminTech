@@ -2,8 +2,6 @@
 include_once '../06-funciones_php/funciones.php'; //conecta a la base de datos
 include_once '../04-modelo/conectDB.php'; // conecta a la base de datos
 
-
-
 if( isset($_POST['via']) && $_POST['via']=='ajax'){
     header('Content-Type: application/json; charset=utf-8');
     
