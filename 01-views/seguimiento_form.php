@@ -6222,14 +6222,26 @@ $(document).ready(function() {
       });
     }
 
-    function mostrarFeedbackGuardadoPedidoMateriales(message, type) {
-      if (window.toastr && typeof toastr[type] === 'function') {
-        toastr[type](message);
+    function mostrarExitoPedidoMateriales(mensaje, segundos) {
+      if (typeof mostrarExito === 'function') {
+        mostrarExito(mensaje, segundos || 3);
         return;
       }
 
-      if (type === 'error') {
-        mostrarError(message);
+      if (window.toastr && typeof toastr.success === 'function') {
+        toastr.success(mensaje);
+        return;
+      }
+    }
+
+    function mostrarErrorPedidoMateriales(mensaje, segundos) {
+      if (typeof mostrarError === 'function') {
+        mostrarError(mensaje, segundos || 3);
+        return;
+      }
+
+      if (window.toastr && typeof toastr.error === 'function') {
+        toastr.error(mensaje);
       }
     }
 
@@ -6383,15 +6395,14 @@ $(document).ready(function() {
             }
 
             limpiarCambiosPendientesPedidoMateriales();
-            mostrarFeedbackGuardadoPedidoMateriales('Pedido realizado y snapshot actualizado.', 'success');
+            mostrarExitoPedidoMateriales('Pedido realizado y estado guardado.');
           });
         }).catch(function(xhr) {
           marcarPedidoMaterialesConCambiosPendientes();
-          mostrarFeedbackGuardadoPedidoMateriales(
+          mostrarErrorPedidoMateriales(
             (xhr && xhr.responseJSON && xhr.responseJSON.message)
               || (xhr && xhr.message)
-              || 'No se pudo guardar el snapshot del pedido.',
-            'error'
+              || 'No se pudo guardar el pedido de materiales.'
           );
         });
       });
@@ -6416,14 +6427,13 @@ $(document).ready(function() {
         }
 
         limpiarCambiosPendientesPedidoMateriales();
-        mostrarFeedbackGuardadoPedidoMateriales('Pedido guardado correctamente.', 'success');
+        mostrarExitoPedidoMateriales('Pedido guardado correctamente.');
       }).catch(function(xhr) {
         marcarPedidoMaterialesConCambiosPendientes();
-        mostrarFeedbackGuardadoPedidoMateriales(
+        mostrarErrorPedidoMateriales(
           (xhr && xhr.responseJSON && xhr.responseJSON.message)
             || (xhr && xhr.message)
-            || 'No se pudo guardar el pedido.',
-          'error'
+            || 'No se pudo guardar el pedido de materiales.'
         );
       });
     });
@@ -6896,13 +6906,13 @@ $(document).ready(function() {
 
       guardarMaterialPedidoAdicional(materialId, 1).then(function(resp) {
         if (!resp || resp.success === false) {
-          toastr.error((resp && resp.error) || 'No se pudo agregar la unidad del material.');
+          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
           return;
         }
 
         actualizarAgregadoPedidoMaterialEnFila($fila, 1);
       }).catch(function() {
-        toastr.error('No se pudo agregar la unidad del material.');
+        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
       }).finally(function() {
         $boton.prop('disabled', false);
         actualizarBloqueoAccionesMaterialPresupuestadoPorAutorizacion($fila);
@@ -6935,13 +6945,13 @@ $(document).ready(function() {
 
       guardarMaterialPedidoAdicional(materialId, -1).then(function(resp) {
         if (!resp || resp.success === false) {
-          toastr.error((resp && resp.error) || 'No se pudo quitar la unidad del material.');
+          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
           return;
         }
 
         actualizarAgregadoPedidoMaterialEnFila($fila, -1);
       }).catch(function() {
-        toastr.error('No se pudo quitar la unidad del material.');
+        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
       }).finally(function() {
         $boton.prop('disabled', false);
         actualizarBloqueoAccionesMaterialPresupuestadoPorAutorizacion($fila);
@@ -6977,7 +6987,7 @@ $(document).ready(function() {
 
       guardarMaterialPedidoAdicional(materialId, -cantidadTotal).then(function(resp) {
         if (!resp || resp.success === false) {
-          toastr.error((resp && resp.error) || 'No se pudo quitar el material.');
+          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
           return;
         }
 
@@ -6988,7 +6998,7 @@ $(document).ready(function() {
         actualizarEstadoBotonRealizarPedido();
         marcarPedidoMaterialesConCambiosPendientes();
       }).catch(function() {
-        toastr.error('No se pudo quitar el material.');
+        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
       }).finally(function() {
         $boton.prop('disabled', false);
       });
