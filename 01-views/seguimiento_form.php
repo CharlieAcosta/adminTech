@@ -14,6 +14,7 @@ include_once '../04-modelo/presupuestoGeneradoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
+include_once '../04-modelo/pedidoMaterialesSnapshotModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
 include_once '../04-modelo/previsitaDocumentosModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
@@ -204,6 +205,7 @@ $presupuestoIntervinoResumen = construirResumenIntervencionesPresupuesto([]);
 $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones';
 $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
 $materialesSolicitadosSeguimiento = [];
+$pedidoMaterialesSnapshot = null;
 
 if(isset($_GET['id']) && isset($_GET['acci'])){
   $id = $_GET['id'];
@@ -522,6 +524,18 @@ if(isset($cliente_datos['0']['id_cliente']) && $visualiza == "" && !is_null($cli
 
 if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
   $documentosPrevisita = listarDocumentosPrevisita((int)$datos['id_previsita'], $datos);
+
+  $dbPedidoMaterialesSnapshot = conectDB();
+  if ($dbPedidoMaterialesSnapshot) {
+    mysqli_set_charset($dbPedidoMaterialesSnapshot, 'utf8mb4');
+    if (pedidoMaterialesSnapshotTablasMinimasDisponibles($dbPedidoMaterialesSnapshot)) {
+      $pedidoMaterialesSnapshot = obtenerPedidoMaterialesSnapshotPorPrevisitaEnConexion(
+        $dbPedidoMaterialesSnapshot,
+        (int)$datos['id_previsita']
+      );
+    }
+    mysqli_close($dbPedidoMaterialesSnapshot);
+  }
 }
 
 $permiteEditarPrevisitaCompleta = ($visualizacionSolicitada === false && $visualiza === '' && $visualiza_prevista === '' && (empty($bloqueoEdicionComercial['bloqueado']) || $esPerfilAdministrativoSeguimiento) && empty($workflowPrevisita['bloqueado']));
@@ -1295,6 +1309,35 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     }
   }
 
+  if (!empty($pedidoMaterialesSnapshot['materiales_agregados']) && is_array($pedidoMaterialesSnapshot['materiales_agregados'])) {
+    $materialesAgregadosPedido = array_values(array_map(function ($detalleSnapshot) {
+      $cantidadInicial = (float)($detalleSnapshot['cantidad_inicial'] ?? 0);
+      $pedidosSnapshot = is_array($detalleSnapshot['pedidos'] ?? null) ? $detalleSnapshot['pedidos'] : [];
+      $cantidadSolicitada = (float)($detalleSnapshot['cantidad_solicitada'] ?? 0);
+      if ($cantidadSolicitada <= 0 && !empty($pedidosSnapshot)) {
+        $cantidadSolicitada = array_sum(array_map('floatval', $pedidosSnapshot));
+      }
+
+      return [
+        'id_material' => (int)($detalleSnapshot['id_material'] ?? 0),
+        'nombre_material' => (string)($detalleSnapshot['material_texto'] ?? ''),
+        'cantidad' => $cantidadInicial,
+        'cantidad_inicial' => $cantidadInicial,
+        'cantidad_agregada' => max(0, $cantidadSolicitada - $cantidadInicial),
+        'tarea_nro' => (int)($detalleSnapshot['tarea_nro'] ?? 0),
+        'tarea_titulo' => (string)($detalleSnapshot['tarea_titulo'] ?? ''),
+      ];
+    }, $pedidoMaterialesSnapshot['materiales_agregados']));
+
+    $idsMaterialesNoSeleccionablesPedido = $idsMaterialesPresupuestadosPedido;
+    foreach ($materialesAgregadosPedido as $materialAgregadoPedido) {
+      $idMaterialAgregado = (int)($materialAgregadoPedido['id_material'] ?? 0);
+      if ($idMaterialAgregado > 0) {
+        $idsMaterialesNoSeleccionablesPedido[$idMaterialAgregado] = true;
+      }
+    }
+  }
+
   $materialesDisponiblesPedido = array_values(array_filter(is_array($materiales ?? null) ? $materiales : [], function ($material) use ($idsMaterialesNoSeleccionablesPedido) {
     $idMaterial = (int)($material['id_material'] ?? 0);
     return $idMaterial > 0 && empty($idsMaterialesNoSeleccionablesPedido[$idMaterial]);
@@ -1351,8 +1394,17 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
 <!-- start accordion 5 - Pedido de materiales -->
 <?php if ($puedeGestionarPedidoMateriales): ?>
+<?php
+  $idPrevisitaPedidoMateriales = (int)($datos['id_previsita'] ?? 0);
+?>
 <script>
+  window.SEGUIMIENTO_PEDIDO_MATERIALES = <?php echo jsonParaJsSeguro([
+    'id_previsita' => $idPrevisitaPedidoMateriales,
+    'url_guardar_snapshot' => '../03-controller/pedidoMaterialesController.php',
+  ], '{}'); ?>;
   window.PEDIDO_MATERIALES_TAREAS = <?php echo jsonParaJsSeguro($pedidoMaterialesTareasDisponibles, '[]'); ?>;
+  window.PEDIDO_MATERIALES_SNAPSHOT = <?php echo jsonParaJsSeguro($pedidoMaterialesSnapshot, 'null'); ?>;
+  window.PEDIDO_MATERIALES_ENDPOINT = '../03-controller/pedidoMaterialesController.php';
 </script>
 <div class="accordion <?php echo $pedidoMaterialesHabilitadoInicial ? '' : 'd-none'; ?>" id="accordionExample5" aria-hidden="<?php echo $pedidoMaterialesHabilitadoInicial ? 'false' : 'true'; ?>">
   <div class="card <?php echo $orden_compra_card; ?> accordion 5">
@@ -1370,8 +1422,8 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     </div>
 
     <div id="collapse5_PM" class="collapse <?php echo $pedido_materiales_show; ?>"
-         data-pedido-materiales-activo="1"
-         data-pedido-materiales-finalizado="0"
+         data-pedido-materiales-activo="<?php echo (int)($pedidoMaterialesSnapshot['pedido_activo'] ?? 1); ?>"
+         data-pedido-materiales-finalizado="<?php echo !empty($pedidoMaterialesSnapshot['finalizado']) ? '1' : '0'; ?>"
          aria-labelledby="heading5" 
          data-parent="#accordionExample5">
       <div class="card-body">
@@ -1412,7 +1464,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                         ? $productoMaterial
                         : 'Material #' . $idMaterialPedido;
                     ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="sin_solicitud">
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="sin_solicitud" data-tarea-nro="<?php echo $tareaNroMaterial; ?>" data-tarea-titulo="<?php echo htmlspecialchars($tareaTituloMaterial, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>">
                       <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
                       <td class="align-middle">
                         <?php if ($tareaNroMaterial > 0): ?>
@@ -1553,7 +1605,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                         ? $productoMaterial
                         : 'Material #' . $idMaterialPedido;
                     ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="pendiente">
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="pendiente" data-tarea-nro="<?php echo (int)($materialSolicitado['tarea_nro'] ?? 0); ?>" data-tarea-titulo="<?php echo htmlspecialchars((string)($materialSolicitado['tarea_titulo'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>">
                       <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
                       <td class="align-middle">
                         <strong>Adicional</strong>
@@ -1627,6 +1679,12 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
         </div>
 
         <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
+          <button type="button"
+                  class="btn btn-secondary btn-uniform mr-2"
+                  id="pedido_materiales_guardar"
+                  disabled>
+            <i class="fa fa-save mr-1"></i> Guardar pedido
+          </button>
           <button type="button"
                   class="btn btn-secondary btn-uniform"
                   id="pedido_materiales_ejecutar"
@@ -3178,6 +3236,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     color: #ffffff;
   }
 
+  #pedido_materiales_guardar,
   #pedido_materiales_ejecutar {
     align-items: center;
     border: 1px solid transparent;
@@ -4543,6 +4602,7 @@ $(document).ready(function() {
     });
 
     var ordenCompraConfig = window.SEGUIMIENTO_ORDEN_COMPRA || null;
+    var pedidoMaterialesConfig = window.SEGUIMIENTO_PEDIDO_MATERIALES || {};
     var ordenCompraCargaInicialRealizada = false;
     var ordenCompraIdActivo = 0;
     var ordenCompraEstadoActual = '';
@@ -5589,7 +5649,64 @@ $(document).ready(function() {
       return isFinite(cantidad) ? cantidad : 0;
     }
 
+    function normalizarCantidadSnapshotPersistida(valor) {
+      if (typeof valor === 'number') {
+        return isFinite(valor) && valor > 0 ? valor : 0;
+      }
+
+      var texto = String(valor || '').trim();
+      if (!texto) {
+        return 0;
+      }
+
+      if (/^-?\d+\.\d{1,6}$/.test(texto)) {
+        var decimal = Number(texto);
+        return isFinite(decimal) && decimal > 0 ? decimal : 0;
+      }
+
+      return parsearCantidadPedidoMaterial(texto);
+    }
+
+    var pedidoMaterialesTieneCambiosPendientes = false;
+    var pedidoMaterialesGuardandoSnapshot = false;
+    var pedidoMaterialesRestaurandoSnapshot = false;
     var PEDIDO_MATERIALES_MAXIMO = 5;
+
+    function obtenerEndpointPedidoMateriales() {
+      return String(
+        pedidoMaterialesConfig.url_guardar_snapshot
+        || window.PEDIDO_MATERIALES_ENDPOINT
+        || '../03-controller/pedidoMaterialesController.php'
+      );
+    }
+
+    function actualizarEstadoBotonGuardarPedidoMateriales() {
+      var $boton = $('#pedido_materiales_guardar');
+      if (!$boton.length) {
+        return;
+      }
+
+      var botonHabilitado = pedidoMaterialesTieneCambiosPendientes && !pedidoMaterialesGuardandoSnapshot;
+
+      $boton
+        .prop('disabled', !botonHabilitado)
+        .toggleClass('btn-info', botonHabilitado)
+        .toggleClass('btn-secondary', !botonHabilitado);
+    }
+
+    function marcarPedidoMaterialesConCambiosPendientes() {
+      if (pedidoMaterialesRestaurandoSnapshot) {
+        return;
+      }
+
+      pedidoMaterialesTieneCambiosPendientes = true;
+      actualizarEstadoBotonGuardarPedidoMateriales();
+    }
+
+    function limpiarCambiosPendientesPedidoMateriales() {
+      pedidoMaterialesTieneCambiosPendientes = false;
+      actualizarEstadoBotonGuardarPedidoMateriales();
+    }
 
     function normalizarNumeroPedidoMateriales(numeroPedido) {
       var numero = parseInt(String(numeroPedido || '1'), 10);
@@ -5603,6 +5720,19 @@ $(document).ready(function() {
 
     function obtenerNumeroPedidoMaterialesActivo() {
       return normalizarNumeroPedidoMateriales($('#collapse5_PM').attr('data-pedido-materiales-activo'));
+    }
+
+    function obtenerNumeroMaximoPedidoMaterialesVisible() {
+      var numeroMaximo = 1;
+
+      $('#collapse5_PM .pedido-materiales-pedido-header').each(function() {
+        var numeroPedido = parseInt(String($(this).attr('data-pedido-numero') || '0'), 10);
+        if (numeroPedido > numeroMaximo) {
+          numeroMaximo = numeroPedido;
+        }
+      });
+
+      return normalizarNumeroPedidoMateriales(numeroMaximo);
     }
 
     function establecerNumeroPedidoMaterialesActivo(numeroPedido) {
@@ -5745,6 +5875,7 @@ $(document).ready(function() {
         );
       });
       actualizarEstiloPedidoMaterialesActivo();
+      marcarPedidoMaterialesConCambiosPendientes();
     }
 
     function agregarCeldaPedidoMaterialSiFalta($fila, numeroPedido, cantidad) {
@@ -5774,6 +5905,7 @@ $(document).ready(function() {
       actualizarCantidadPedidoMaterialEnFila($fila, numeroPedidoActivo, cantidadNueva);
       $fila.attr('data-material-agregado', String(cantidadNueva));
       actualizarResumenVisualPedidoMaterialEnFila($fila);
+      marcarPedidoMaterialesConCambiosPendientes();
 
       return cantidadNueva;
     }
@@ -5954,7 +6086,7 @@ $(document).ready(function() {
         return;
       }
 
-      if (pedidoMaterialesEstaFinalizado()) {
+      if (pedidoMaterialesEstaFinalizado() || pedidoMaterialesGuardandoSnapshot) {
         $boton
           .prop('disabled', true)
           .removeClass('btn-success')
@@ -6007,6 +6139,100 @@ $(document).ready(function() {
       return detallePedido;
     }
 
+    function obtenerSnapshotFilaPedidoMaterial($fila, tipoFila, ordenVisual) {
+      var pedidos = {};
+      var numeroPedido;
+
+      for (numeroPedido = 1; numeroPedido <= PEDIDO_MATERIALES_MAXIMO; numeroPedido += 1) {
+        pedidos[numeroPedido] = obtenerCantidadPedidoMaterialEnFila($fila, numeroPedido);
+      }
+
+      return {
+        tipo_fila: tipoFila,
+        id_tarea: null,
+        tarea_nro: parseInt(String($fila.attr('data-tarea-nro') || '0'), 10) || null,
+        tarea_titulo: String($fila.attr('data-tarea-titulo') || '').trim(),
+        id_material: parseInt(String($fila.attr('data-material-id') || '0'), 10) || 0,
+        material_texto: String($fila.attr('data-material-text') || '').trim(),
+        cantidad_inicial: obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong'),
+        cantidad_solicitada: obtenerCantidadSolicitadaPedidoMaterialEnFila($fila),
+        pedidos: pedidos,
+        estado_autorizacion: obtenerEstadoAutorizacionPedidoMaterialEnFila($fila),
+        autorizacion_adicional: $fila.is('[data-material-autorizacion-adicional]')
+          ? parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-adicional'))
+          : null,
+        pedido_autorizacion_previo: $fila.is('[data-material-autorizacion-pedido-previo]')
+          ? parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'))
+          : null,
+        orden_visual: ordenVisual
+      };
+    }
+
+    function obtenerSnapshotFilasPedidoMateriales(selector, tipoFila) {
+      var filas = [];
+
+      $(selector).find('tr[data-material-id]').each(function(indice) {
+        filas.push(obtenerSnapshotFilaPedidoMaterial($(this), tipoFila, indice + 1));
+      });
+
+      return filas;
+    }
+
+    function obtenerSnapshotPedidoMateriales() {
+      return {
+        id_previsita: parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10) || 0,
+        pedido_activo: obtenerNumeroPedidoMaterialesActivo(),
+        pedido_maximo_visible: obtenerNumeroMaximoPedidoMaterialesVisible(),
+        finalizado: pedidoMaterialesEstaFinalizado(),
+        materiales_presupuestados: obtenerSnapshotFilasPedidoMateriales('#pedidoMaterialesPresupuestadosTableBody', 'presupuestado'),
+        materiales_agregados: obtenerSnapshotFilasPedidoMateriales('#pedidoMaterialesAgregadosTableBody', 'agregado')
+      };
+    }
+
+    function guardarSnapshotPedidoMateriales(accionGuardado) {
+      pedidoMaterialesGuardandoSnapshot = true;
+      actualizarEstadoBotonGuardarPedidoMateriales();
+      actualizarEstadoBotonRealizarPedido();
+
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify({
+          accion: 'guardar_snapshot',
+          snapshot: $.extend({}, obtenerSnapshotPedidoMateriales(), {
+            accion_guardado: accionGuardado === 'realizar' ? 'realizar' : 'guardar'
+          })
+        })
+      }).then(function(resp) {
+        if (!resp || resp.success === false) {
+          var mensajeError = (resp && resp.message) || (resp && resp.error) || 'No se pudo guardar el pedido de materiales.';
+          return $.Deferred().reject({
+            responseJSON: resp,
+            message: mensajeError
+          }).promise();
+        }
+
+        return resp;
+      }).always(function() {
+        pedidoMaterialesGuardandoSnapshot = false;
+        actualizarEstadoBotonGuardarPedidoMateriales();
+        actualizarEstadoBotonRealizarPedido();
+      });
+    }
+
+    function mostrarFeedbackGuardadoPedidoMateriales(message, type) {
+      if (window.toastr && typeof toastr[type] === 'function') {
+        toastr[type](message);
+        return;
+      }
+
+      if (type === 'error') {
+        mostrarError(message);
+      }
+    }
+
     function reiniciarAutorizacionPedidoMaterialParaNuevoCiclo($fila) {
       $fila
         .removeAttr('data-material-autorizacion-adicional data-material-autorizacion-pedido-previo')
@@ -6015,6 +6241,7 @@ $(document).ready(function() {
       renderizarBadgeAutorizacionPedidoMaterial($fila, 'sin_solicitud');
       renderizarAccionesAutorizacionPedidoMaterial($fila, 'sin_solicitud');
       actualizarVisibilidadAccionesCantidadPedidoMaterial($fila, false);
+      marcarPedidoMaterialesConCambiosPendientes();
     }
 
     function congelarPedidoMateriales(numeroPedido) {
@@ -6049,6 +6276,7 @@ $(document).ready(function() {
       });
 
       actualizarEstadoBotonRealizarPedido();
+      marcarPedidoMaterialesConCambiosPendientes();
     }
 
     function iniciarSiguienteCicloPedidoMateriales(numeroPedidoConfirmado) {
@@ -6075,6 +6303,7 @@ $(document).ready(function() {
       });
 
       actualizarEstadoBotonRealizarPedido();
+      marcarPedidoMaterialesConCambiosPendientes();
     }
 
     function procesarConfirmacionPedidoMateriales() {
@@ -6136,19 +6365,67 @@ $(document).ready(function() {
         allowEscapeKey: false,
         reverseButtons: false
       }).then(function(result) {
-        if (result && result.isConfirmed) {
-          procesarConfirmacionPedidoMateriales();
-          // TODO: implementar persistencia real del pedido de materiales al deposito.
+        if (!(result && result.isConfirmed)) {
+          return;
         }
+
+        guardarSnapshotPedidoMateriales('realizar').then(function(resp) {
+          if (!resp || resp.success === false) {
+            throw resp;
+          }
+
+          limpiarCambiosPendientesPedidoMateriales();
+          procesarConfirmacionPedidoMateriales();
+
+          return guardarSnapshotPedidoMateriales('realizar').then(function(respPosterior) {
+            if (!respPosterior || respPosterior.success === false) {
+              throw respPosterior;
+            }
+
+            limpiarCambiosPendientesPedidoMateriales();
+            mostrarFeedbackGuardadoPedidoMateriales('Pedido realizado y snapshot actualizado.', 'success');
+          });
+        }).catch(function(xhr) {
+          marcarPedidoMaterialesConCambiosPendientes();
+          mostrarFeedbackGuardadoPedidoMateriales(
+            (xhr && xhr.responseJSON && xhr.responseJSON.message)
+              || (xhr && xhr.message)
+              || 'No se pudo guardar el snapshot del pedido.',
+            'error'
+          );
+        });
       });
     }
 
     $(document).on('click', '#pedido_materiales_ejecutar', function() {
-      if ($(this).prop('disabled') || pedidoMaterialesEstaFinalizado()) {
+      if ($(this).prop('disabled') || pedidoMaterialesEstaFinalizado() || pedidoMaterialesGuardandoSnapshot) {
         return;
       }
 
       mostrarConfirmacionRealizarPedido();
+    });
+
+    $(document).on('click', '#pedido_materiales_guardar', function() {
+      if ($(this).prop('disabled') || !pedidoMaterialesTieneCambiosPendientes) {
+        return;
+      }
+
+      guardarSnapshotPedidoMateriales('guardar').then(function(resp) {
+        if (!resp || resp.success === false) {
+          throw resp;
+        }
+
+        limpiarCambiosPendientesPedidoMateriales();
+        mostrarFeedbackGuardadoPedidoMateriales('Pedido guardado correctamente.', 'success');
+      }).catch(function(xhr) {
+        marcarPedidoMaterialesConCambiosPendientes();
+        mostrarFeedbackGuardadoPedidoMateriales(
+          (xhr && xhr.responseJSON && xhr.responseJSON.message)
+            || (xhr && xhr.message)
+            || 'No se pudo guardar el pedido.',
+          'error'
+        );
+      });
     });
 
     function actualizarResumenVisualPedidoMaterialEnFila($fila) {
@@ -6191,6 +6468,7 @@ $(document).ready(function() {
       renderizarBadgeAutorizacionPedidoMaterial($fila, 'pendiente');
       renderizarAccionesAutorizacionPedidoMaterial($fila, 'pendiente');
       actualizarResumenVisualPedidoMaterialEnFila($fila);
+      marcarPedidoMaterialesConCambiosPendientes();
     }
 
     function cambiarEstadoAutorizacionPedidoMaterialEnFila($fila, estado) {
@@ -6207,6 +6485,7 @@ $(document).ready(function() {
       renderizarBadgeAutorizacionPedidoMaterial($fila, estado);
       renderizarAccionesAutorizacionPedidoMaterial($fila, estado);
       actualizarResumenVisualPedidoMaterialEnFila($fila);
+      marcarPedidoMaterialesConCambiosPendientes();
     }
 
     $(document).on('click', '.pedido-material-autorizacion-autorizar', function() {
@@ -6346,16 +6625,11 @@ $(document).ready(function() {
           agregarFilaPedidoMaterial(datosMaterial.materialId, datosMaterial.materialTexto, datosMaterial.cantidad, result.value.tareaSeleccionada);
           quitarMaterialPedidoDelSelect(datosMaterial.materialId);
           $('#pedido_material_cantidad').val('');
+          marcarPedidoMaterialesConCambiosPendientes();
           // TODO: implementar persistencia de la autorización para material no presupuestado.
         }
       });
     }
-
-    $('#pedidoMaterialesPresupuestadosTableBody tr, #pedidoMaterialesAgregadosTableBody tr').each(function() {
-      actualizarResumenVisualPedidoMaterialEnFila($(this));
-    });
-    actualizarEstiloPedidoMaterialesActivo();
-    inicializarTooltipsAccionesPedidoMateriales($('#collapse5_PM'));
 
     function actualizarCantidadInicialPedidoMaterialEnFila($fila, cantidadSumar) {
       var cantidadActual = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
@@ -6376,7 +6650,7 @@ $(document).ready(function() {
     }
 
     function guardarMaterialPedidoAdicional(materialId, cantidad) {
-      var idPrevisita = parseInt(String(ordenCompraConfig.id_previsita || '0'), 10);
+      var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10);
 
       if (!idPrevisita) {
         return Promise.reject();
@@ -6466,6 +6740,124 @@ $(document).ready(function() {
       actualizarVisibilidadTablaMaterialesAgregados();
       actualizarEstiloPedidoMaterialesActivo();
       inicializarTooltipsAccionesPedidoMateriales($filaNueva);
+      marcarPedidoMaterialesConCambiosPendientes();
+    }
+
+    function aplicarSnapshotDetallePedidoMaterialAFila($fila, detalleSnapshot, numeroMaximoVisible) {
+      var pedidos = (detalleSnapshot && detalleSnapshot.pedidos) || {};
+      var estadoAutorizacion = (detalleSnapshot && detalleSnapshot.estado_autorizacion) || 'sin_solicitud';
+      var numeroPedido;
+
+      if (!$fila.length || !detalleSnapshot) {
+        return;
+      }
+
+      $fila.attr({
+        'data-material-id': String(detalleSnapshot.id_material || 0),
+        'data-material-text': String(detalleSnapshot.material_texto || ''),
+        'data-material-cantidad-inicial': String(normalizarCantidadSnapshotPersistida(detalleSnapshot.cantidad_inicial)),
+        'data-material-agregado': String(normalizarCantidadSnapshotPersistida(detalleSnapshot.cantidad_solicitada)),
+        'data-material-autorizacion-estado': estadoAutorizacion,
+        'data-tarea-nro': String(detalleSnapshot.tarea_nro || ''),
+        'data-tarea-titulo': String(detalleSnapshot.tarea_titulo || '')
+      });
+
+      if (detalleSnapshot.autorizacion_adicional !== null && detalleSnapshot.autorizacion_adicional !== undefined) {
+        $fila.attr('data-material-autorizacion-adicional', String(normalizarCantidadSnapshotPersistida(detalleSnapshot.autorizacion_adicional)));
+      } else {
+        $fila.removeAttr('data-material-autorizacion-adicional');
+      }
+
+      if (detalleSnapshot.pedido_autorizacion_previo !== null && detalleSnapshot.pedido_autorizacion_previo !== undefined) {
+        $fila.attr('data-material-autorizacion-pedido-previo', String(normalizarCantidadSnapshotPersistida(detalleSnapshot.pedido_autorizacion_previo)));
+      } else {
+        $fila.removeAttr('data-material-autorizacion-pedido-previo');
+      }
+
+      for (numeroPedido = 1; numeroPedido <= numeroMaximoVisible; numeroPedido += 1) {
+        if (numeroPedido > 1) {
+          agregarColumnaPedidoMaterial(numeroPedido);
+          agregarCeldaPedidoMaterialSiFalta($fila, numeroPedido, 0);
+        }
+
+        actualizarCantidadPedidoMaterialEnFila(
+          $fila,
+          numeroPedido,
+          normalizarCantidadSnapshotPersistida(pedidos[numeroPedido] || pedidos[String(numeroPedido)] || 0)
+        );
+      }
+
+      renderizarBadgeAutorizacionPedidoMaterial($fila, estadoAutorizacion);
+      renderizarAccionesAutorizacionPedidoMaterial($fila, estadoAutorizacion);
+    }
+
+    function restaurarSnapshotFilasPedidoMateriales(selector, detallesSnapshot, numeroMaximoVisible) {
+      var detalles = Array.isArray(detallesSnapshot) ? detallesSnapshot : [];
+
+      $(selector).find('tr[data-material-id]').each(function(indice) {
+        aplicarSnapshotDetallePedidoMaterialAFila($(this), detalles[indice] || null, numeroMaximoVisible);
+      });
+    }
+
+    function restaurarSnapshotPedidoMateriales(snapshot) {
+      var snapshotPedidoMateriales = snapshot || window.PEDIDO_MATERIALES_SNAPSHOT;
+      var numeroMaximoVisible;
+      var numeroPedidoActivo;
+      var numeroPedido;
+
+      if (!snapshotPedidoMateriales || typeof snapshotPedidoMateriales !== 'object') {
+        return;
+      }
+
+      pedidoMaterialesRestaurandoSnapshot = true;
+
+      try {
+        numeroMaximoVisible = normalizarNumeroPedidoMateriales(snapshotPedidoMateriales.pedido_maximo_visible || 1);
+        numeroPedidoActivo = normalizarNumeroPedidoMateriales(snapshotPedidoMateriales.pedido_activo || 1);
+
+        for (numeroPedido = 2; numeroPedido <= numeroMaximoVisible; numeroPedido += 1) {
+          agregarColumnaPedidoMaterial(numeroPedido);
+        }
+
+        restaurarSnapshotFilasPedidoMateriales(
+          '#pedidoMaterialesPresupuestadosTableBody',
+          snapshotPedidoMateriales.materiales_presupuestados || [],
+          numeroMaximoVisible
+        );
+        restaurarSnapshotFilasPedidoMateriales(
+          '#pedidoMaterialesAgregadosTableBody',
+          snapshotPedidoMateriales.materiales_agregados || [],
+          numeroMaximoVisible
+        );
+
+        establecerNumeroPedidoMaterialesActivo(numeroPedidoActivo);
+        $('#collapse5_PM').attr('data-pedido-materiales-finalizado', snapshotPedidoMateriales.finalizado ? '1' : '0');
+
+        for (numeroPedido = 1; numeroPedido <= numeroMaximoVisible; numeroPedido += 1) {
+          if (numeroPedido < numeroPedidoActivo || snapshotPedidoMateriales.finalizado) {
+            congelarPedidoMateriales(numeroPedido);
+          }
+        }
+
+        $('#pedidoMaterialesPresupuestadosTableBody tr[data-material-id], #pedidoMaterialesAgregadosTableBody tr[data-material-id]').each(function() {
+          actualizarResumenVisualPedidoMaterialEnFila($(this));
+        });
+
+        actualizarNumeracionMaterialesAgregados();
+        actualizarVisibilidadTablaMaterialesAgregados();
+        actualizarEstiloPedidoMaterialesActivo();
+
+        if (snapshotPedidoMateriales.finalizado) {
+          finalizarFlujoPedidoMateriales();
+        } else {
+          $('#pedido_material_select, #pedido_material_cantidad, #pedido_material_agregar').prop('disabled', false);
+          actualizarEstadoBotonRealizarPedido();
+        }
+      } finally {
+        pedidoMaterialesRestaurandoSnapshot = false;
+        limpiarCambiosPendientesPedidoMateriales();
+        inicializarTooltipsAccionesPedidoMateriales($('#collapse5_PM'));
+      }
     }
 
     $(document).on('click', '.pedido-material-agregar-unidades', function() {
@@ -6577,6 +6969,7 @@ $(document).ready(function() {
         agregarMaterialPedidoAlSelect(materialId, materialTexto);
         actualizarVisibilidadTablaMaterialesAgregados();
         actualizarEstadoBotonRealizarPedido();
+        marcarPedidoMaterialesConCambiosPendientes();
         return;
       }
 
@@ -6593,6 +6986,7 @@ $(document).ready(function() {
         agregarMaterialPedidoAlSelect(materialId, materialTexto);
         actualizarVisibilidadTablaMaterialesAgregados();
         actualizarEstadoBotonRealizarPedido();
+        marcarPedidoMaterialesConCambiosPendientes();
       }).catch(function() {
         toastr.error('No se pudo quitar el material.');
       }).finally(function() {
@@ -6609,7 +7003,7 @@ $(document).ready(function() {
       var materialTexto = $('#pedido_material_select option:selected').text();
       var cantidad = $('#pedido_material_cantidad').val();
       var cantidadNumero = parseFloat(String(cantidad || '').replace(',', '.'));
-      var idPrevisita = parseInt(String(ordenCompraConfig.id_previsita || '0'), 10);
+      var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10);
 
       if (!materialId || materialId === 'Seleccione un material' || !isFinite(cantidadNumero) || cantidadNumero <= 0) {
         mostrarError('Seleccioná un material e indicá una cantidad válida.');
@@ -6627,6 +7021,15 @@ $(document).ready(function() {
         cantidad: cantidadNumero
       });
     });
+
+    $('#pedidoMaterialesPresupuestadosTableBody tr, #pedidoMaterialesAgregadosTableBody tr').each(function() {
+      actualizarResumenVisualPedidoMaterialEnFila($(this));
+    });
+    actualizarVisibilidadTablaMaterialesAgregados();
+    actualizarEstiloPedidoMaterialesActivo();
+    restaurarSnapshotPedidoMateriales(window.PEDIDO_MATERIALES_SNAPSHOT);
+    inicializarTooltipsAccionesPedidoMateriales($('#collapse5_PM'));
+    limpiarCambiosPendientesPedidoMateriales();
 
 
 ///////////////////////////////////////////////////////////////////////////////
