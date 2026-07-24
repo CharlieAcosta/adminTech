@@ -1083,7 +1083,11 @@
       $input.data('confirmacionPrecioPresupuestoPendiente', true).prop('readonly', true);
       try {
         const contexto = await solicitarPrecioPresupuesto({ ...identidad, funcion: 'obtenerContextoPrecioPresupuesto' });
-        if (contexto.snapshot_vencido !== true) {
+        const precioSnapshotCoincideCatalogo = [
+          'MISMO_PRECIO_CATALOGO_VIGENTE',
+          'MISMO_PRECIO_CATALOGO_VENCIDO'
+        ].includes(String(contexto.escenario || ''));
+        if (contexto.snapshot_vencido !== true && precioSnapshotCoincideCatalogo) {
           $input
             .val(String(contexto.precio_snapshot))
             .attr('data-fecha-actualizacion', String(contexto.fecha_snapshot || ''))
