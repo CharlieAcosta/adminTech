@@ -2861,10 +2861,6 @@ $(document).ready(function() {
         background: #fff !important;
       }
 
-      #${PRINT_ROOT_ID} .pdf-capture-section.print-page-total {
-        display: flex !important;
-        flex-direction: column !important;
-      }
     `;
 
     document.head.appendChild(style);
@@ -3481,29 +3477,11 @@ $(document).ready(function() {
     };
     const paginasFisicas = [];
 
-    for (let indiceSeccion = 0; indiceSeccion < seccionesLogicas.length; indiceSeccion += 1) {
-      const seccionOriginal = seccionesLogicas[indiceSeccion];
+    for (const seccionOriginal of seccionesLogicas) {
       const seccion = seccionOriginal.cloneNode(true);
       seccion.classList.add('pdf-capture-section');
       quitarEncabezadoSeccion(seccion);
       seccion.style.setProperty('width', `${A4_CONTENT_WIDTH_PX}px`, 'important');
-
-      const siguienteSeccion = seccionesLogicas[indiceSeccion + 1];
-      const debeIntegrarCierre = seccion.classList.contains('print-page-task')
-        && siguienteSeccion?.classList.contains('print-page-total');
-
-      if (debeIntegrarCierre) {
-        const cierre = siguienteSeccion.cloneNode(true);
-        quitarEncabezadoSeccion(cierre);
-        Array.from(cierre.children).forEach((elemento) => {
-          seccion.appendChild(elemento);
-        });
-        indiceSeccion += 1;
-      }
-
-      if (seccion.classList.contains('print-page-total')) {
-        seccion.style.setProperty('min-height', `${altoContenidoCssPx}px`, 'important');
-      }
 
       $stage.append(seccion);
       const $seccion = $(seccion);
@@ -4222,10 +4200,15 @@ $(document).ready(function() {
 let htmlPrimeraPagina = '';
 let htmlPaginasTareas = '';
 const subtotalesTareasResumen = [];
+let cantidadTareasIncluidasPdf = 0;
 
 $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
-  const nro = idx + 1;
   const $card = $(this);
+  if (!$card.find('.incluir-en-total').prop('checked')) return;
+
+  const nro = idx + 1;
+  const indiceTareaIncluida = cantidadTareasIncluidasPdf;
+  cantidadTareasIncluidasPdf += 1;
 
   let $detalle = $card.find('textarea.tarea-descripcion').first();
   if (!$detalle.length) $detalle = $card.find('textarea').first();
@@ -4302,17 +4285,15 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
     .replace(/^Subtotal\s+Tarea\s+\d+\s*:\s*/i, '')
     .trim() || 'FALTA COMPLETAR';
 
-  if ($card.find('.incluir-en-total').prop('checked')) {
-    const tituloResumen = String(tituloTarea || `Tarea ${nro}`).trim();
-    const etiquetaResumen = new RegExp(`^Tarea\\s+${nro}$`, 'i').test(tituloResumen)
-      ? `Tarea ${nro}`
-      : `Tarea ${nro}: ${tituloResumen}`;
+  const tituloResumen = String(tituloTarea || `Tarea ${nro}`).trim();
+  const etiquetaResumen = new RegExp(`^Tarea\\s+${nro}$`, 'i').test(tituloResumen)
+    ? `Tarea ${nro}`
+    : `Tarea ${nro}: ${tituloResumen}`;
 
-    subtotalesTareasResumen.push({
-      etiqueta: etiquetaResumen,
-      valor: subtotalTareaValor
-    });
-  }
+  subtotalesTareasResumen.push({
+    etiqueta: etiquetaResumen,
+    valor: subtotalTareaValor
+  });
 
   // Fotos
   const fotos = [];
@@ -4398,8 +4379,8 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       </div>
     </div>
   `;
-  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
-  const encabezadoInterno = idx === 0 ? '' : encabezadoPaginaSecundaria;
+  // Desde la segunda tarea incluida: nueva página lógica + encabezado repetido
+  const encabezadoInterno = indiceTareaIncluida === 0 ? '' : encabezadoPaginaSecundaria;
 
   const contenidoTarea = `
       ${encabezadoInterno}
@@ -4433,7 +4414,7 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       </section>
   `;
 
-  if (idx === 0) {
+  if (indiceTareaIncluida === 0) {
     htmlPrimeraPagina += contenidoTarea;
   } else {
     htmlPaginasTareas += `
@@ -4565,6 +4546,47 @@ const htmlPaginaTotal = `
   </section>
 `;
 
+const htmlPrimeraSeccionTarea = cantidadTareasIncluidasPdf
+  ? `
+    <section class="print-page-task">
+      <div class="top">
+        <div class="logo">
+          <img src="${esc(logoSrc)}" alt="Logo">
+        </div>
+        <div class="doc">
+          <div class="doc-label">Presupuesto Nro:</div>
+          <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="grid">
+        <div class="box">
+          <h4>Cliente</h4>
+          <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
+          <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
+          <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
+          <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
+          <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
+          <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+        </div>
+
+        <div class="box">
+          <h4>Obra / Visita</h4>
+          <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
+          <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
+          <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
+          <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
+          <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+        </div>
+      </div>
+
+      ${htmlPrimeraPagina}
+    </section>
+  `
+  : '';
+
         // HTML completo (lo usamos para extraer el <body>)
         const baseHref = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
         const html = `
@@ -4583,8 +4605,6 @@ const htmlPaginaTotal = `
   @page { size: A4; margin: 15mm; }
 
   .page { width: 100%; max-width: 100%; padding: 0; overflow-x: hidden; }
-  .print-page-total { display:flex; flex-direction:column; }
-
   .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .logo img { max-width: 220px; height:auto; }
   .doc { text-align:right; }
@@ -4671,9 +4691,6 @@ const htmlPaginaTotal = `
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  .print-page-task > .bloque + .resumen-cierre {
-    margin-top: 10px;
-  }
   .resumen-cierre-con-subtotal .resumen-tarea-fila {
     margin-top: 5px;
     margin-bottom: 0;
@@ -4736,7 +4753,6 @@ const htmlPaginaTotal = `
   .total .valor { font-size: 16px; font-weight: 800; padding: 8px 12px; border: 2px solid #111; border-radius: 10px; }
 
   .condiciones-presupuesto {
-    margin-top: auto;
     padding-top: 14px;
     border-top: 1px solid #ddd;
     font-size: 9px;
@@ -4793,42 +4809,7 @@ const htmlPaginaTotal = `
 </head>
 <body>
 <div class="page">
-  <section class="print-page-task">
-    <div class="top">
-      <div class="logo">
-        <img src="${esc(logoSrc)}" alt="Logo">
-      </div>
-      <div class="doc">
-        <div class="doc-label">Presupuesto Nro:</div>
-        <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
-      </div>
-    </div>
-
-    <hr>
-
-    <div class="grid">
-      <div class="box">
-        <h4>Cliente</h4>
-        <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
-        <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
-        <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
-        <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
-        <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
-        <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
-      </div>
-
-      <div class="box">
-        <h4>Obra / Visita</h4>
-        <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
-        <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
-        <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
-        <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
-        <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
-      </div>
-    </div>
-
-    ${htmlPrimeraPagina || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
-  </section>
+  ${htmlPrimeraSeccionTarea}
   ${htmlPaginasTareas}
   ${htmlPaginaTotal}
 </div>
