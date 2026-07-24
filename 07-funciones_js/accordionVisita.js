@@ -2771,9 +2771,32 @@ $(document).ready(function() {
   const PRINT_STYLE_ID = 'presu-print-style';
   const A4_WIDTH_PX = 794;
   const A4_HEIGHT_PX = 1123;
-  const A4_MARGIN_PX = 38;
   const A4_WIDTH_MM = 210;
   const A4_HEIGHT_MM = 297;
+  const A4_MARGIN_MM = 15;
+  const A4_CONTENT_WIDTH_MM = A4_WIDTH_MM - (A4_MARGIN_MM * 2);
+  const A4_CONTENT_HEIGHT_MM = A4_HEIGHT_MM - (A4_MARGIN_MM * 2);
+  const A4_CONTENT_WIDTH_PX = Math.round((A4_WIDTH_PX * A4_CONTENT_WIDTH_MM) / A4_WIDTH_MM);
+  const PDF_HEADER_GAP_MM = 4;
+  const PDF_CAPTURE_SCALE = 2;
+  const convertirMmAPxContenido = (milimetros) => Math.round(
+    (Number(milimetros) * A4_CONTENT_WIDTH_PX) / A4_CONTENT_WIDTH_MM
+  );
+  const PDF_TEXT_CUT_SAFETY_MM = 1;
+  const PDF_TEXT_CUT_SAFETY_PX = convertirMmAPxContenido(PDF_TEXT_CUT_SAFETY_MM);
+  const PDF_SUMMARY_TOTAL_GAP_MM = 7;
+  const PDF_SUMMARY_TOTAL_GAP_PX = convertirMmAPxContenido(PDF_SUMMARY_TOTAL_GAP_MM);
+  const PDF_IMAGE_ROW_GAP_MM = 3;
+  const PDF_IMAGE_ROW_GAP_PX = convertirMmAPxContenido(PDF_IMAGE_ROW_GAP_MM);
+  const PDF_IMAGE_HALF_ROW_GAP_PX = PDF_IMAGE_ROW_GAP_PX / 2;
+  const PDF_IMAGE_SECTION_TOP_GAP_MM = 4;
+  const PDF_IMAGE_SECTION_TOP_GAP_PX = convertirMmAPxContenido(PDF_IMAGE_SECTION_TOP_GAP_MM);
+  const PDF_IMAGE_TITLE_GAP_MM = 2;
+  const PDF_IMAGE_TITLE_GAP_PX = convertirMmAPxContenido(PDF_IMAGE_TITLE_GAP_MM);
+  const PDF_IMAGE_TITLE_RESERVE_MM = 8;
+  const PDF_IMAGE_TITLE_RESERVE_PX = convertirMmAPxContenido(PDF_IMAGE_TITLE_RESERVE_MM);
+  const PDF_IMAGE_SLOT_PADDING_MM = 2;
+  const PDF_IMAGE_SLOT_PADDING_PX = convertirMmAPxContenido(PDF_IMAGE_SLOT_PADDING_MM);
 
   const limpiarHostRender = () => {
     const $root = $('#' + PRINT_ROOT_ID);
@@ -2809,15 +2832,35 @@ $(document).ready(function() {
       #${PRINT_ROOT_ID} .print-page-total {
         width: ${A4_WIDTH_PX}px !important;
         min-height: ${A4_HEIGHT_PX}px !important;
-        padding: ${A4_MARGIN_PX}px !important;
+        padding: 0 !important;
         background: #fff !important;
-        overflow: hidden !important;
+        overflow: visible !important;
       }
 
       #${PRINT_ROOT_ID} .page-break-before {
         break-before: auto !important;
         page-break-before: auto !important;
       }
+
+      #${PRINT_ROOT_ID} .pdf-capture-stage {
+        width: ${A4_CONTENT_WIDTH_PX}px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+
+      #${PRINT_ROOT_ID} .pdf-capture-header,
+      #${PRINT_ROOT_ID} .pdf-capture-section {
+        width: ${A4_CONTENT_WIDTH_PX}px !important;
+        max-width: ${A4_CONTENT_WIDTH_PX}px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+      }
+
     `;
 
     document.head.appendChild(style);
@@ -2856,27 +2899,36 @@ $(document).ready(function() {
     })));
   };
 
-  const ajustarFotosDocumentoEmitido = ($scope) => {
-    const paginas = Array.from($scope.find('.print-page-task'));
-    if (!paginas.length) return;
+  const ajustarFotosDocumentoEmitido = ($scope, altoMaximoPaginaPx = null) => {
+    const seccionesImagenes = Array.from(
+      $scope.filter('.seccion-imagenes').add($scope.find('.seccion-imagenes'))
+    );
+    if (!seccionesImagenes.length) return;
 
-    paginas.forEach((pagina) => {
-      const contenedorFotos = pagina.querySelector('.fotos');
-      if (!contenedorFotos) return;
+    const altoPagina = Number.isFinite(altoMaximoPaginaPx)
+      ? Math.max(1, Math.floor(altoMaximoPaginaPx))
+      : Math.floor((A4_CONTENT_HEIGHT_MM * A4_CONTENT_WIDTH_PX) / A4_CONTENT_WIDTH_MM);
+    const altoMaximoFila = Math.max(
+      1,
+      Math.floor(
+        (altoPagina - PDF_IMAGE_TITLE_RESERVE_PX - PDF_IMAGE_ROW_GAP_PX) / 2
+      )
+    );
+    const altoMaximoImagen = Math.max(
+      1,
+      altoMaximoFila - (PDF_IMAGE_SLOT_PADDING_PX * 2)
+    );
 
-      const slots = Array.from(contenedorFotos.querySelectorAll('.foto-slot'));
+    seccionesImagenes.forEach((seccionImagenes) => {
+      const slots = Array.from(seccionImagenes.querySelectorAll('.foto-slot'));
       if (!slots.length) return;
 
-      const pageRect = pagina.getBoundingClientRect();
-      const fotosRect = contenedorFotos.getBoundingClientRect();
-      const topRelativo = fotosRect.top - pageRect.top;
-      const altoDisponible = Math.floor(A4_HEIGHT_PX - A4_MARGIN_PX - topRelativo);
-
-      if (altoDisponible <= 0) return;
-
-      contenedorFotos.style.maxHeight = `${altoDisponible}px`;
       slots.forEach((slot) => {
-        slot.style.maxHeight = `${altoDisponible}px`;
+        slot.style.maxHeight = `${altoMaximoFila}px`;
+        const imagen = slot.querySelector('.foto');
+        if (imagen) {
+          imagen.style.maxHeight = `${altoMaximoImagen}px`;
+        }
       });
     });
   };
@@ -2990,15 +3042,523 @@ $(document).ready(function() {
     }
 
     await esperarImagenesRender($printRoot);
-    ajustarFotosDocumentoEmitido($printRoot);
-    await esperarSiguienteFrame();
 
-    const paginas = Array.from(
+    const seccionesLogicas = Array.from(
       $printRoot[0].querySelectorAll('.print-page-task, .print-page-total')
     );
 
-    if (!paginas.length) {
+    if (!seccionesLogicas.length) {
       throw new Error('No se encontraron páginas para renderizar el documento.');
+    }
+
+    const primeraSeccion = seccionesLogicas[0];
+    const obtenerHijoDirecto = (selector) => Array.from(primeraSeccion.children)
+      .find((child) => child.matches(selector));
+    const encabezadoTop = obtenerHijoDirecto('.top');
+    const encabezadoGrid = obtenerHijoDirecto('.grid');
+    const encabezadoHr = Array.from(primeraSeccion.children)
+      .find((child) => child.tagName?.toLowerCase() === 'hr');
+
+    if (!encabezadoTop || !encabezadoGrid) {
+      throw new Error('No se pudo identificar el encabezado del documento.');
+    }
+
+    const $stage = $('<div/>', { class: 'pdf-capture-stage' }).appendTo($printRoot);
+    const construirEncabezado = (numeroPagina = '') => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'pdf-capture-header';
+      wrapper.appendChild(encabezadoTop.cloneNode(true));
+      if (encabezadoHr) wrapper.appendChild(encabezadoHr.cloneNode(true));
+      wrapper.appendChild(encabezadoGrid.cloneNode(true));
+
+      const numero = wrapper.querySelector('.doc-page');
+      if (numero) {
+        numero.textContent = numeroPagina ? `Página Nro: ${numeroPagina}` : 'Página Nro:';
+      }
+
+      return wrapper;
+    };
+    const quitarEncabezadoSeccion = (seccion) => {
+      const hijos = Array.from(seccion.children);
+      const top = hijos.find((child) => child.matches('.top'));
+      const grid = hijos.find((child) => child.matches('.grid'));
+      const hr = hijos.find((child) => child.tagName?.toLowerCase() === 'hr');
+      if (top) top.remove();
+      if (hr) hr.remove();
+      if (grid) grid.remove();
+    };
+    const capturarElemento = async (elemento) => window.html2canvas(elemento, {
+        scale: PDF_CAPTURE_SCALE,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        windowWidth: A4_CONTENT_WIDTH_PX,
+        windowHeight: A4_HEIGHT_PX
+      });
+    const $headerMedicion = $(construirEncabezado()).appendTo($stage);
+    await esperarImagenesRender($headerMedicion);
+    await esperarSiguienteFrame();
+    const canvasHeaderMedicion = await capturarElemento($headerMedicion[0]);
+    const altoHeaderMm = (A4_CONTENT_WIDTH_MM * canvasHeaderMedicion.height) / canvasHeaderMedicion.width;
+    const altoContenidoMm = A4_CONTENT_HEIGHT_MM - altoHeaderMm - PDF_HEADER_GAP_MM;
+
+    $headerMedicion.remove();
+
+    if (altoContenidoMm <= 0) {
+      $stage.remove();
+      throw new Error('El encabezado no deja espacio útil para el contenido del documento.');
+    }
+
+    const altoContenidoCssPx = Math.floor(
+      (altoContenidoMm * A4_CONTENT_WIDTH_PX) / A4_CONTENT_WIDTH_MM
+    );
+    const buscarCorteSeguro = (
+      canvas,
+      offsetY,
+      altoMaximo,
+      margenSeguridadCanvas
+    ) => {
+      const limite = Math.min(canvas.height, offsetY + altoMaximo);
+      if (limite >= canvas.height) return canvas.height;
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return null;
+
+      const minimo = Math.max(
+        offsetY + Math.floor(altoMaximo * 0.58),
+        offsetY + 1
+      );
+      const altoAnalisis = Math.max(0, limite - minimo);
+      if (altoAnalisis <= 0) return null;
+
+      const pixeles = ctx.getImageData(0, minimo, canvas.width, altoAnalisis).data;
+      const filasVaciasRequeridas = Math.max(
+        6,
+        Math.ceil(Math.max(1, margenSeguridadCanvas) * 2)
+      );
+      let finFranja = -1;
+      let filasSeguras = 0;
+
+      for (let y = limite - 1; y >= minimo; y -= 1) {
+        const inicioFila = (y - minimo) * canvas.width * 4;
+        let filaVacia = true;
+
+        for (let x = 0; x < canvas.width; x += 1) {
+          const idx = inicioFila + (x * 4);
+          const alpha = pixeles[idx + 3];
+          const esTinta = alpha > 0
+            && (
+              pixeles[idx] < 255
+              || pixeles[idx + 1] < 255
+              || pixeles[idx + 2] < 255
+            );
+          if (esTinta) {
+            filaVacia = false;
+            break;
+          }
+        }
+
+        if (filaVacia) {
+          if (finFranja < 0) finFranja = y;
+          filasSeguras += 1;
+          if (filasSeguras >= filasVaciasRequeridas) {
+            return Math.max(
+              offsetY + 1,
+              Math.round(finFranja - ((filasSeguras - 1) / 2))
+            );
+          }
+        } else {
+          finFranja = -1;
+          filasSeguras = 0;
+        }
+      }
+
+      return null;
+    };
+    const medirRangosPaginacion = (seccion, canvas) => {
+      const rectSeccion = seccion.getBoundingClientRect();
+      const altoSeccion = Math.max(1, rectSeccion.height);
+      const escalaY = canvas.height / altoSeccion;
+      const medirElemento = (elemento) => {
+        const rect = elemento.getBoundingClientRect();
+        return {
+          top: Math.max(0, (rect.top - rectSeccion.top) * escalaY),
+          bottom: Math.max(0, (rect.bottom - rectSeccion.top) * escalaY)
+        };
+      };
+      const atomicos = Array.from(seccion.querySelectorAll('[data-pdf-atomic]'))
+        .map(medirElemento)
+        .filter((rango) => rango.bottom > rango.top);
+      const rangosTexto = [];
+      const walkerTexto = seccion.ownerDocument.createTreeWalker(
+        seccion,
+        window.NodeFilter.SHOW_TEXT,
+        {
+          acceptNode: (node) => {
+            const texto = String(node.nodeValue || '').replace(/\u00a0/g, ' ').trim();
+            if (!texto) return window.NodeFilter.FILTER_REJECT;
+
+            const parent = node.parentElement;
+            if (!parent || parent.closest('script, style')) {
+              return window.NodeFilter.FILTER_REJECT;
+            }
+
+            const estilos = window.getComputedStyle(parent);
+            if (estilos.display === 'none' || estilos.visibility === 'hidden') {
+              return window.NodeFilter.FILTER_REJECT;
+            }
+
+            return window.NodeFilter.FILTER_ACCEPT;
+          }
+        }
+      );
+      let nodoTexto = walkerTexto.nextNode();
+
+      while (nodoTexto) {
+        const range = seccion.ownerDocument.createRange();
+        range.selectNodeContents(nodoTexto);
+
+        Array.from(range.getClientRects()).forEach((rect) => {
+          if (rect.width <= 0 || rect.height <= 0) return;
+
+          rangosTexto.push({
+            top: Math.max(0, (rect.top - rectSeccion.top) * escalaY),
+            bottom: Math.max(0, (rect.bottom - rectSeccion.top) * escalaY)
+          });
+        });
+
+        if (typeof range.detach === 'function') range.detach();
+        nodoTexto = walkerTexto.nextNode();
+      }
+
+      rangosTexto.sort((a, b) => a.top - b.top || a.bottom - b.bottom);
+      const lineasTexto = [];
+
+      rangosTexto.forEach((rango) => {
+        const ultimaLinea = lineasTexto[lineasTexto.length - 1];
+        if (!ultimaLinea) {
+          lineasTexto.push({ ...rango });
+          return;
+        }
+
+        const centroActual = (rango.top + rango.bottom) / 2;
+        const centroUltimo = (ultimaLinea.top + ultimaLinea.bottom) / 2;
+        const altoActual = rango.bottom - rango.top;
+        const altoUltimo = ultimaLinea.bottom - ultimaLinea.top;
+        const toleranciaMismaLinea = Math.max(
+          1,
+          Math.min(altoActual, altoUltimo) * 0.35
+        );
+
+        if (Math.abs(centroActual - centroUltimo) <= toleranciaMismaLinea) {
+          ultimaLinea.top = Math.min(ultimaLinea.top, rango.top);
+          ultimaLinea.bottom = Math.max(ultimaLinea.bottom, rango.bottom);
+          return;
+        }
+
+        lineasTexto.push({ ...rango });
+      });
+      const imagenes = Array.from(seccion.querySelectorAll('[data-pdf-images]'))
+        .map((contenedor) => {
+          const inicio = contenedor.querySelector('.imagenes-inicio');
+          const filas = Array.from(contenedor.querySelectorAll('.fotos-fila'))
+            .map(medirElemento)
+            .filter((rango) => rango.bottom > rango.top);
+
+          return {
+            inicio: medirElemento(inicio || contenedor).top,
+            filas
+          };
+        });
+
+      return { atomicos, imagenes, lineasTexto, escalaY };
+    };
+    const buscarCortePorLimitesTexto = (
+      lineasTexto,
+      offsetY,
+      limite,
+      altoMaximo,
+      margenSeguridadCanvas
+    ) => {
+      const minimo = Math.max(
+        offsetY + Math.floor(altoMaximo * 0.58),
+        offsetY + 1
+      );
+      const lineasPagina = lineasTexto
+        .filter((linea) => (
+          linea.bottom > offsetY
+          && linea.top < limite + margenSeguridadCanvas
+        ))
+        .sort((a, b) => a.top - b.top || a.bottom - b.bottom);
+
+      if (!lineasPagina.length) return null;
+
+      const lineasCercanasAlLimite = lineasPagina.filter((linea) => (
+        limite > linea.top - margenSeguridadCanvas
+        && limite < linea.bottom + margenSeguridadCanvas
+      ));
+
+      if (!lineasCercanasAlLimite.length) {
+        return limite;
+      }
+
+      const lineaAfectada = lineasCercanasAlLimite.find(
+        (linea) => linea.bottom > limite
+      ) || lineasCercanasAlLimite[lineasCercanasAlLimite.length - 1];
+      const indiceLinea = lineasPagina.indexOf(lineaAfectada);
+      let finLineaAnterior = offsetY;
+
+      for (let idx = indiceLinea - 1; idx >= 0; idx -= 1) {
+        const lineaAnterior = lineasPagina[idx];
+        if (lineaAnterior.bottom <= lineaAfectada.top) {
+          finLineaAnterior = Math.max(offsetY, lineaAnterior.bottom);
+          break;
+        }
+      }
+
+      const inicioLineaAfectada = Math.min(limite, lineaAfectada.top);
+      const altoFranjaDisponible = inicioLineaAfectada - finLineaAnterior;
+      if (altoFranjaDisponible <= 0) return null;
+
+      const margenAplicable = Math.min(
+        margenSeguridadCanvas,
+        altoFranjaDisponible / 2
+      );
+      const corte = inicioLineaAfectada - margenAplicable;
+
+      return corte >= minimo ? corte : null;
+    };
+    const buscarCorteRebalanceadoImagenes = (
+      seccionesImagenes,
+      offsetY,
+      limite,
+      altoMaximo
+    ) => {
+      const tolerancia = 2;
+      const calcularGrupos = (filas, indiceInicial, inicioPrimeraPagina) => {
+        const grupos = [];
+        let indice = indiceInicial;
+        let inicioPagina = inicioPrimeraPagina;
+
+        while (indice < filas.length) {
+          const inicioGrupo = indice;
+          const limiteGrupo = inicioPagina + altoMaximo;
+
+          while (indice < filas.length && filas[indice].bottom <= limiteGrupo + tolerancia) {
+            indice += 1;
+          }
+
+          if (indice === inicioGrupo) {
+            indice += 1;
+          }
+
+          grupos.push({
+            inicio: inicioGrupo,
+            cantidad: indice - inicioGrupo
+          });
+          inicioPagina = indice < filas.length ? filas[indice].top : inicioPagina;
+        }
+
+        return grupos;
+      };
+      const rebalancearUltimosGrupos = (filas, grupos) => {
+        let huboMovimiento = false;
+
+        do {
+          huboMovimiento = false;
+
+          for (let idx = grupos.length - 1; idx > 0; idx -= 1) {
+            const anterior = grupos[idx - 1];
+            const actual = grupos[idx];
+
+            while (anterior.cantidad > actual.cantidad + 1) {
+              const nuevoInicioActual = actual.inicio - 1;
+              const nuevaCantidadActual = actual.cantidad + 1;
+              const finActual = filas[nuevoInicioActual + nuevaCantidadActual - 1].bottom;
+              const inicioPaginaActual = filas[nuevoInicioActual].top;
+
+              if (finActual > inicioPaginaActual + altoMaximo + tolerancia) {
+                break;
+              }
+
+              anterior.cantidad -= 1;
+              actual.inicio = nuevoInicioActual;
+              actual.cantidad = nuevaCantidadActual;
+              huboMovimiento = true;
+            }
+          }
+        } while (huboMovimiento);
+
+        return grupos;
+      };
+
+      for (const seccionImagenes of seccionesImagenes) {
+        const inicio = seccionImagenes.inicio;
+        const filas = seccionImagenes.filas;
+        if (!filas.length || filas[filas.length - 1].bottom <= offsetY + tolerancia) {
+          continue;
+        }
+        if (inicio >= limite - tolerancia) {
+          continue;
+        }
+
+        const indiceInicial = filas.findIndex((fila) => fila.bottom > offsetY + tolerancia);
+        if (indiceInicial < 0) continue;
+
+        const comienzaEnPaginaActual = inicio > offsetY + tolerancia
+          && inicio < limite - tolerancia;
+        if (
+          comienzaEnPaginaActual
+          && filas[indiceInicial].bottom > limite + tolerancia
+        ) {
+          return inicio;
+        }
+
+        const inicioPrimeraPagina = comienzaEnPaginaActual ? offsetY : Math.max(offsetY, inicio);
+        const gruposSinBalancear = calcularGrupos(
+          filas,
+          indiceInicial,
+          inicioPrimeraPagina
+        );
+
+        if (!gruposSinBalancear.length) {
+          continue;
+        }
+
+        const primerGrupo = gruposSinBalancear[0];
+
+        if (
+          comienzaEnPaginaActual
+          && gruposSinBalancear.length > 1
+          && primerGrupo.cantidad < gruposSinBalancear[1].cantidad
+        ) {
+          return inicio;
+        }
+
+        const grupos = comienzaEnPaginaActual
+          ? gruposSinBalancear
+          : rebalancearUltimosGrupos(filas, gruposSinBalancear);
+        const cantidadPrimeraPagina = grupos[0].cantidad;
+        const indiceCorte = indiceInicial + cantidadPrimeraPagina;
+
+        if (indiceCorte < filas.length) {
+          return Math.min(limite, filas[indiceCorte].top);
+        }
+      }
+
+      return null;
+    };
+    const ajustarCorteABloquesAtomicos = (
+      cortePropuesto,
+      offsetY,
+      limite,
+      bloquesAtomicos
+    ) => {
+      const tolerancia = 2;
+      let corte = cortePropuesto;
+
+      for (const bloque of bloquesAtomicos) {
+        const cortaBloque = corte > bloque.top + tolerancia
+          && corte < bloque.bottom - tolerancia;
+        if (!cortaBloque) continue;
+
+        if (bloque.top > offsetY + tolerancia) {
+          corte = bloque.top;
+          continue;
+        }
+
+        if (bloque.bottom <= limite + tolerancia) {
+          corte = bloque.bottom;
+        }
+      }
+
+      return corte;
+    };
+    const paginasFisicas = [];
+
+    for (const seccionOriginal of seccionesLogicas) {
+      const seccion = seccionOriginal.cloneNode(true);
+      seccion.classList.add('pdf-capture-section');
+      quitarEncabezadoSeccion(seccion);
+      seccion.style.setProperty('width', `${A4_CONTENT_WIDTH_PX}px`, 'important');
+
+      $stage.append(seccion);
+      const $seccion = $(seccion);
+      ajustarFotosDocumentoEmitido($seccion, altoContenidoCssPx);
+      await esperarImagenesRender($seccion);
+      await esperarSiguienteFrame();
+
+      const canvas = await capturarElemento(seccion);
+      const altoMaximoCanvas = Math.max(
+        1,
+        Math.floor((altoContenidoMm * canvas.width) / A4_CONTENT_WIDTH_MM)
+      );
+      const rangosPaginacion = medirRangosPaginacion(seccion, canvas);
+      const margenSeguridadTextoCanvas = Math.max(
+        1,
+        PDF_TEXT_CUT_SAFETY_PX * rangosPaginacion.escalaY
+      );
+      const toleranciaResiduoPx = 8;
+
+      for (let offsetY = 0; offsetY < canvas.height;) {
+        const altoRestante = canvas.height - offsetY;
+        if (altoRestante <= toleranciaResiduoPx) break;
+
+        const limite = Math.min(canvas.height, offsetY + altoMaximoCanvas);
+        let corteBase = canvas.height;
+
+        if (limite < canvas.height) {
+          const corteImagenes = buscarCorteRebalanceadoImagenes(
+            rangosPaginacion.imagenes,
+            offsetY,
+            limite,
+            altoMaximoCanvas
+          );
+          const corteTexto = corteImagenes === null
+            ? buscarCortePorLimitesTexto(
+                rangosPaginacion.lineasTexto,
+                offsetY,
+                limite,
+                altoMaximoCanvas,
+                margenSeguridadTextoCanvas
+              )
+            : null;
+          const corteVisual = corteImagenes === null && corteTexto === null
+            ? buscarCorteSeguro(
+                canvas,
+                offsetY,
+                altoMaximoCanvas,
+                margenSeguridadTextoCanvas
+              )
+            : null;
+
+          corteBase = corteImagenes ?? corteTexto ?? corteVisual ?? limite;
+        }
+
+        const corteAtomico = limite < canvas.height
+          ? ajustarCorteABloquesAtomicos(
+              corteBase,
+              offsetY,
+              limite,
+              rangosPaginacion.atomicos
+            )
+          : canvas.height;
+        const corteY = Math.min(
+          canvas.height,
+          Math.max(offsetY + 1, Math.round(corteAtomico))
+        );
+        const altoSlice = Math.max(1, corteY - offsetY);
+        paginasFisicas.push({ canvas, offsetY, altoSlice });
+        offsetY = corteY;
+      }
+
+      seccion.remove();
+    }
+
+    if (!paginasFisicas.length) {
+      $stage.remove();
+      throw new Error('No se pudo paginar el contenido del documento.');
     }
 
     const pdf = new window.jspdf.jsPDF({
@@ -3007,63 +3567,69 @@ $(document).ready(function() {
       format: 'a4',
       compress: true
     });
-    const altoCanvasPorPagina = Math.ceil((A4_HEIGHT_MM / A4_WIDTH_MM) * (A4_WIDTH_PX * 2));
-    const toleranciaResiduoPx = 8;
-    let paginaPdfAgregada = false;
 
-    for (let index = 0; index < paginas.length; index += 1) {
-      const pagina = paginas[index];
-      const canvas = await window.html2canvas(pagina, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        windowWidth: A4_WIDTH_PX,
-        windowHeight: A4_HEIGHT_PX
-      });
+    for (let index = 0; index < paginasFisicas.length; index += 1) {
+      const pagina = paginasFisicas[index];
+      if (index > 0) pdf.addPage();
 
-      for (let offsetY = 0; offsetY < canvas.height; offsetY += altoCanvasPorPagina) {
-        const altoRestante = canvas.height - offsetY;
-        if (paginaPdfAgregada && altoRestante <= toleranciaResiduoPx) {
-          break;
-        }
+      const $header = $(construirEncabezado(String(index + 1))).appendTo($stage);
+      await esperarImagenesRender($header);
+      await esperarSiguienteFrame();
+      const canvasHeader = await capturarElemento($header[0]);
+      $header.remove();
 
-        const altoSlice = Math.min(altoCanvasPorPagina, altoRestante);
-        const sliceCanvas = document.createElement('canvas');
-        sliceCanvas.width = canvas.width;
-        sliceCanvas.height = altoSlice;
+      const headerData = canvasHeader.toDataURL('image/png');
+      const altoHeaderPaginaMm = (A4_CONTENT_WIDTH_MM * canvasHeader.height) / canvasHeader.width;
+      pdf.addImage(
+        headerData,
+        'PNG',
+        A4_MARGIN_MM,
+        A4_MARGIN_MM,
+        A4_CONTENT_WIDTH_MM,
+        altoHeaderPaginaMm,
+        undefined,
+        'FAST'
+      );
 
-        const ctx = sliceCanvas.getContext('2d');
-        if (!ctx) {
-          throw new Error('No se pudo preparar el recorte del PDF emitido.');
-        }
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = pagina.canvas.width;
+      sliceCanvas.height = pagina.altoSlice;
 
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
-        ctx.drawImage(
-          canvas,
-          0,
-          offsetY,
-          canvas.width,
-          altoSlice,
-          0,
-          0,
-          sliceCanvas.width,
-          sliceCanvas.height
-        );
-
-        if (paginaPdfAgregada) {
-          pdf.addPage();
-        }
-
-        const altoSliceMm = (A4_WIDTH_MM * altoSlice) / canvas.width;
-        const imgData = sliceCanvas.toDataURL('image/png');
-        pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH_MM, altoSliceMm, undefined, 'FAST');
-        paginaPdfAgregada = true;
+      const ctx = sliceCanvas.getContext('2d');
+      if (!ctx) {
+        $stage.remove();
+        throw new Error('No se pudo preparar el recorte del PDF emitido.');
       }
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(
+        pagina.canvas,
+        0,
+        pagina.offsetY,
+        pagina.canvas.width,
+        pagina.altoSlice,
+        0,
+        0,
+        sliceCanvas.width,
+        sliceCanvas.height
+      );
+
+      const altoSliceMm = (A4_CONTENT_WIDTH_MM * pagina.altoSlice) / pagina.canvas.width;
+      const imgData = sliceCanvas.toDataURL('image/png');
+      pdf.addImage(
+        imgData,
+        'PNG',
+        A4_MARGIN_MM,
+        A4_MARGIN_MM + altoHeaderPaginaMm + PDF_HEADER_GAP_MM,
+        A4_CONTENT_WIDTH_MM,
+        altoSliceMm,
+        undefined,
+        'FAST'
+      );
     }
 
+    $stage.remove();
     return pdf.output('blob');
   };
 
@@ -3558,12 +4124,26 @@ $(document).ready(function() {
               : '')
           };
         };
-        const agruparItems = (items, tamanoGrupo) => {
-          const resultado = [];
-          for (let idx = 0; idx < items.length; idx += tamanoGrupo) {
-            resultado.push(items.slice(idx, idx + tamanoGrupo));
+        const agruparFotosEnFilasEquilibradas = (items) => {
+          const fotos = Array.from(items || []);
+          if (!fotos.length) return [];
+
+          const cantidadFilas = Math.ceil(fotos.length / 2);
+          const indiceFilaSimple = fotos.length >= 5 && fotos.length % 2 === 1
+            ? cantidadFilas - 2
+            : cantidadFilas - 1;
+          const filas = [];
+          let cursor = 0;
+
+          for (let filaIdx = 0; filaIdx < cantidadFilas; filaIdx += 1) {
+            const cantidadFila = filaIdx === indiceFilaSimple && fotos.length % 2 === 1
+              ? 1
+              : 2;
+            filas.push(fotos.slice(cursor, cursor + cantidadFila));
+            cursor += cantidadFila;
           }
-          return resultado;
+
+          return filas.filter((fila) => fila.length);
         };
 
         const fechaImpresion = new Date();
@@ -3619,10 +4199,16 @@ $(document).ready(function() {
         // Construir HTML de tareas desde el DOM del presupuesto
 let htmlPrimeraPagina = '';
 let htmlPaginasTareas = '';
+const subtotalesTareasResumen = [];
+let cantidadTareasIncluidasPdf = 0;
 
 $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
-  const nro = idx + 1;
   const $card = $(this);
+  if (!$card.find('.incluir-en-total').prop('checked')) return;
+
+  const nro = idx + 1;
+  const indiceTareaIncluida = cantidadTareasIncluidasPdf;
+  cantidadTareasIncluidasPdf += 1;
 
   let $detalle = $card.find('textarea.tarea-descripcion').first();
   if (!$detalle.length) $detalle = $card.find('textarea').first();
@@ -3695,6 +4281,19 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
 
   const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
   const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
+  const subtotalTareaValor = subtTareaTxt
+    .replace(/^Subtotal\s+Tarea\s+\d+\s*:\s*/i, '')
+    .trim() || 'FALTA COMPLETAR';
+
+  const tituloResumen = String(tituloTarea || `Tarea ${nro}`).trim();
+  const etiquetaResumen = new RegExp(`^Tarea\\s+${nro}$`, 'i').test(tituloResumen)
+    ? `Tarea ${nro}`
+    : `Tarea ${nro}: ${tituloResumen}`;
+
+  subtotalesTareasResumen.push({
+    etiqueta: etiquetaResumen,
+    valor: subtotalTareaValor
+  });
 
   // Fotos
   const fotos = [];
@@ -3705,37 +4304,46 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       if (!src) return;
       fotos.push({
         src,
-        alt: `Foto tarea ${nro}`
+        alt: `Foto tarea ${nro} ${fotos.length + 1}`
       });
     });
   }
-  const fotosInline = fotos.slice(0, 2);
-  const fotosExtra = fotos.slice(2);
-  let fotosHtml = '';
-  if (fotosInline.length) {
-    fotosInline.forEach((foto) => {
-      fotosHtml += `
-        <div class="foto-slot">
-          <img class="foto" src="${esc(foto.src)}" alt="${esc(foto.alt)}">
-        </div>`;
-    });
-  } else {
-    fotosHtml = `<div class="falta">FALTA COMPLETAR</div>`;
-  }
-  const paginasImagenesExtra = agruparItems(fotosExtra, 4).map((grupo, grupoIdx) => `
-      <section class="print-page-task print-page-task-imagenes-extra page-break-before" data-tarea="${esc(String(nro))}" data-grupo-imagenes="${esc(String(grupoIdx + 1))}">
-        <div class="imagenes-extra-grid">
-          ${grupo.map((foto, fotoIdx) => `
-            <div class="imagen-extra-slot">
-              <img
-                class="imagen-extra"
-                src="${esc(foto.src)}"
-                alt="${esc(foto.alt || `Foto tarea ${nro} ${grupoIdx * 4 + fotoIdx + 3}`)}">
-            </div>
-          `).join('')}
+  const filasFotos = agruparFotosEnFilasEquilibradas(fotos);
+  const tituloImagenesHtml = '<h4 class="imagenes-titulo">Imágenes</h4>';
+  const renderizarFilaFotos = (fila, esAtomica = true) => {
+    const claseFilaUnica = fila.length === 1 ? ' fotos-fila-una' : '';
+    const atributoAtomico = esAtomica ? ' data-pdf-atomic="fila-imagenes"' : '';
+
+    return `
+      <div class="fotos-fila${claseFilaUnica}"${atributoAtomico}>
+        ${fila.map((foto) => `
+          <div class="foto-slot">
+            <img class="foto" src="${esc(foto.src)}" alt="${esc(foto.alt)}">
+          </div>
+        `).join('')}
+      </div>
+    `;
+  };
+  const seccionImagenesHtml = filasFotos.length
+    ? `
+      <section class="seccion-imagenes" data-pdf-images>
+        <div class="imagenes-inicio" data-pdf-atomic="inicio-imagenes">
+          ${tituloImagenesHtml}
+          ${renderizarFilaFotos(filasFotos[0], false)}
+        </div>
+        ${filasFotos.slice(1).map((fila) => (
+          renderizarFilaFotos(fila)
+        )).join('')}
+      </section>
+    `
+    : `
+      <section class="seccion-imagenes" data-pdf-images>
+        <div class="imagenes-inicio" data-pdf-atomic="inicio-imagenes">
+          ${tituloImagenesHtml}
+          <div class="falta">FALTA COMPLETAR</div>
         </div>
       </section>
-    `).join('');
+    `;
 
   const encabezadoPaginaSecundaria = `
     <div class="top">
@@ -3771,8 +4379,8 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       </div>
     </div>
   `;
-  // Desde la tarea 2 en adelante: nueva página + encabezado repetido
-  const encabezadoInterno = idx === 0 ? '' : encabezadoPaginaSecundaria;
+  // Desde la segunda tarea incluida: nueva página lógica + encabezado repetido
+  const encabezadoInterno = indiceTareaIncluida === 0 ? '' : encabezadoPaginaSecundaria;
 
   const contenidoTarea = `
       ${encabezadoInterno}
@@ -3802,25 +4410,54 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
           </tbody>
         </table>
 
-        <div class="subtarea"><b>${esc(subtTareaTxt.replace(/^Subtotal\s+Tarea\s+\d+\s*:\s*/i, 'Subtotal: '))}</b></div>
-
-        <h4 style="margin-top:16px;">Imágenes</h4>
-        <div class="fotos">${fotosHtml}</div>
+        ${seccionImagenesHtml}
       </section>
   `;
 
-  if (idx === 0) {
+  if (indiceTareaIncluida === 0) {
     htmlPrimeraPagina += contenidoTarea;
-    htmlPaginasTareas += paginasImagenesExtra;
   } else {
     htmlPaginasTareas += `
       <section class="print-page-task page-break-before">
         ${contenidoTarea}
       </section>
-      ${paginasImagenesExtra}
     `;
   }
 });
+
+const renderizarSubtotalTareaResumen = (item) => `
+    <div class="resumen-tarea-fila">
+      <div class="resumen-tarea-etiqueta">
+        <b>Subtotal - ${esc(item.etiqueta)}</b>
+      </div>
+      <div class="resumen-tarea-valor"><b>${esc(item.valor)}</b></div>
+    </div>
+`;
+const subtotalesTareasPreviosHtml = subtotalesTareasResumen
+  .slice(0, -1)
+  .map(renderizarSubtotalTareaResumen)
+  .join('');
+const ultimoSubtotalTareaHtml = subtotalesTareasResumen.length
+  ? renderizarSubtotalTareaResumen(subtotalesTareasResumen[subtotalesTareasResumen.length - 1])
+  : '';
+const tituloResumenTareasHtml = '<div class="resumen-tareas-titulo">Resumen de tareas incluidas</div>';
+const resumenTareasPreviasHtml = subtotalesTareasResumen.length > 1
+  ? `
+    <div class="resumen-tareas">
+      ${tituloResumenTareasHtml}
+      ${subtotalesTareasPreviosHtml}
+    </div>
+  `
+  : '';
+const tituloResumenCierreHtml = subtotalesTareasResumen.length === 1
+  ? tituloResumenTareasHtml
+  : '';
+const claseResumenCierre = subtotalesTareasResumen.length
+  ? 'resumen-cierre resumen-cierre-con-subtotal'
+  : 'resumen-cierre';
+const atributoResumenCierre = subtotalesTareasResumen.length
+  ? ' data-pdf-atomic="resumen-cierre"'
+  : '';
 
 const condicionesPresupuestoHtml = `
     <div class="condiciones-presupuesto">
@@ -3895,13 +4532,60 @@ const htmlPaginaTotal = `
       </div>
     </div>
 
-    <div class="total">
-      <div class="valor">TOTAL: ${esc(totalTxt)}</div>
+    ${resumenTareasPreviasHtml}
+
+    <div class="${claseResumenCierre}"${atributoResumenCierre}>
+      ${tituloResumenCierreHtml}
+      ${ultimoSubtotalTareaHtml}
+      <div class="total">
+        <div class="valor">TOTAL: ${esc(totalTxt)}</div>
+      </div>
     </div>
 
     ${condicionesPresupuestoHtml}
   </section>
 `;
+
+const htmlPrimeraSeccionTarea = cantidadTareasIncluidasPdf
+  ? `
+    <section class="print-page-task">
+      <div class="top">
+        <div class="logo">
+          <img src="${esc(logoSrc)}" alt="Logo">
+        </div>
+        <div class="doc">
+          <div class="doc-label">Presupuesto Nro:</div>
+          <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="grid">
+        <div class="box">
+          <h4>Cliente</h4>
+          <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
+          <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
+          <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
+          <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
+          <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
+          <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
+        </div>
+
+        <div class="box">
+          <h4>Obra / Visita</h4>
+          <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
+          <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
+          <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
+          <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
+          <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
+        </div>
+      </div>
+
+      ${htmlPrimeraPagina}
+    </section>
+  `
+  : '';
 
         // HTML completo (lo usamos para extraer el <body>)
         const baseHref = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
@@ -3918,12 +4602,9 @@ const htmlPaginaTotal = `
   html, body { padding: 0; margin: 0; width: 100%; overflow-x: hidden; }
   body { font-family: Arial, Helvetica, sans-serif; color:#111; margin: 0; }
 
-  @page { size: A4; margin: 10mm; }
+  @page { size: A4; margin: 15mm; }
 
   .page { width: 100%; max-width: 100%; padding: 0; overflow-x: hidden; }
-  .print-page-total { display:flex; flex-direction:column; }
-  .print-page-task-imagenes-extra { display:flex; align-items:stretch; }
-
   .top { display:flex; align-items:center; justify-content:space-between; gap:14px; }
   .logo img { max-width: 220px; height:auto; }
   .doc { text-align:right; }
@@ -3972,21 +4653,80 @@ const htmlPaginaTotal = `
 
   table, tr, td, th { page-break-inside: avoid; break-inside: avoid; }
 
-  .subtarea { margin-top: 8px; padding: 7px 9px; background:#f7f7f7; border:1px solid #ddd; border-radius: 8px; text-align:right; font-weight: 700; }
-
-  .fotos {
+  .resumen-tareas { margin-top: 10px; }
+  .resumen-tareas-titulo {
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: #333;
+  }
+  .resumen-tarea-fila {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
     align-items: flex-start;
-    align-content: flex-start;
-    overflow: hidden;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 5px;
+    padding: 7px 9px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #f7f7f7;
+    font-size: 11px;
+    line-height: 1.3;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .resumen-tarea-etiqueta {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .resumen-tarea-valor {
+    flex: 0 0 auto;
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .resumen-cierre {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .resumen-cierre-con-subtotal .resumen-tarea-fila {
+    margin-top: 5px;
+    margin-bottom: 0;
+  }
+
+  .imagenes-titulo {
+    margin: 0 0 ${PDF_IMAGE_TITLE_GAP_PX}px;
+  }
+  .imagenes-inicio {
+    padding-top: ${PDF_IMAGE_SECTION_TOP_GAP_PX}px;
+  }
+  .imagenes-inicio,
+  .fotos-fila {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .fotos-fila {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: ${PDF_IMAGE_ROW_GAP_PX}px;
+    margin-bottom: ${PDF_IMAGE_ROW_GAP_PX}px;
+    align-items: flex-start;
+  }
+  .imagenes-inicio:last-child .fotos-fila,
+  .seccion-imagenes > .fotos-fila:last-child {
+    margin-bottom: 0;
+  }
+  .fotos-fila-una {
+    justify-content: center;
   }
 
   .foto-slot {
-    flex: 0 0 calc(50% - 5px);
-    width: calc(50% - 5px);
-    max-width: calc(50% - 5px);
+    flex: 0 0 calc(50% - ${PDF_IMAGE_HALF_ROW_GAP_PX}px);
+    width: calc(50% - ${PDF_IMAGE_HALF_ROW_GAP_PX}px);
+    max-width: calc(50% - ${PDF_IMAGE_HALF_ROW_GAP_PX}px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3994,7 +4734,7 @@ const htmlPaginaTotal = `
     border: 1px solid #ddd;
     border-radius: 8px;
     background: #fafafa;
-    padding: 6px;
+    padding: ${PDF_IMAGE_SLOT_PADDING_PX}px;
   }
 
   .foto {
@@ -4008,43 +4748,11 @@ const htmlPaginaTotal = `
     page-break-inside: avoid;
   }
 
-  .imagenes-extra-grid {
-    width: 100%;
-    min-height: ${A4_HEIGHT_PX - (A4_MARGIN_PX * 2)}px;
-    height: ${A4_HEIGHT_PX - (A4_MARGIN_PX * 2)}px;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .imagen-extra-slot {
-    min-width: 0;
-    min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background: #fafafa;
-    padding: 6px;
-  }
-
-  .imagen-extra {
-    display: block;
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-  }
-
   .total { display:flex; justify-content:flex-end; margin-top: 10px; break-inside: avoid; }
+  .resumen-cierre-con-subtotal .total { margin-top: ${PDF_SUMMARY_TOTAL_GAP_PX}px; }
   .total .valor { font-size: 16px; font-weight: 800; padding: 8px 12px; border: 2px solid #111; border-radius: 10px; }
 
   .condiciones-presupuesto {
-    margin-top: auto;
     padding-top: 14px;
     border-top: 1px solid #ddd;
     font-size: 9px;
@@ -4080,7 +4788,7 @@ const htmlPaginaTotal = `
       overflow-x: hidden !important;
     }
 
-    .box, .bloque, .fotos, .foto, table, tr, td, th {
+    .box, .bloque, .imagenes-inicio, .fotos-fila, .foto, table, tr, td, th {
       break-inside: avoid;
       page-break-inside: avoid;
     }
@@ -4101,42 +4809,7 @@ const htmlPaginaTotal = `
 </head>
 <body>
 <div class="page">
-  <section class="print-page-task">
-    <div class="top">
-      <div class="logo">
-        <img src="${esc(logoSrc)}" alt="Logo">
-      </div>
-      <div class="doc">
-        <div class="doc-label">Presupuesto Nro:</div>
-        <div class="muted">N°: ${esc(idPresupuesto)} | Fecha: ${esc(new Date().toLocaleDateString())}</div>
-      </div>
-    </div>
-
-    <hr>
-
-    <div class="grid">
-      <div class="box">
-        <h4>Cliente</h4>
-        <div class="linea"><b>Razón social:</b> ${valOrFalta(cliente.razon_social)}</div>
-        <div class="linea"><b>CUIT:</b> ${valOrFalta(cliente.cuit)}</div>
-        <div class="linea"><b>Dirección:</b> ${valOrFalta(cliente.direccion)}</div>
-        <div class="linea"><b>Contacto:</b> ${valOrFalta(cliente.contacto)}</div>
-        <div class="linea"><b>Email:</b> ${valOrFalta(cliente.email)}</div>
-        <div class="linea"><b>Teléfono:</b> ${valOrFalta(cliente.telefono)}</div>
-      </div>
-
-      <div class="box">
-        <h4>Obra / Visita</h4>
-        <div class="linea"><b>Título:</b> ${valOrFalta(obra.titulo)}</div>
-        <div class="linea"><b>Dirección:</b> ${valOrFalta(obra.direccion)}</div>
-        <div class="linea"><b>Fecha visita:</b> ${valOrFalta(obra.fecha)}</div>
-        <div class="linea"><b>Agente:</b> ${valOrFalta(presup.agente)}</div>
-        <div class="linea"><b>Descripción:</b> ${valOrFalta(obra.descripcion)}</div>
-      </div>
-    </div>
-
-    ${htmlPrimeraPagina || `<div class="box"><span class="falta">FALTA COMPLETAR</span></div>`}
-  </section>
+  ${htmlPrimeraSeccionTarea}
   ${htmlPaginasTareas}
   ${htmlPaginaTotal}
 </div>
@@ -4169,13 +4842,9 @@ const htmlPaginaTotal = `
           '<table class="tabla-resumen"><tbody>'
         );
 
-        let numeroPaginaActual = 0;
         soloBody = soloBody.replace(
           /<div class="muted">[\s\S]*?<\/div>/g,
-          () => {
-            numeroPaginaActual += 1;
-            return `<div class="doc-code">${esc(numeroPresupuestoVisual)}</div><div class="doc-page">Página Nro: ${esc(numeroPaginaActual)}</div>`;
-          }
+          `<div class="doc-code">${esc(numeroPresupuestoVisual)}</div><div class="doc-page">Página Nro:</div>`
         );
 
         // 4) Corregir logo a absoluto
