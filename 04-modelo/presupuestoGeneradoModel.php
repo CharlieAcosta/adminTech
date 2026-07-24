@@ -366,7 +366,7 @@ if (!function_exists('obtenerContextoPrecioPresupuesto')) {
                     SELECT linea.id_ptmo AS id_linea, linea.id_jornal AS id_catalogo,
                            linea.nombre_jornal AS descripcion,
                            linea.valor_jornal_usado AS precio_snapshot,
-                           linea.updated_at_origen AS fecha_snapshot,
+                           COALESCE(linea.updated_at_origen, linea.updated_at) AS fecha_snapshot,
                            catalogo.jornal_valor AS precio_catalogo,
                            catalogo.updated_at AS fecha_catalogo,
                            tarea.id_presupuesto
@@ -591,7 +591,7 @@ if (!function_exists('confirmarPrecioPresupuesto')) {
                        linea.{$columnaIdCatalogo} AS id_catalogo,
                        " . ($tipo === 'material'
                            ? 'linea.precio_unitario_usado AS precio_snapshot, COALESCE(linea.log_edicion, linea.log_alta) AS fecha_snapshot'
-                           : 'linea.valor_jornal_usado AS precio_snapshot, linea.updated_at_origen AS fecha_snapshot') . ",
+                           : 'linea.valor_jornal_usado AS precio_snapshot, COALESCE(linea.updated_at_origen, linea.updated_at) AS fecha_snapshot') . ",
                        tarea.id_presupuesto
                 FROM {$tablaLinea} AS linea
                 INNER JOIN presupuesto_tareas AS tarea
