@@ -663,7 +663,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
         }
         $diffDias = (int)$hoy->diff($dt)->format('%a');
         if ($dt < $hoy && $diffDias > 30) {
-            return ['bg-danger', '']; // vencido, editable
+            return ['bg-danger', 'readonly']; // vencido: se resuelve mediante SweetAlert contextual
         }
         return ['bg-success', 'readonly']; // vigente
     };

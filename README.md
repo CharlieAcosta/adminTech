@@ -221,31 +221,41 @@ return [
 
 ### Circuito PHP de presupuestos existentes
 
-- Los precios vencidos renderizados por PHP se confirman desde `03-controller/presupuestos_guardar.php` con `funcion=confirmarPrecioPresupuesto`.
-- La confirmacion actualiza el catalogo y el snapshot de la linea actual del presupuesto, recalcula `subtotal_fila` y no modifica la cabecera ni el estado comercial.
-- Confirmar el mismo importe tambien renueva la fecha de origen del precio.
+- Cada linea conserva un snapshot historico independiente: materiales usan `precio_unitario_usado` y `log_edicion`; jornales usan `valor_jornal_usado` y `updated_at_origen`. El catalogo maestro mantiene por separado `materiales.precio_unitario`/`COALESCE(log_edicion, log_alta)` y `tipo_jornales.jornal_valor`/`updated_at`.
+- El SweetAlert rojo general se mantiene al abrir el accordion. La resolucion individual comienza con `focusin` sobre un precio rojo y `readonly`: primero consulta `funcion=obtenerContextoPrecioPresupuesto` y luego presenta un SweetAlert2 contextual, sin persistir por foco, Enter ni blur.
+- El backend clasifica cuatro escenarios: mismo precio/catalogo vigente, mismo precio/catalogo vencido, distinto precio/catalogo vigente y distinto precio/catalogo vencido. Segun la eleccion ejecuta `SINCRONIZAR_SNAPSHOT_DESDE_CATALOGO`, `APLICAR_CATALOGO_AL_SNAPSHOT`, `CONFIRMAR_CATALOGO_Y_SINCRONIZAR` o `ACTUALIZAR_CATALOGO_Y_SNAPSHOT` mediante `funcion=confirmarPrecioPresupuesto`.
+- Sincronizar o aplicar un catalogo vigente modifica exclusivamente el snapshot de la linea intervenida. Confirmar vigencia o ingresar un precio nuevo modifica explicitamente el catalogo y despues esa unica linea; nunca renueva en bloque otras apariciones del mismo material o jornal.
+- La operacion recalcula `subtotal_fila`, no modifica la cabecera ni el estado comercial y solo cambia rojo a verde despues de releer los valores persistidos.
+- La escritura recibe precio y fecha esperados de snapshot y catalogo, vuelve a leerlos bajo las protecciones disponibles y responde HTTP `409` si otro usuario los modifico desde que se abrio el SweetAlert.
 - El guardado completo valida todos los catalogos antes de eliminar lineas: preserva snapshots historicos existentes sin modificacion de importe, valida contra catalogo las lineas nuevas o modificadas y conserva las fechas de origen correspondientes.
-- Como el guardado recrea lineas, la respuesta incluye el mapeo de IDs nuevos y `07-funciones_js/accordionPresupuesto.js` actualiza `data-id-ptm` y `data-id-ptmo` en el DOM.
+- Como el guardado recrea lineas, la respuesta incluye el mapeo de IDs nuevos y `07-funciones_js/accordionPresupuesto.js` actualiza `data-id-ptm` y `data-id-ptmo` en el DOM; para el primer guardado dinamico, sin IDs anteriores, usa el orden estable de la respuesta y de las filas como fallback.
 
 ### Circuito dinamico generado desde Visita
 
-- Los precios vencidos del presupuesto generado dinamicamente se confirman con `funcion=confirmarPrecioCatalogoPresupuestoDinamico`.
-- Este circuito actualiza solo el catalogo porque todavia no existen `id_presupuesto`, `id_ptm` ni `id_ptmo`.
+- Los precios vencidos del presupuesto generado dinamicamente se consultan con `funcion=obtenerContextoPrecioCatalogoPresupuestoDinamico` al recibir foco y se resuelven con `funcion=confirmarPrecioCatalogoPresupuestoDinamico` desde un SweetAlert2.
+- Este circuito actualiza solo el catalogo porque todavia no existen `id_presupuesto`, `id_ptm` ni `id_ptmo`: permite confirmar el importe actual o ingresar expresamente uno nuevo y valida precio/fecha esperados antes de escribir.
+- Al terminar cada generacion explicita, el circuito dinamico reutiliza el resumen y el Sweet general compartidos y consume el aviso inmediatamente, antes de que pueda quedar pendiente un `shown.bs.collapse`. Un token local por generacion impide duplicados; las aperturas manuales posteriores conservan su aviso normal.
+- En mano de obra, el porcentaje de utilidad global es independiente del `% Extra` de cada jornal. Si el campo de utilidad queda vacio, el calculo historico aplica el valor por defecto de `100%`: el subtotal visible de Mano de Obra incluye la suma base de las lineas, la utilidad calculada y `Otros`. La utilidad tambien alimenta `Subtotal Util. MO.`, el total de tarea y sus indicadores comerciales.
+- El boton Guardar dinamico delega en `window.presupuestoGuardar()` cuando esta disponible. El handler antiguo queda solo como fallback y ya no puede ejecutar un segundo guardado ni reactivar el boton desde su `finally`; el estado final se resuelve con la rutina central de dirty/vencidos.
 - Ya no usa `simpleUpdateInDB()` para materiales ni jornales de presupuesto dinamico.
 - El guardado posterior crea los snapshots desde el catalogo validado y persiste las fechas actuales de origen.
 
 ### UX y reglas de botones
 
-- Rojo (`bg-danger`) indica precio vencido editable; verde (`bg-success`) indica precio vigente confirmado o vigente por fecha.
+- Rojo (`bg-danger`) indica precio vencido resoluble por SweetAlert2; el input permanece `readonly`. Verde (`bg-success`) indica precio vigente confirmado o vigente por fecha.
 - La advertencia de valores desactualizados se muestra al abrir el accordion Presupuesto o al cargarlo ya abierto, no durante foco, input, Enter, blur ni revalidaciones posteriores.
-- La confirmacion puede ejecutarse con Enter o blur despues de intervencion del usuario; Enter seguido de blur genera una sola solicitud.
-- La revalidacion posterior a una confirmacion es silenciosa: mantiene bloqueado Guardar/Emitir si quedan vencidos y respeta el resto de bloqueos del presupuesto.
-- Guardar queda bloqueado mientras existan precios vencidos o no haya cambios pendientes validos; Generar documento queda disponible solo cuando no hay cambios pendientes ni bloqueos comerciales/workflow.
+- En cada apertura, el aviso vuelve a contar en el DOM solamente las filas que conservan `precio-unitario bg-danger` o `valor-jornal bg-danger`, informa materiales, jornales y total con singular/plural, y no aparece cuando el total es cero.
+- Los handlers individuales usan `focusin` con namespace y bloquean SweetAlerts y solicitudes duplicadas. Cancelar quita el foco y evita la reapertura inmediata.
+- El handler `focusin` del presupuesto PHP exige los atributos reales de snapshot (`data-id-presupuesto` y `data-id-ptm`/`data-id-ptmo`); de ese modo no intercepta precios del circuito dinamico ni abre una inconsistencia antes de su Sweet contextual.
+- La revalidacion posterior al aviso inicial es silenciosa: editar detalle, cantidades, porcentajes o imagenes, resolver/cancelar un precio y recalcular no vuelven a mostrar el SweetAlert rojo general.
+- Guardar depende del estado dirty y de los bloqueos comerciales/workflow, no de la vigencia: con cambios locales puede persistir parcialmente el borrador aunque queden precios rojos. Generar documento exige presupuesto limpio, todos los precios vigentes y ausencia de bloqueos adicionales.
+- La matriz de acciones es unica para ambos circuitos: sin cambios y con vencidos, ambos botones quedan deshabilitados; con cambios, Guardar queda habilitado y Generar documento deshabilitado, haya o no vencidos; sin cambios ni vencidos, Guardar queda deshabilitado y Generar documento habilitado. Los bloqueos comerciales o de workflow tienen prioridad y deshabilitan ambas acciones.
 
 ### Riesgo tecnico
 
 - `materiales` sigue usando motor MyISAM, por lo que no hay atomicidad ACID completa sobre ese catalogo.
 - Para materiales se usa `GET_LOCK()` cooperativo, relectura y compensacion compare-and-set cuando corresponde; el lock solo coordina consumidores que respeten el mismo convenio.
+- Una caida abrupta o un escritor que ignore el advisory lock conserva riesgo residual: la compensacion compare-and-set es de mejor esfuerzo, no atomicidad ACID completa.
 - `tipo_jornales` y los snapshots de presupuesto operan dentro del comportamiento transaccional disponible para sus tablas.
 - `previsitas` tambien mantiene una ventana residual de concurrencia por su motor actual; los flujos reducen el riesgo con validaciones previas y relecturas.
 - Se recomienda migrar `materiales` y `previsitas` a InnoDB en una etapa futura para cerrar la brecha transaccional.
