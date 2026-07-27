@@ -1673,6 +1673,61 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
             data-placement="bottom"
           >Sin intervenciones</span>
         </span>
+        <span class="oc-header-actions" aria-label="Acciones de Orden de compra">
+          <span
+            class="oc-header-action-tooltip oc-header-save-action <?php echo $ordenCompraMostrarGuardarInicial ? '' : 'd-none'; ?>"
+            data-toggle="tooltip"
+            data-placement="bottom"
+            title="Guardar OC"
+          >
+            <button
+              type="button"
+              id="oc_btn_guardar"
+              class="oc-header-action oc-header-action-save"
+              aria-label="Guardar OC"
+            >
+              <i class="fas fa-save" aria-hidden="true"></i>
+            </button>
+          </span>
+          <button
+            type="button"
+            id="oc_btn_volver"
+            class="oc-header-action oc-header-action-back"
+            data-toggle="tooltip"
+            data-placement="bottom"
+            title="Volver"
+            aria-label="Volver"
+          >
+            <i class="fas fa-arrow-left" aria-hidden="true"></i>
+          </button>
+                                                        <span
+                                                            class="dropdown oc-header-more-actions d-none"
+                                                            data-toggle="tooltip"
+                                                            data-placement="bottom"
+                                                            title="Más acciones"
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                class="oc-header-action oc-header-action-more"
+                                                                data-toggle="dropdown"
+                                                                aria-haspopup="true"
+                                                                aria-expanded="false"
+                                                                aria-label="Más acciones"
+                                                            >
+              <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
+            </button>
+            <span class="dropdown-menu dropdown-menu-right oc-header-dropdown-menu">
+              <button type="button" id="oc_btn_observar" class="dropdown-item oc-header-dropdown-item oc-header-dropdown-item-observe d-none">
+                <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+                Marcar observada
+              </button>
+              <button type="button" id="oc_btn_anular" class="dropdown-item oc-header-dropdown-item oc-header-dropdown-item-danger d-none">
+                <i class="fas fa-ban" aria-hidden="true"></i>
+                Anular OC
+              </button>
+            </span>
+          </span>
+        </span>
       </h2>
     </div>
 
@@ -1690,10 +1745,22 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
           <!-- 1. Documentación OC / PDF respaldatorio -->
           <div class="card card-info mb-3 w-100 oc-card-principal" id="oc_seccion_pdf">
-            <div class="card-header py-2">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
               <h5 class="card-title mb-0 text-white">
                 <i class="fas fa-file-pdf mr-2"></i>Documentación OC
               </h5>
+              <button
+                type="button"
+                id="oc_btn_ver_presupuesto_aprobado"
+                class="btn btn-sm btn-light ml-auto d-inline-flex align-items-center flex-shrink-0"
+                data-toggle="tooltip"
+                data-placement="top"
+                title="Ver presupuesto aprobado"
+                disabled
+              >
+                <i class="fas fa-file-pdf mr-sm-1"></i>
+                <span class="d-none d-sm-inline">Presupuesto</span>
+              </button>
             </div>
             <div class="card-body">
 
@@ -2236,20 +2303,6 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
             </div>
           </div>
 
-          <div class="text-center oc-form-actions">
-            <button type="button" id="oc_btn_guardar" class="btn bg-success mr-2 mb-2 btn-uniform <?php echo $ordenCompraMostrarGuardarInicial ? '' : 'd-none'; ?>">
-              <i class="fa fa-save mr-1"></i> Guardar OC
-            </button>
-            <button type="button" id="oc_btn_observar" class="btn btn-warning mr-2 mb-2 btn-uniform d-none">
-              <i class="fa fa-exclamation-triangle mr-1"></i> Marcar observada
-            </button>
-            <button type="button" id="oc_btn_anular" class="btn btn-danger mr-2 mb-2 btn-uniform d-none">
-              <i class="fa fa-ban mr-1"></i> Anular OC
-            </button>
-            <button type="button" id="oc_btn_volver" class="btn btn-secondary mb-2 btn-uniform">
-              <i class="fa fa-arrow-left mr-1"></i> Volver
-            </button>
-          </div>
         </form>
       </div>
     </div>
@@ -2258,6 +2311,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 <script>
   window.SEGUIMIENTO_ORDEN_COMPRA = <?php echo jsonParaJsSeguro([
     'endpoint' => '../03-controller/ordenesCompraController.php',
+    'endpoint_presupuesto' => '../03-controller/presupuestos_guardar.php',
     'id_presupuesto' => $idPresupuestoOrdenCompra,
     'id_previsita' => $idPrevisitaOrdenCompra,
     'puede_editar' => $ordenCompraPuedeEditarInicial,
@@ -3033,10 +3087,158 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     font-weight: 600;
   }
 
-  .orden-compra-form .oc-form-actions {
-    border-top: 1px solid #d9e0e7;
-    margin-top: 1rem;
-    padding-top: 1rem;
+  #ordenCompraAccordionCard .oc-header-actions {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+    margin-left: auto;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 0.3rem;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 1.35rem;
+    height: 2.1rem;
+    justify-content: center;
+    padding: 0;
+    transition: color 0.2s ease, text-shadow 0.2s ease, transform 0.2s ease;
+    width: 1.85rem;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-tooltip {
+    align-items: center;
+    display: inline-flex;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-tooltip .oc-header-action:disabled {
+    pointer-events: none;
+  }
+
+  #ordenCompraAccordionCard .oc-header-save-action.is-disabled {
+    cursor: not-allowed;
+  }
+
+  #ordenCompraAccordionCard .oc-header-save-action.is-saving {
+    cursor: wait;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action:hover,
+  #ordenCompraAccordionCard .oc-header-action:focus {
+    background: transparent;
+    outline: none;
+    transform: scale(1.16);
+  }
+
+  #ordenCompraAccordionCard .oc-header-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    text-shadow: none;
+    transform: none;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action.is-saving:disabled {
+    cursor: wait;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-save {
+    color: #ffffff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-save:not(:disabled):hover,
+  #ordenCompraAccordionCard .oc-header-action-save:not(:disabled):focus {
+    color: #cfe2ff;
+    text-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-back {
+    color: #dee2e6;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-back:hover,
+  #ordenCompraAccordionCard .oc-header-action-back:focus {
+    color: #ffffff;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.38);
+  }
+
+  #ordenCompraAccordionCard .oc-header-more-actions {
+    margin-left: 0.15rem;
+  }
+
+  #ordenCompraAccordionCard > .card-header {
+    overflow: visible;
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-more {
+    color: #dee2e6;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  }
+
+  #ordenCompraAccordionCard .oc-header-action-more:hover,
+  #ordenCompraAccordionCard .oc-header-action-more:focus,
+  #ordenCompraAccordionCard .oc-header-more-actions.show .oc-header-action-more {
+    color: #ffffff;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.38);
+    transform: scale(1.16);
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-menu {
+    background: #f8fffb;
+    border: 1px solid rgba(40, 167, 69, 0.28);
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1.15rem rgba(30, 70, 47, 0.16), inset 0 3px 0 #28a745;
+    font-size: 0.9rem;
+    margin-top: 0.45rem;
+    min-width: 190px;
+    overflow: hidden;
+    padding: 0.35rem;
+    z-index: 1060;
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-item {
+    align-items: center;
+    background: transparent;
+    border-radius: 0.35rem;
+    color: #2f3b35;
+    display: flex;
+    font-weight: 500;
+    gap: 0.65rem;
+    line-height: 1.2;
+    padding: 0.6rem 0.7rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-item:hover,
+  #ordenCompraAccordionCard .oc-header-dropdown-item:focus {
+    background: #eaf7ef;
+    color: #1f5132;
+    outline: none;
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-item i {
+    flex: 0 0 1rem;
+    text-align: center;
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-item-observe i {
+    color: #d39e00;
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-item-danger {
+    color: #dc3545;
+  }
+
+  #ordenCompraAccordionCard .oc-header-dropdown-item-danger:hover,
+  #ordenCompraAccordionCard .oc-header-dropdown-item-danger:focus {
+    background: #fff1f2;
+    color: #b02a37;
   }
 
   .orden-compra-form .form-group label {
@@ -4548,6 +4750,10 @@ $(document).ready(function() {
     var ordenCompraEstadoActual = '';
     var ordenCompraPuedeEditar = false;
     var ordenCompraPdfActual = null;
+    var ordenCompraSnapshotBase = null;
+    var ordenCompraGuardando = false;
+    var presupuestoAprobadoDocumento = null;
+    var ordenCompraCamposNumericos = ['monto_neto', 'total', 'anticipo_valor'];
     var ordenCompraCampos = [
       'numero_oc',
       'fecha_emision',
@@ -4595,6 +4801,112 @@ $(document).ready(function() {
 
     function existeFormularioOrdenCompra() {
       return !!(ordenCompraConfig && $('#ordenCompraForm').length);
+    }
+
+    function mostrarAvisoPresupuestoAprobado(mensaje, icono) {
+      mensaje = mensaje || 'El presupuesto aprobado no esta disponible.';
+      icono = icono || 'info';
+
+      if (window.Swal && typeof window.Swal.fire === 'function') {
+        window.Swal.fire({
+          icon: icono,
+          title: 'Presupuesto aprobado',
+          text: mensaje,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (window.toastr && typeof window.toastr.info === 'function') {
+        window.toastr.info(mensaje);
+        return;
+      }
+
+      window.alert(mensaje);
+    }
+
+    function actualizarBotonPresupuestoAprobado(documento) {
+      presupuestoAprobadoDocumento = documento || null;
+      var disponible = !!(
+        presupuestoAprobadoDocumento
+        && presupuestoAprobadoDocumento.disponible
+        && parseInt(presupuestoAprobadoDocumento.id_documento_emitido || 0, 10) > 0
+      );
+      var mensaje = disponible
+        ? 'Ver presupuesto aprobado'
+        : String((presupuestoAprobadoDocumento && presupuestoAprobadoDocumento.mensaje) || 'Presupuesto aprobado no disponible');
+
+      $('#oc_btn_ver_presupuesto_aprobado')
+        .prop('disabled', false)
+        .toggleClass('btn-light', disponible)
+        .toggleClass('btn-outline-light', !disponible)
+        .attr('title', mensaje)
+        .attr('data-original-title', mensaje)
+        .tooltip('dispose')
+        .tooltip({
+          container: 'body',
+          trigger: 'hover',
+          boundary: 'window'
+        });
+    }
+
+    function consultarDisponibilidadPresupuestoAprobado() {
+      if (!existeFormularioOrdenCompra() || !presupuestoOrdenCompraValido()) {
+        actualizarBotonPresupuestoAprobado(null);
+        return;
+      }
+
+      $('#oc_btn_ver_presupuesto_aprobado')
+        .prop('disabled', true)
+        .attr('title', 'Consultando presupuesto aprobado...')
+        .attr('data-original-title', 'Consultando presupuesto aprobado...');
+
+      $.ajax({
+        type: 'POST',
+        url: ordenCompraConfig.endpoint_presupuesto,
+        dataType: 'json',
+        data: {
+          via: 'ajax',
+          funcion: 'obtenerDisponibilidadPresupuestoAprobado',
+          id_presupuesto: ordenCompraConfig.id_presupuesto,
+          id_previsita: ordenCompraConfig.id_previsita
+        }
+      }).done(function(resp) {
+        if (resp && resp.ok && resp.documento) {
+          actualizarBotonPresupuestoAprobado(resp.documento);
+          return;
+        }
+
+        actualizarBotonPresupuestoAprobado({
+          disponible: false,
+          mensaje: (resp && resp.msg) ? resp.msg : 'No se pudo consultar el presupuesto aprobado.'
+        });
+      }).fail(function(xhr) {
+        var respuesta = xhr && xhr.responseJSON ? xhr.responseJSON : null;
+        actualizarBotonPresupuestoAprobado({
+          disponible: false,
+          mensaje: (respuesta && respuesta.msg) ? respuesta.msg : 'No se pudo consultar el presupuesto aprobado.'
+        });
+      });
+    }
+
+    function verPresupuestoAprobadoOrdenCompra() {
+      if (!presupuestoAprobadoDocumento || !presupuestoAprobadoDocumento.disponible) {
+        mostrarAvisoPresupuestoAprobado(
+          presupuestoAprobadoDocumento && presupuestoAprobadoDocumento.mensaje
+            ? presupuestoAprobadoDocumento.mensaje
+            : 'El presupuesto aprobado no esta disponible.'
+        );
+        return;
+      }
+
+      var url = ordenCompraConfig.endpoint_presupuesto
+        + '?accion=ver_presupuesto_aprobado'
+        + '&id_presupuesto=' + encodeURIComponent(ordenCompraConfig.id_presupuesto)
+        + '&id_previsita=' + encodeURIComponent(ordenCompraConfig.id_previsita)
+        + '&id_documento_emitido=' + encodeURIComponent(presupuestoAprobadoDocumento.id_documento_emitido);
+
+      window.open(url, '_blank', 'noopener');
     }
 
     function presupuestoOrdenCompraValido() {
@@ -4694,7 +5006,7 @@ $(document).ready(function() {
       ordenCompraIdActivo = 0;
       ordenCompraPdfActual = null;
       $('#oc_id_orden_compra').val('');
-      $('#oc_pdf_oc').val('');
+      limpiarSeleccionPdfOrdenCompra();
       ordenCompraCampos.forEach(function(nombre) {
         if (nombre === 'moneda') {
           setCampoOrdenCompra(nombre, 'ARS');
@@ -4720,7 +5032,7 @@ $(document).ready(function() {
         mime: ordenCompra.pdf_mime_type || '',
         tamano: parseInt(ordenCompra.pdf_tamano_bytes || 0, 10) || 0
       };
-      $('#oc_pdf_oc').val('');
+      limpiarSeleccionPdfOrdenCompra();
       $('#oc_id_orden_compra').val(ordenCompraIdActivo || '');
       ordenCompraCampos.forEach(function(nombre) {
         setCampoOrdenCompra(nombre, ordenCompra[nombre]);
@@ -4756,9 +5068,23 @@ $(document).ready(function() {
       return inputPdf && inputPdf.files && inputPdf.files.length > 0 ? inputPdf.files[0] : null;
     }
 
+    function limpiarSeleccionPdfOrdenCompra() {
+      try {
+        $('#oc_pdf_oc').val('');
+      } catch (e) {}
+
+      $('#oc_pdf_preview').addClass('d-none');
+      $('#oc_pdf_preview_error').addClass('d-none').text('');
+    }
+
     function ordenCompraTienePdfSeleccionadoValido() {
       var archivoPdf = obtenerArchivoPdfSeleccionadoOrdenCompra();
       return !!(archivoPdf && validarArchivoPdfOrdenCompra(archivoPdf) === null);
+    }
+
+    function ordenCompraTienePdfSeleccionadoInvalido() {
+      var archivoPdf = obtenerArchivoPdfSeleccionadoOrdenCompra();
+      return !!(archivoPdf && validarArchivoPdfOrdenCompra(archivoPdf) !== null);
     }
 
     function ordenCompraTienePdfDisponibleParaEditar() {
@@ -4879,15 +5205,61 @@ $(document).ready(function() {
       actualizarBloqueoSeccionesOrdenCompra();
     }
 
+    function actualizarTooltipGuardarOrdenCompra(mensaje) {
+      var $boton = $('#oc_btn_guardar');
+      var $tooltip = $boton.closest('.oc-header-save-action');
+      var tieneTooltipInicializado = !!$tooltip.data('bs.tooltip');
+
+      $boton.attr('aria-label', mensaje);
+      $tooltip
+        .attr('aria-label', mensaje)
+        .attr('tabindex', $boton.prop('disabled') ? '0' : '-1')
+        .attr('data-original-title', mensaje);
+      if (tieneTooltipInicializado) {
+        $tooltip.tooltip('hide').removeAttr('title');
+      } else {
+        $tooltip.attr('title', mensaje);
+      }
+    }
+
     function actualizarBotonesOrdenCompra() {
       var tieneOcActiva = ordenCompraIdActivo > 0 && ['cargada', 'observada'].indexOf(ordenCompraEstadoActual) !== -1;
-      var puedeGuardar = ordenCompraPuedeEditar
-        && ordenCompraEstadoPermiteEdicion()
-        && ordenCompraTienePdfDisponibleParaEditar();
+      var puedeMostrarGuardar = ordenCompraPuedeEditar && ordenCompraEstadoPermiteEdicion();
+      var tienePdfDisponible = ordenCompraTienePdfDisponibleParaEditar();
+      var tienePdfInvalido = ordenCompraTienePdfSeleccionadoInvalido();
+      var tieneCambios = ordenCompraTieneCambios();
+      var puedeGuardar = puedeMostrarGuardar
+        && tienePdfDisponible
+        && !tienePdfInvalido
+        && tieneCambios
+        && !ordenCompraGuardando;
+      var puedeObservar = ordenCompraPuedeEditar && tieneOcActiva && ordenCompraEstadoActual !== 'observada';
+      var puedeAnular = ordenCompraPuedeEditar && tieneOcActiva;
+      var tooltipGuardar = 'Guardar OC';
 
-      $('#oc_btn_guardar').toggleClass('d-none', !puedeGuardar);
-      $('#oc_btn_observar').toggleClass('d-none', !(ordenCompraPuedeEditar && tieneOcActiva && ordenCompraEstadoActual !== 'observada'));
-      $('#oc_btn_anular').toggleClass('d-none', !(ordenCompraPuedeEditar && tieneOcActiva));
+      if (ordenCompraGuardando) {
+        tooltipGuardar = 'Guardando OC...';
+      } else if (tienePdfInvalido) {
+        tooltipGuardar = 'El PDF seleccionado no es válido';
+      } else if (!tienePdfDisponible) {
+        tooltipGuardar = 'Adjuntá un PDF válido para guardar';
+      } else if (!tieneCambios) {
+        tooltipGuardar = 'Sin cambios para guardar';
+      }
+
+      var $botonGuardar = $('#oc_btn_guardar');
+      $botonGuardar
+        .toggleClass('is-saving', ordenCompraGuardando)
+        .prop('disabled', !puedeGuardar)
+        .attr('aria-busy', ordenCompraGuardando ? 'true' : 'false');
+      $botonGuardar.closest('.oc-header-save-action')
+        .toggleClass('d-none', !puedeMostrarGuardar)
+        .toggleClass('is-disabled', !puedeGuardar)
+        .toggleClass('is-saving', ordenCompraGuardando);
+      actualizarTooltipGuardarOrdenCompra(tooltipGuardar);
+      $('#oc_btn_observar').toggleClass('d-none', !puedeObservar);
+      $('#oc_btn_anular').toggleClass('d-none', !puedeAnular);
+      $('.oc-header-more-actions').toggleClass('d-none', !(puedeObservar || puedeAnular));
     }
 
     function ordenCompraHabilitaPedidoMateriales() {
@@ -4898,10 +5270,12 @@ $(document).ready(function() {
       return ordenCompraPuedeEditar && ordenCompraEstadoActual === 'pendiente';
     }
 
-    function actualizarAvanceOrdenCompra() {
+    function actualizarAvanceOrdenCompra(opciones) {
+      opciones = opciones || {};
       var habilitaPedidoMateriales = ordenCompraHabilitaPedidoMateriales();
       var listaParaCarga = ordenCompraListaParaCarga();
       var puedePedidoMateriales = !!ordenCompraConfig.puede_pedido_materiales;
+      var mantenerAccordionOrdenCompra = opciones.mantenerAccordionOrdenCompra === true;
       var $cardOrdenCompra = $('#ordenCompraAccordionCard');
       var $accordionPedidoMateriales = $('#accordionExample5');
 
@@ -4912,6 +5286,14 @@ $(document).ready(function() {
 
       $accordionPedidoMateriales.toggleClass('d-none', !(habilitaPedidoMateriales && puedePedidoMateriales));
       $accordionPedidoMateriales.attr('aria-hidden', (habilitaPedidoMateriales && puedePedidoMateriales) ? 'false' : 'true');
+
+      // El refresco posterior al guardado actualiza estado y datos sin navegar a otro acordeón.
+      if (mantenerAccordionOrdenCompra) {
+        if (!$('#collapse4_OC').hasClass('show')) {
+          $('#collapse4_OC').collapse('show');
+        }
+        return;
+      }
 
       if (habilitaPedidoMateriales && puedePedidoMateriales) {
         if ($('#collapse4_OC').hasClass('show')) {
@@ -4931,8 +5313,9 @@ $(document).ready(function() {
       }
     }
 
-    function renderOrdenCompraPayload(payload) {
+    function renderOrdenCompraPayload(payload, opciones) {
       payload = payload || {};
+      opciones = opciones || {};
       var estado = String(payload.estado_calculado || 'no_habilitada');
       var label = String(payload.label_estado || estado);
       var badgeClass = String(payload.badge_class || 'badge-secondary');
@@ -4965,8 +5348,9 @@ $(document).ready(function() {
 
       renderPdfOrdenCompra();
       actualizarBloqueoSeccionesOrdenCompra();
+      actualizarSnapshotBaseOrdenCompra();
       actualizarBotonesOrdenCompra();
-      actualizarAvanceOrdenCompra();
+      actualizarAvanceOrdenCompra(opciones);
       if (typeof window.actualizarIntervinoOrdenCompraUI === 'function') {
         window.actualizarIntervinoOrdenCompraUI(ordenCompra ? ordenCompra.intervino_resumen : null);
       }
@@ -5004,30 +5388,31 @@ $(document).ready(function() {
       return $.ajax(ajaxConfig);
     }
 
-    function obtenerOrdenCompra(force) {
+    function obtenerOrdenCompra(force, opciones) {
+      opciones = opciones || {};
       if (!existeFormularioOrdenCompra()) {
-        return;
+        return $.Deferred().resolve().promise();
       }
 
       if (!presupuestoOrdenCompraValido()) {
         renderEstadoInicialOrdenCompra();
-        return;
+        return $.Deferred().resolve().promise();
       }
 
       if (ordenCompraCargaInicialRealizada && !force) {
-        return;
+        return $.Deferred().resolve().promise();
       }
 
       ordenCompraCargaInicialRealizada = true;
       alertaOrdenCompra('alert-info', 'Consultando Orden de compra...', 'Se estan obteniendo los datos administrativos disponibles.');
 
-      requestOrdenCompra({
+      return requestOrdenCompra({
         accion: 'obtener_orden_compra',
         id_presupuesto: ordenCompraConfig.id_presupuesto,
         id_previsita: ordenCompraConfig.id_previsita
       }).done(function(resp) {
         if (resp && resp.success) {
-          renderOrdenCompraPayload(resp.data || {});
+          renderOrdenCompraPayload(resp.data || {}, opciones);
           return;
         }
 
@@ -5048,6 +5433,57 @@ $(document).ready(function() {
       }
 
       return String($campo.val() || '').trim();
+    }
+
+    function normalizarValorSnapshotOrdenCompra(nombre, valor) {
+      var normalizado = String(valor == null ? '' : valor)
+        .replace(/\r\n?/g, '\n')
+        .trim();
+
+      if (normalizado !== '' && ordenCompraCamposNumericos.indexOf(nombre) !== -1) {
+        var numero = Number(normalizado.replace(',', '.'));
+        if (isFinite(numero)) {
+          return String(numero);
+        }
+      }
+
+      return normalizado;
+    }
+
+    function obtenerSnapshotOrdenCompra() {
+      var snapshot = {};
+
+      ordenCompraCampos.forEach(function(nombre) {
+        snapshot[nombre] = normalizarValorSnapshotOrdenCompra(
+          nombre,
+          valorCampoOrdenCompra(nombre)
+        );
+      });
+
+      return JSON.stringify(snapshot);
+    }
+
+    function actualizarSnapshotBaseOrdenCompra() {
+      ordenCompraSnapshotBase = obtenerSnapshotOrdenCompra();
+    }
+
+    function ordenCompraTieneCambios() {
+      if (ordenCompraSnapshotBase === null) {
+        return false;
+      }
+
+      return obtenerSnapshotOrdenCompra() !== ordenCompraSnapshotBase
+        || ordenCompraTienePdfSeleccionadoValido();
+    }
+
+    function inicializarDeteccionCambiosOrdenCompra() {
+      $('#ordenCompraForm')
+        .off('.ordenCompraDirty')
+        .on(
+          'input.ordenCompraDirty change.ordenCompraDirty',
+          '.oc-field:not([type="file"])',
+          actualizarBotonesOrdenCompra
+        );
     }
 
     function datosFormularioOrdenCompra(accion) {
@@ -5239,10 +5675,16 @@ $(document).ready(function() {
       requestOrdenCompra(formDataOrdenCompraConFlags(accion, flags), { multipart: true }).done(function(resp) {
         if (resp && resp.success) {
           if (!informarResultadoAltaClienteOrdenCompra(resp)) {
-            toastr.success(resp.message || 'Orden de compra guardada.');
+            mostrarExito(resp.message || 'Orden de compra guardada.');
           }
-          obtenerOrdenCompra(true);
-          deferred.resolve(resp);
+          var refrescoOrdenCompra = obtenerOrdenCompra(true, { mantenerAccordionOrdenCompra: true });
+          if (refrescoOrdenCompra && typeof refrescoOrdenCompra.always === 'function') {
+            refrescoOrdenCompra.always(function() {
+              deferred.resolve(resp);
+            });
+          } else {
+            deferred.resolve(resp);
+          }
           return;
         }
 
@@ -5271,7 +5713,15 @@ $(document).ready(function() {
     }
 
     function guardarOrdenCompra() {
-      if (!ordenCompraPuedeEditar) {
+      if (
+        !ordenCompraPuedeEditar
+        || !ordenCompraEstadoPermiteEdicion()
+        || ordenCompraGuardando
+        || !ordenCompraTienePdfDisponibleParaEditar()
+        || ordenCompraTienePdfSeleccionadoInvalido()
+        || !ordenCompraTieneCambios()
+      ) {
+        actualizarBotonesOrdenCompra();
         return;
       }
 
@@ -5280,11 +5730,12 @@ $(document).ready(function() {
       }
 
       var accion = ordenCompraIdActivo > 0 ? 'actualizar_orden_compra' : 'guardar_orden_compra';
-      var $boton = $('#oc_btn_guardar');
-      $boton.prop('disabled', true);
+      ordenCompraGuardando = true;
+      actualizarBotonesOrdenCompra();
 
       enviarGuardarOrdenCompra(accion).always(function() {
-        $boton.prop('disabled', false);
+        ordenCompraGuardando = false;
+        actualizarBotonesOrdenCompra();
       });
     }
 
@@ -5373,9 +5824,7 @@ $(document).ready(function() {
       }
 
       function limpiarPreview() {
-        try { $input.val(''); } catch(e) {}
-        $preview.addClass('d-none');
-        $error.addClass('d-none').text('');
+        limpiarSeleccionPdfOrdenCompra();
         actualizarBloqueoSeccionesOrdenCompra();
         actualizarBotonesOrdenCompra();
       }
@@ -5417,8 +5866,13 @@ $(document).ready(function() {
     })();
     // --- Fin Dropzone PDF OC ---
 
-    if (existeFormularioOrdenCompra()) {
-      $('#oc_btn_guardar').on('click', guardarOrdenCompra);
+        if (existeFormularioOrdenCompra()) {
+            $('.oc-header-more-actions').on('show.bs.dropdown', function() {
+                $(this).tooltip('hide');
+            });
+
+            inicializarDeteccionCambiosOrdenCompra();
+            $('#oc_btn_guardar').on('click', guardarOrdenCompra);
       $('#oc_btn_volver').on('click', function(event) {
         event.preventDefault();
         event.stopPropagation();
@@ -5428,7 +5882,9 @@ $(document).ready(function() {
         cambiarEstadoOrdenCompra('observada');
       });
       $('#oc_btn_anular').on('click', confirmarAnularOrdenCompra);
+      $('#oc_btn_ver_presupuesto_aprobado').on('click', verPresupuestoAprobadoOrdenCompra);
       actualizarBloqueoSeccionesOrdenCompra();
+      consultarDisponibilidadPresupuestoAprobado();
 
       if ($('#collapse4_OC').hasClass('show') || ordenCompraConfig.oc_solicitada || !!(ordenCompraConfig.estado_inicial && ordenCompraConfig.estado_inicial.tiene_oc)) {
         obtenerOrdenCompra(true);
