@@ -326,6 +326,287 @@ if (!function_exists('resolverDisponibilidadDocumentoEmitidoPresupuesto')) {
     }
 }
 
+if (!function_exists('resolverRutaSeguraDocumentoEmitidoPresupuesto')) {
+    function resolverRutaSeguraDocumentoEmitidoPresupuesto(
+        int $idPresupuesto,
+        string $rutaArchivo
+    ): array {
+        $directorioEsperado = realpath(baseRutaDocumentosEmitidosPresupuesto($idPresupuesto));
+        $rutaNormalizada = trim(str_replace('\\', '/', $rutaArchivo));
+
+        if (
+            $idPresupuesto <= 0
+            || $rutaNormalizada === ''
+            || $directorioEsperado === false
+            || !is_dir($directorioEsperado)
+        ) {
+            return [
+                'disponible' => false,
+                'ruta_absoluta' => '',
+            ];
+        }
+
+        $rutaCandidata = normalizarRutaServidor($rutaNormalizada);
+        $rutaReal = realpath($rutaCandidata);
+        $baseReal = rtrim(str_replace('\\', '/', $directorioEsperado), '/');
+        $archivoReal = $rutaReal !== false ? str_replace('\\', '/', $rutaReal) : '';
+        $prefijoPermitido = $baseReal . '/';
+
+        $dentroDelDirectorio = $archivoReal !== ''
+            && strncmp($archivoReal, $prefijoPermitido, strlen($prefijoPermitido)) === 0;
+
+        return [
+            'disponible' => $dentroDelDirectorio && is_file($archivoReal) && is_readable($archivoReal),
+            'ruta_absoluta' => $dentroDelDirectorio ? $archivoReal : '',
+        ];
+    }
+}
+
+if (!function_exists('resolverDocumentoAprobadoVigentePresupuestoEnConexion')) {
+    function resolverDocumentoAprobadoVigentePresupuestoEnConexion(
+        mysqli $db,
+        int $idPresupuesto,
+        int $idPrevisita
+    ): array {
+        $respuestaBase = [
+            'disponible' => false,
+            'id_documento_emitido' => null,
+            'nombre_archivo' => '',
+            'fecha_emision' => '',
+            'fecha_envio' => '',
+            'fecha_aprobacion' => '',
+            'modo_circuito' => obtenerModoActivoCircuitoComercialPresupuestos(),
+            'mensaje' => 'No se encontro un presupuesto aprobado disponible.',
+            'ruta_absoluta' => '',
+        ];
+
+        if ($idPresupuesto <= 0 || $idPrevisita <= 0) {
+            $respuestaBase['mensaje'] = 'Los identificadores del presupuesto y la previsita no son validos.';
+            return $respuestaBase;
+        }
+
+        foreach ([
+            'presupuestos',
+            'presupuesto_documentos_emitidos',
+            'presupuesto_documentos_emitidos_envios',
+            'presupuesto_historial_comercial',
+        ] as $tablaRequerida) {
+            if (!tabla_existe($db, $tablaRequerida)) {
+                $respuestaBase['mensaje'] = 'El circuito documental de presupuestos no esta disponible.';
+                return $respuestaBase;
+            }
+        }
+
+        $sqlPresupuesto = "
+            SELECT id_presupuesto
+            FROM presupuestos
+            WHERE id_presupuesto = ?
+              AND id_previsita = ?
+            LIMIT 1
+        ";
+        $stmtPresupuesto = mysqli_prepare($db, $sqlPresupuesto);
+        if (!$stmtPresupuesto) {
+            $respuestaBase['mensaje'] = 'No se pudo validar el presupuesto solicitado.';
+            return $respuestaBase;
+        }
+        mysqli_stmt_bind_param($stmtPresupuesto, 'ii', $idPresupuesto, $idPrevisita);
+        mysqli_stmt_execute($stmtPresupuesto);
+        $resPresupuesto = mysqli_stmt_get_result($stmtPresupuesto);
+        $presupuestoExiste = $resPresupuesto && mysqli_fetch_assoc($resPresupuesto);
+        mysqli_stmt_close($stmtPresupuesto);
+
+        if (!$presupuestoExiste) {
+            $respuestaBase['mensaje'] = 'El presupuesto no corresponde a la previsita informada.';
+            return $respuestaBase;
+        }
+
+        $modoCircuito = $respuestaBase['modo_circuito'];
+        $sqlEstadoVigente = "
+            SELECT estado_resultante
+            FROM presupuesto_historial_comercial
+            WHERE id_presupuesto = ?
+              AND id_previsita = ?
+              AND modo_circuito = ?
+            ORDER BY created_at DESC, id_historial_comercial DESC
+            LIMIT 1
+        ";
+        $stmtEstado = mysqli_prepare($db, $sqlEstadoVigente);
+        if (!$stmtEstado) {
+            $respuestaBase['mensaje'] = 'No se pudo validar el estado comercial del presupuesto.';
+            return $respuestaBase;
+        }
+        mysqli_stmt_bind_param($stmtEstado, 'iis', $idPresupuesto, $idPrevisita, $modoCircuito);
+        mysqli_stmt_execute($stmtEstado);
+        $resEstado = mysqli_stmt_get_result($stmtEstado);
+        $estadoVigente = $resEstado ? mysqli_fetch_assoc($resEstado) : null;
+        mysqli_stmt_close($stmtEstado);
+
+        if (strtoupper(trim((string)($estadoVigente['estado_resultante'] ?? ''))) !== 'APROBADO') {
+            $respuestaBase['mensaje'] = 'El presupuesto no se encuentra aprobado en el circuito comercial vigente.';
+            return $respuestaBase;
+        }
+
+        $sqlAprobacion = "
+            SELECT
+                h.id_documento_emitido,
+                h.created_at AS fecha_aprobacion
+            FROM presupuesto_historial_comercial h
+            WHERE h.id_presupuesto = ?
+              AND h.id_previsita = ?
+              AND h.modo_circuito = ?
+              AND h.accion = 'aprobado'
+              AND h.estado_resultante = 'APROBADO'
+            ORDER BY h.created_at DESC, h.id_historial_comercial DESC
+            LIMIT 1
+        ";
+        $stmtAprobacion = mysqli_prepare($db, $sqlAprobacion);
+        if (!$stmtAprobacion) {
+            $respuestaBase['mensaje'] = 'No se pudo consultar la aprobacion vigente.';
+            return $respuestaBase;
+        }
+        mysqli_stmt_bind_param($stmtAprobacion, 'iis', $idPresupuesto, $idPrevisita, $modoCircuito);
+        mysqli_stmt_execute($stmtAprobacion);
+        $resAprobacion = mysqli_stmt_get_result($stmtAprobacion);
+        $aprobacion = $resAprobacion ? mysqli_fetch_assoc($resAprobacion) : null;
+        mysqli_stmt_close($stmtAprobacion);
+
+        $idDocumentoEmitido = (int)($aprobacion['id_documento_emitido'] ?? 0);
+        if (!$aprobacion || $idDocumentoEmitido <= 0) {
+            $respuestaBase['fecha_aprobacion'] = (string)($aprobacion['fecha_aprobacion'] ?? '');
+            $respuestaBase['mensaje'] = 'La aprobacion vigente no tiene un documento emitido asociado.';
+            return $respuestaBase;
+        }
+
+        $sqlDocumento = "
+            SELECT id_documento_emitido, nombre_archivo, ruta_archivo, created_at AS fecha_emision
+            FROM presupuesto_documentos_emitidos
+            WHERE id_documento_emitido = ?
+              AND id_presupuesto = ?
+              AND id_previsita = ?
+            LIMIT 1
+        ";
+        $stmtDocumento = mysqli_prepare($db, $sqlDocumento);
+        if (!$stmtDocumento) {
+            $respuestaBase['mensaje'] = 'No se pudo consultar el documento aprobado.';
+            return $respuestaBase;
+        }
+        mysqli_stmt_bind_param(
+            $stmtDocumento,
+            'iii',
+            $idDocumentoEmitido,
+            $idPresupuesto,
+            $idPrevisita
+        );
+        mysqli_stmt_execute($stmtDocumento);
+        $resDocumento = mysqli_stmt_get_result($stmtDocumento);
+        $documento = $resDocumento ? mysqli_fetch_assoc($resDocumento) : null;
+        mysqli_stmt_close($stmtDocumento);
+
+        if (!$documento) {
+            $respuestaBase['id_documento_emitido'] = $idDocumentoEmitido;
+            $respuestaBase['fecha_aprobacion'] = (string)($aprobacion['fecha_aprobacion'] ?? '');
+            $respuestaBase['mensaje'] = 'El documento asociado a la aprobacion vigente no existe.';
+            return $respuestaBase;
+        }
+
+        $estadoEnvioExitoso = $modoCircuito === 'smtp' ? 'enviado' : 'simulado';
+        $sqlEnvio = "
+            SELECT MAX(created_at) AS fecha_envio
+            FROM presupuesto_documentos_emitidos_envios
+            WHERE id_documento_emitido = ?
+              AND id_presupuesto = ?
+              AND id_previsita = ?
+              AND modo_envio = ?
+              AND estado_envio = ?
+        ";
+        $stmtEnvio = mysqli_prepare($db, $sqlEnvio);
+        if (!$stmtEnvio) {
+            $respuestaBase['mensaje'] = 'No se pudo validar el envio del documento aprobado.';
+            return $respuestaBase;
+        }
+        mysqli_stmt_bind_param(
+            $stmtEnvio,
+            'iiiss',
+            $idDocumentoEmitido,
+            $idPresupuesto,
+            $idPrevisita,
+            $modoCircuito,
+            $estadoEnvioExitoso
+        );
+        mysqli_stmt_execute($stmtEnvio);
+        $resEnvio = mysqli_stmt_get_result($stmtEnvio);
+        $envio = $resEnvio ? mysqli_fetch_assoc($resEnvio) : null;
+        mysqli_stmt_close($stmtEnvio);
+
+        if (empty($envio['fecha_envio'])) {
+            $respuestaBase['id_documento_emitido'] = $idDocumentoEmitido;
+            $respuestaBase['nombre_archivo'] = repararTextoMojibakePresupuestoProfundo(
+                (string)($documento['nombre_archivo'] ?? '')
+            );
+            $respuestaBase['fecha_emision'] = (string)($documento['fecha_emision'] ?? '');
+            $respuestaBase['fecha_aprobacion'] = (string)($aprobacion['fecha_aprobacion'] ?? '');
+            $respuestaBase['mensaje'] = 'El documento asociado a la aprobacion vigente no tiene un envio exitoso.';
+            return $respuestaBase;
+        }
+
+        $rutaSegura = resolverRutaSeguraDocumentoEmitidoPresupuesto(
+            $idPresupuesto,
+            (string)($documento['ruta_archivo'] ?? '')
+        );
+
+        $respuesta = array_merge($respuestaBase, [
+            'id_documento_emitido' => (int)$documento['id_documento_emitido'],
+            'nombre_archivo' => repararTextoMojibakePresupuestoProfundo((string)$documento['nombre_archivo']),
+            'fecha_emision' => (string)($documento['fecha_emision'] ?? ''),
+            'fecha_envio' => (string)$envio['fecha_envio'],
+            'fecha_aprobacion' => (string)($aprobacion['fecha_aprobacion'] ?? ''),
+            'ruta_absoluta' => (string)$rutaSegura['ruta_absoluta'],
+        ]);
+
+        if (empty($rutaSegura['disponible'])) {
+            $respuesta['mensaje'] = 'El documento aprobado esta registrado, pero el archivo no esta disponible en el servidor.';
+            return $respuesta;
+        }
+
+        $respuesta['disponible'] = true;
+        $respuesta['mensaje'] = 'Presupuesto aprobado disponible.';
+
+        return $respuesta;
+    }
+}
+
+if (!function_exists('resolverDocumentoAprobadoVigentePresupuesto')) {
+    function resolverDocumentoAprobadoVigentePresupuesto(
+        int $idPresupuesto,
+        int $idPrevisita
+    ): array {
+        $db = conectDB();
+        if (!$db) {
+            return [
+                'disponible' => false,
+                'mensaje' => 'No se pudo abrir conexion a la base de datos.',
+            ];
+        }
+
+        mysqli_set_charset($db, 'utf8mb4');
+
+        try {
+            return resolverDocumentoAprobadoVigentePresupuestoEnConexion(
+                $db,
+                $idPresupuesto,
+                $idPrevisita
+            );
+        } catch (Throwable $e) {
+            return [
+                'disponible' => false,
+                'mensaje' => 'No se pudo consultar el presupuesto aprobado.',
+            ];
+        } finally {
+            mysqli_close($db);
+        }
+    }
+}
+
 if (!function_exists('listarDocumentosEmitidosPresupuesto')) {
     function listarDocumentosEmitidosPresupuesto(int $idPrevisita, ?int $idPresupuesto = null): array
     {

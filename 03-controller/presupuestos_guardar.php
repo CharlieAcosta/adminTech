@@ -41,6 +41,102 @@ if (!function_exists('obtenerPerfilUsuarioSolicitudPresupuesto')) {
     }
 }
 
+if (!function_exists('perfilPuedeConsultarDocumentoAprobadoPresupuesto')) {
+    function perfilPuedeConsultarDocumentoAprobadoPresupuesto(?string $perfil): bool
+    {
+        return perfilPuedeEditarOrdenCompra($perfil)
+            || perfilSoloPuedeVerOrdenCompra($perfil)
+            || perfilPuedeVerSeguimientoCompletoOrdenCompra($perfil)
+            || perfilPuedeAccederSoloOrdenCompra($perfil);
+    }
+}
+
+if (!function_exists('validarAccesoDocumentoAprobadoPresupuesto')) {
+    function validarAccesoDocumentoAprobadoPresupuesto(): array
+    {
+        $idUsuario = (int)($_SESSION['usuario']['id_usuario'] ?? 0);
+        $perfil = obtenerPerfilUsuarioSolicitudPresupuesto();
+
+        if ($idUsuario <= 0 || $perfil === '') {
+            return ['ok' => false, 'status' => 401, 'msg' => 'No hay sesion de usuario activa.'];
+        }
+
+        if (!perfilPuedeConsultarDocumentoAprobadoPresupuesto($perfil)) {
+            return ['ok' => false, 'status' => 403, 'msg' => 'El perfil no tiene permiso para consultar el presupuesto aprobado.'];
+        }
+
+        return ['ok' => true, 'status' => 200, 'id_usuario' => $idUsuario, 'perfil' => $perfil];
+    }
+}
+
+if (!function_exists('metadatosPublicosDocumentoAprobadoPresupuesto')) {
+    function metadatosPublicosDocumentoAprobadoPresupuesto(array $documento): array
+    {
+        return [
+            'disponible' => !empty($documento['disponible']),
+            'id_documento_emitido' => isset($documento['id_documento_emitido'])
+                ? (int)$documento['id_documento_emitido']
+                : null,
+            'nombre_archivo' => (string)($documento['nombre_archivo'] ?? ''),
+            'fecha_emision' => (string)($documento['fecha_emision'] ?? ''),
+            'fecha_envio' => (string)($documento['fecha_envio'] ?? ''),
+            'fecha_aprobacion' => (string)($documento['fecha_aprobacion'] ?? ''),
+            'modo_circuito' => (string)($documento['modo_circuito'] ?? ''),
+            'mensaje' => (string)($documento['mensaje'] ?? ''),
+        ];
+    }
+}
+
+if (($_GET['accion'] ?? '') === 'ver_presupuesto_aprobado') {
+    $accesoDocumento = validarAccesoDocumentoAprobadoPresupuesto();
+    if (empty($accesoDocumento['ok'])) {
+        http_response_code((int)$accesoDocumento['status']);
+        echo htmlspecialchars((string)$accesoDocumento['msg'], ENT_QUOTES, 'UTF-8');
+        exit;
+    }
+
+    $idPresupuesto = isset($_GET['id_presupuesto']) ? (int)$_GET['id_presupuesto'] : 0;
+    $idPrevisita = isset($_GET['id_previsita']) ? (int)$_GET['id_previsita'] : 0;
+    $idDocumentoSolicitado = isset($_GET['id_documento_emitido']) ? (int)$_GET['id_documento_emitido'] : 0;
+    $documento = resolverDocumentoAprobadoVigentePresupuesto($idPresupuesto, $idPrevisita);
+
+    if (
+        empty($documento['disponible'])
+        || $idDocumentoSolicitado <= 0
+        || (int)($documento['id_documento_emitido'] ?? 0) !== $idDocumentoSolicitado
+        || empty($documento['ruta_absoluta'])
+    ) {
+        http_response_code(404);
+        echo htmlspecialchars(
+            (string)($documento['mensaje'] ?? 'El presupuesto aprobado no esta disponible.'),
+            ENT_QUOTES,
+            'UTF-8'
+        );
+        exit;
+    }
+
+    $rutaAbsoluta = (string)$documento['ruta_absoluta'];
+    $nombreArchivo = trim((string)($documento['nombre_archivo'] ?? 'presupuesto-aprobado.pdf'));
+    if ($nombreArchivo === '') {
+        $nombreArchivo = 'presupuesto-aprobado.pdf';
+    }
+    if (!preg_match('/\.pdf$/i', $nombreArchivo)) {
+        $nombreArchivo .= '.pdf';
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . str_replace(['"', "\r", "\n"], '', $nombreArchivo) . '"');
+    header('Content-Length: ' . filesize($rutaAbsoluta));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store, max-age=0');
+    readfile($rutaAbsoluta);
+    exit;
+}
+
 if (!function_exists('enriquecerRespuestaHistorialComercialPresupuestoParaUsuario')) {
     function enriquecerRespuestaHistorialComercialPresupuestoParaUsuario(array $respuesta, ?int $idUsuario = null, ?string $perfil = null): array
     {
@@ -64,6 +160,29 @@ try {
     $funcion = $_POST['funcion'] ?? '';
 
     switch ($funcion) {
+        case 'obtenerDisponibilidadPresupuestoAprobado':
+            $accesoDocumento = validarAccesoDocumentoAprobadoPresupuesto();
+            if (empty($accesoDocumento['ok'])) {
+                http_response_code((int)$accesoDocumento['status']);
+                echo json_encode([
+                    'ok' => false,
+                    'msg' => (string)$accesoDocumento['msg'],
+                    'documento' => null,
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $idPresupuesto = isset($_POST['id_presupuesto']) ? (int)$_POST['id_presupuesto'] : 0;
+            $idPrevisita = isset($_POST['id_previsita']) ? (int)$_POST['id_previsita'] : 0;
+            $documento = resolverDocumentoAprobadoVigentePresupuesto($idPresupuesto, $idPrevisita);
+
+            echo json_encode([
+                'ok' => true,
+                'msg' => (string)($documento['mensaje'] ?? ''),
+                'documento' => metadatosPublicosDocumentoAprobadoPresupuesto($documento),
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+
         case 'obtenerContextoPrecioPresupuesto':
         case 'obtenerContextoPrecioCatalogoPresupuestoDinamico':
             $idUsuarioSesion = isset($_SESSION['usuario']['id_usuario']) ? (int)$_SESSION['usuario']['id_usuario'] : 0;

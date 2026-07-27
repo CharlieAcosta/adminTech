@@ -1690,10 +1690,22 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
           <!-- 1. Documentación OC / PDF respaldatorio -->
           <div class="card card-info mb-3 w-100 oc-card-principal" id="oc_seccion_pdf">
-            <div class="card-header py-2">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
               <h5 class="card-title mb-0 text-white">
                 <i class="fas fa-file-pdf mr-2"></i>Documentación OC
               </h5>
+              <button
+                type="button"
+                id="oc_btn_ver_presupuesto_aprobado"
+                class="btn btn-sm btn-light ml-auto d-inline-flex align-items-center flex-shrink-0"
+                data-toggle="tooltip"
+                data-placement="top"
+                title="Ver presupuesto aprobado"
+                disabled
+              >
+                <i class="fas fa-file-pdf mr-sm-1"></i>
+                <span class="d-none d-sm-inline">Presupuesto</span>
+              </button>
             </div>
             <div class="card-body">
 
@@ -2258,6 +2270,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 <script>
   window.SEGUIMIENTO_ORDEN_COMPRA = <?php echo jsonParaJsSeguro([
     'endpoint' => '../03-controller/ordenesCompraController.php',
+    'endpoint_presupuesto' => '../03-controller/presupuestos_guardar.php',
     'id_presupuesto' => $idPresupuestoOrdenCompra,
     'id_previsita' => $idPrevisitaOrdenCompra,
     'puede_editar' => $ordenCompraPuedeEditarInicial,
@@ -4548,6 +4561,7 @@ $(document).ready(function() {
     var ordenCompraEstadoActual = '';
     var ordenCompraPuedeEditar = false;
     var ordenCompraPdfActual = null;
+    var presupuestoAprobadoDocumento = null;
     var ordenCompraCampos = [
       'numero_oc',
       'fecha_emision',
@@ -4595,6 +4609,112 @@ $(document).ready(function() {
 
     function existeFormularioOrdenCompra() {
       return !!(ordenCompraConfig && $('#ordenCompraForm').length);
+    }
+
+    function mostrarAvisoPresupuestoAprobado(mensaje, icono) {
+      mensaje = mensaje || 'El presupuesto aprobado no esta disponible.';
+      icono = icono || 'info';
+
+      if (window.Swal && typeof window.Swal.fire === 'function') {
+        window.Swal.fire({
+          icon: icono,
+          title: 'Presupuesto aprobado',
+          text: mensaje,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (window.toastr && typeof window.toastr.info === 'function') {
+        window.toastr.info(mensaje);
+        return;
+      }
+
+      window.alert(mensaje);
+    }
+
+    function actualizarBotonPresupuestoAprobado(documento) {
+      presupuestoAprobadoDocumento = documento || null;
+      var disponible = !!(
+        presupuestoAprobadoDocumento
+        && presupuestoAprobadoDocumento.disponible
+        && parseInt(presupuestoAprobadoDocumento.id_documento_emitido || 0, 10) > 0
+      );
+      var mensaje = disponible
+        ? 'Ver presupuesto aprobado'
+        : String((presupuestoAprobadoDocumento && presupuestoAprobadoDocumento.mensaje) || 'Presupuesto aprobado no disponible');
+
+      $('#oc_btn_ver_presupuesto_aprobado')
+        .prop('disabled', false)
+        .toggleClass('btn-light', disponible)
+        .toggleClass('btn-outline-light', !disponible)
+        .attr('title', mensaje)
+        .attr('data-original-title', mensaje)
+        .tooltip('dispose')
+        .tooltip({
+          container: 'body',
+          trigger: 'hover',
+          boundary: 'window'
+        });
+    }
+
+    function consultarDisponibilidadPresupuestoAprobado() {
+      if (!existeFormularioOrdenCompra() || !presupuestoOrdenCompraValido()) {
+        actualizarBotonPresupuestoAprobado(null);
+        return;
+      }
+
+      $('#oc_btn_ver_presupuesto_aprobado')
+        .prop('disabled', true)
+        .attr('title', 'Consultando presupuesto aprobado...')
+        .attr('data-original-title', 'Consultando presupuesto aprobado...');
+
+      $.ajax({
+        type: 'POST',
+        url: ordenCompraConfig.endpoint_presupuesto,
+        dataType: 'json',
+        data: {
+          via: 'ajax',
+          funcion: 'obtenerDisponibilidadPresupuestoAprobado',
+          id_presupuesto: ordenCompraConfig.id_presupuesto,
+          id_previsita: ordenCompraConfig.id_previsita
+        }
+      }).done(function(resp) {
+        if (resp && resp.ok && resp.documento) {
+          actualizarBotonPresupuestoAprobado(resp.documento);
+          return;
+        }
+
+        actualizarBotonPresupuestoAprobado({
+          disponible: false,
+          mensaje: (resp && resp.msg) ? resp.msg : 'No se pudo consultar el presupuesto aprobado.'
+        });
+      }).fail(function(xhr) {
+        var respuesta = xhr && xhr.responseJSON ? xhr.responseJSON : null;
+        actualizarBotonPresupuestoAprobado({
+          disponible: false,
+          mensaje: (respuesta && respuesta.msg) ? respuesta.msg : 'No se pudo consultar el presupuesto aprobado.'
+        });
+      });
+    }
+
+    function verPresupuestoAprobadoOrdenCompra() {
+      if (!presupuestoAprobadoDocumento || !presupuestoAprobadoDocumento.disponible) {
+        mostrarAvisoPresupuestoAprobado(
+          presupuestoAprobadoDocumento && presupuestoAprobadoDocumento.mensaje
+            ? presupuestoAprobadoDocumento.mensaje
+            : 'El presupuesto aprobado no esta disponible.'
+        );
+        return;
+      }
+
+      var url = ordenCompraConfig.endpoint_presupuesto
+        + '?accion=ver_presupuesto_aprobado'
+        + '&id_presupuesto=' + encodeURIComponent(ordenCompraConfig.id_presupuesto)
+        + '&id_previsita=' + encodeURIComponent(ordenCompraConfig.id_previsita)
+        + '&id_documento_emitido=' + encodeURIComponent(presupuestoAprobadoDocumento.id_documento_emitido);
+
+      window.open(url, '_blank', 'noopener');
     }
 
     function presupuestoOrdenCompraValido() {
@@ -5428,7 +5548,9 @@ $(document).ready(function() {
         cambiarEstadoOrdenCompra('observada');
       });
       $('#oc_btn_anular').on('click', confirmarAnularOrdenCompra);
+      $('#oc_btn_ver_presupuesto_aprobado').on('click', verPresupuestoAprobadoOrdenCompra);
       actualizarBloqueoSeccionesOrdenCompra();
+      consultarDisponibilidadPresupuestoAprobado();
 
       if ($('#collapse4_OC').hasClass('show') || ordenCompraConfig.oc_solicitada || !!(ordenCompraConfig.estado_inicial && ordenCompraConfig.estado_inicial.tiene_oc)) {
         obtenerOrdenCompra(true);
