@@ -4340,7 +4340,7 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
       <section class="seccion-imagenes" data-pdf-images>
         <div class="imagenes-inicio" data-pdf-atomic="inicio-imagenes">
           ${tituloImagenesHtml}
-          <div class="falta">FALTA COMPLETAR</div>
+          <div style="color:#000;">Sin imágenes adjuntas</div>
         </div>
       </section>
     `;
