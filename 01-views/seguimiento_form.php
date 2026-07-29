@@ -1678,6 +1678,21 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           </div>
         </div>
 
+        <div class="card card-light mt-3 mb-0 pedido-materiales-pdfs-card">
+          <div class="card-header py-2">
+            <h5 class="card-title mb-0">
+              <i class="fas fa-file-pdf text-danger mr-2"></i>PDFs generados
+            </h5>
+          </div>
+          <div class="card-body py-3">
+            <div class="row pedido-materiales-pdfs-listado" id="pedido_materiales_pdfs_listado" aria-live="polite">
+              <div class="col-12 text-center text-muted py-2">
+                <i class="fas fa-spinner fa-spin mr-1"></i> Consultando PDFs generados...
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
           <button type="button"
                   class="btn btn-outline-primary btn-uniform mr-2 d-none"
@@ -3462,6 +3477,60 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     justify-content: center;
     padding: 10px 22px;
     width: 180px;
+  }
+
+  .pedido-materiales-pdfs-listado {
+    margin-left: -0.35rem;
+    margin-right: -0.35rem;
+  }
+
+  .pedido-materiales-pdf-columna {
+    flex: 1 1 180px;
+    max-width: 20%;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  .pedido-materiales-pdf-item {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.4rem;
+    height: 100%;
+    min-height: 168px;
+    padding: 0.75rem;
+  }
+
+  .pedido-materiales-pdf-nombre {
+    font-size: 0.74rem;
+    line-height: 1.25;
+    min-height: 2.4em;
+    overflow-wrap: anywhere;
+  }
+
+  .pedido-materiales-pdf-fecha {
+    font-size: 0.72rem;
+    min-height: 1.2em;
+  }
+
+  @media (max-width: 1199.98px) {
+    .pedido-materiales-pdf-columna {
+      flex-basis: 33.333%;
+      max-width: 33.333%;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .pedido-materiales-pdf-columna {
+      flex-basis: 50%;
+      max-width: 50%;
+    }
+  }
+
+  @media (max-width: 479.98px) {
+    .pedido-materiales-pdf-columna {
+      flex-basis: 100%;
+      max-width: 100%;
+    }
   }
 
   .pedido-materiales-autorizacion-solicitada {
@@ -6143,6 +6212,7 @@ $(document).ready(function() {
     var pedidoMaterialesProcesandoRealizacion = false;
     var pedidoMaterialesGenerandoPdf = false;
     var pedidoMaterialesEnviandoCorreo = false;
+    var pedidoMaterialesCargandoListadoPdfs = false;
     var idPedidoMaterialesConfirmadoParaPdf = 0;
     var PEDIDO_MATERIALES_MAXIMO = 5;
 
@@ -6207,6 +6277,158 @@ $(document).ready(function() {
       actualizarEstadoBotonCorreoPedidoMateriales();
     }
 
+    function formatearFechaPdfPedidoMateriales(fecha) {
+      var valor = String(fecha || '').trim();
+      if (!valor) {
+        return '';
+      }
+
+      var partes = valor.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+      if (!partes) {
+        return valor;
+      }
+
+      return partes[3] + '/' + partes[2] + '/' + partes[1]
+        + ' ' + partes[4] + ':' + partes[5] + (partes[6] ? ':' + partes[6] : '');
+    }
+
+    function renderizarListadoPdfsPedidoMateriales(documentos) {
+      var $contenedor = $('#pedido_materiales_pdfs_listado');
+      if (!$contenedor.length) {
+        return;
+      }
+
+      var documentosPorPedido = {};
+      (Array.isArray(documentos) ? documentos : []).forEach(function(documento) {
+        var numeroPedido = parseInt(String(documento.numero_pedido || '0'), 10) || 0;
+        if (numeroPedido >= 1 && numeroPedido <= PEDIDO_MATERIALES_MAXIMO) {
+          documentosPorPedido[numeroPedido] = documento;
+        }
+      });
+
+      var tarjetas = [];
+      for (var numeroPedido = 1; numeroPedido <= PEDIDO_MATERIALES_MAXIMO; numeroPedido += 1) {
+        var documento = documentosPorPedido[numeroPedido] || null;
+        var idPedido = documento
+          ? (parseInt(String(documento.id_pedido_materiales_pedido || '0'), 10) || 0)
+          : 0;
+        var generado = !!(
+          documento
+          && documento.documento_generado
+          && documento.id_pedido_materiales_pedido_documento
+        );
+        var nombre = generado
+          ? String(documento.nombre_archivo || 'PDF generado')
+          : (idPedido > 0 ? 'Sin PDF' : 'Sin pedido confirmado');
+        var fecha = generado
+          ? formatearFechaPdfPedidoMateriales(
+              documento.fecha_generacion || documento.created_at
+            )
+          : '';
+        var badge = generado
+          ? '<span class="badge badge-success">PDF generado</span>'
+          : '<span class="badge badge-secondary">Sin PDF</span>';
+        var accion = '';
+
+        if (idPedido > 0) {
+          accion = ''
+            + '<button type="button"'
+            + ' class="btn btn-sm ' + (generado ? 'btn-outline-danger' : 'btn-outline-primary')
+            + ' pedido-materiales-pdf-accion mt-auto"'
+            + ' data-id-pedido-materiales-pedido="' + escapeHtmlOrdenCompra(idPedido) + '"'
+            + ' data-accion-pdf="' + (generado ? 'descargar' : 'generar') + '">'
+            + '<i class="fas fa-' + (generado ? 'download' : 'file-pdf') + ' mr-1"></i>'
+            + (generado ? 'Descargar' : 'Generar PDF')
+            + '</button>';
+        }
+
+        tarjetas.push(
+          '<div class="pedido-materiales-pdf-columna mb-2">'
+            + '<div class="pedido-materiales-pdf-item d-flex flex-column text-center">'
+              + '<strong class="mb-2">Pedido #' + escapeHtmlOrdenCompra(numeroPedido) + '</strong>'
+              + '<div class="mb-2">' + badge + '</div>'
+              + '<div class="pedido-materiales-pdf-nombre text-muted mb-1"'
+                + (generado ? ' title="' + escapeHtmlOrdenCompra(nombre) + '"' : '') + '>'
+                + escapeHtmlOrdenCompra(nombre)
+              + '</div>'
+              + '<div class="pedido-materiales-pdf-fecha text-muted mb-2">'
+                + (fecha ? 'Generado: ' + escapeHtmlOrdenCompra(fecha) : '&nbsp;')
+              + '</div>'
+              + accion
+            + '</div>'
+          + '</div>'
+        );
+      }
+
+      $contenedor.html(tarjetas.join(''));
+    }
+
+    function renderizarErrorListadoPdfsPedidoMateriales(mensaje) {
+      var $contenedor = $('#pedido_materiales_pdfs_listado');
+      if (!$contenedor.length) {
+        return;
+      }
+
+      $contenedor.html(
+        '<div class="col-12">'
+          + '<div class="alert alert-warning mb-0 py-2">'
+            + '<i class="fas fa-exclamation-triangle mr-1"></i>'
+            + escapeHtmlOrdenCompra(mensaje || 'No se pudieron consultar los PDFs generados.')
+          + '</div>'
+        + '</div>'
+      );
+    }
+
+    function cargarListadoPdfsPedidoMateriales() {
+      var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10) || 0;
+      if (idPrevisita <= 0 || pedidoMaterialesCargandoListadoPdfs) {
+        return $.Deferred().resolve().promise();
+      }
+
+      pedidoMaterialesCargandoListadoPdfs = true;
+
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify({
+          accion: 'listar_pdfs_pedido_materiales',
+          id_previsita: idPrevisita
+        })
+      }).then(function(resp) {
+        if (!resp || resp.success === false) {
+          throw resp;
+        }
+
+        var datos = resp.data || resp;
+        renderizarListadoPdfsPedidoMateriales(datos.documentos || resp.documentos || []);
+
+        return resp;
+      }).catch(function(xhr) {
+        renderizarErrorListadoPdfsPedidoMateriales(
+          (xhr && xhr.responseJSON && xhr.responseJSON.message)
+            || (xhr && xhr.message)
+            || 'No se pudieron consultar los PDFs generados.'
+        );
+
+        return null;
+      }).always(function() {
+        pedidoMaterialesCargandoListadoPdfs = false;
+      });
+    }
+
+    function descargarPdfPedidoMaterialesExistente(idPedido) {
+      idPedido = parseInt(String(idPedido || '0'), 10) || 0;
+      if (idPedido <= 0) {
+        return;
+      }
+
+      window.location.href = obtenerEndpointPedidoMateriales()
+        + '?accion=descargar_pdf_pedido'
+        + '&id_pedido_materiales_pedido=' + encodeURIComponent(idPedido);
+    }
+
     function generarPdfPedidoMaterialesConfirmado(idPedido) {
       pedidoMaterialesGenerandoPdf = true;
       actualizarEstadoBotonPdfPedidoMateriales();
@@ -6239,6 +6461,7 @@ $(document).ready(function() {
         }
 
         mostrarExitoPedidoMateriales('PDF generado correctamente.');
+        cargarListadoPdfsPedidoMateriales();
         window.location.href = String(datosPdf.url_descarga);
 
         return resp;
@@ -6277,6 +6500,7 @@ $(document).ready(function() {
         pedidoMaterialesEnviandoCorreo = false;
         actualizarEstadoBotonPdfPedidoMateriales();
         actualizarEstadoBotonCorreoPedidoMateriales();
+        cargarListadoPdfsPedidoMateriales();
       });
     }
 
@@ -7173,6 +7397,36 @@ $(document).ready(function() {
       });
     });
 
+    $(document).on('click', '.pedido-materiales-pdf-accion', function() {
+      var $boton = $(this);
+      var idPedido = parseInt(
+        String($boton.attr('data-id-pedido-materiales-pedido') || '0'),
+        10
+      ) || 0;
+      var accion = String($boton.attr('data-accion-pdf') || '');
+      if (
+        $boton.prop('disabled')
+        || idPedido <= 0
+        || pedidoMaterialesGenerandoPdf
+        || pedidoMaterialesProcesandoRealizacion
+      ) {
+        return;
+      }
+
+      if (accion === 'descargar') {
+        descargarPdfPedidoMaterialesExistente(idPedido);
+        return;
+      }
+
+      generarPdfPedidoMaterialesConfirmado(idPedido).catch(function(xhr) {
+        mostrarErrorPedidoMateriales(
+          (xhr && xhr.responseJSON && xhr.responseJSON.message)
+            || (xhr && xhr.message)
+            || 'No se pudo generar el PDF del pedido.'
+        );
+      });
+    });
+
     $(document).on('click', '#pedido_materiales_enviar_correo', function() {
       var idPedido = parseInt(
         String($(this).attr('data-id-pedido-materiales-pedido') || '0'),
@@ -7826,6 +8080,7 @@ $(document).ready(function() {
     actualizarVisibilidadTablaMaterialesAgregados();
     actualizarEstiloPedidoMaterialesActivo();
     restaurarSnapshotPedidoMateriales(window.PEDIDO_MATERIALES_SNAPSHOT);
+    cargarListadoPdfsPedidoMateriales();
     inicializarTooltipsAccionesPedidoMateriales($('#collapse5_PM'));
     limpiarCambiosPendientesPedidoMateriales();
 

@@ -567,7 +567,7 @@ if (!function_exists('pedidoMaterialesPdfAgregarCabeceraPagina')) {
         $lineas = [
             'Pedido interno: ' . (int)$cabecera['id_pedido_materiales_pedido'],
             'Fecha de confirmacion: ' . (string)$cabecera['fecha_confirmacion'],
-            'Previsita: ' . (int)$cabecera['id_previsita'],
+            'ID: ' . (int)$cabecera['id_previsita'],
             'Presupuesto Nro.: ' . $numeroPresupuestoVisible,
             'Orden de Compra: ' . (int)$cabecera['id_orden_compra']
                 . ' / Nro. ' . $numeroOc,
@@ -719,7 +719,7 @@ if (!function_exists('obtenerRutaPdfPedidoMaterialesConfirmado')) {
             $idPrevisita
         );
         $nombreArchivo = sprintf(
-            'PEDIDO_MATERIALES_PREVISITA_%d_PEDIDO_%d_ID_%d.pdf',
+            'PEDIDO_MATERIALES_ID_%d_PEDIDO_%d_INTERNO_%d.pdf',
             $idPrevisita,
             $numeroPedido,
             $idPedido
@@ -779,6 +779,79 @@ if (!function_exists('obtenerDocumentoPdfPedidoMaterialesConfirmado')) {
         mysqli_stmt_close($stmt);
 
         return $documento ?: null;
+    }
+}
+
+if (!function_exists('listarDocumentosPdfPedidoMaterialesPorPrevisita')) {
+    function listarDocumentosPdfPedidoMaterialesPorPrevisita(
+        mysqli $db,
+        int $idPrevisita
+    ): array {
+        if ($idPrevisita <= 0) {
+            throw new RuntimeException('El ID del Pedido de Materiales es obligatorio.', 422);
+        }
+
+        if (!pedidoMaterialesPdfTablasMinimasDisponibles($db)) {
+            throw new RuntimeException(
+                'La persistencia PDF de Pedido de Materiales no esta disponible. Debe aplicarse la migracion 2026-07-29-B_pedido_materiales_pedido_documentos.sql.',
+                409
+            );
+        }
+
+        $tipoDocumento = 'pedido_materiales_pdf';
+        $sql = "
+            SELECT
+                p.id_pedido_materiales_pedido,
+                p.numero_pedido,
+                p.estado AS estado_pedido,
+                p.fecha_confirmacion,
+                d.id_pedido_materiales_pedido_documento,
+                d.nombre_archivo,
+                d.mime_type,
+                d.tamano_bytes,
+                d.hash_archivo,
+                d.created_at,
+                d.updated_at AS fecha_generacion
+            FROM pedido_materiales_pedidos p
+            LEFT JOIN pedido_materiales_pedido_documentos d
+              ON d.id_pedido_materiales_pedido = p.id_pedido_materiales_pedido
+             AND d.tipo_documento = ?
+            WHERE p.id_previsita = ?
+            ORDER BY p.numero_pedido ASC, p.id_pedido_materiales_pedido ASC
+        ";
+        $stmt = mysqli_prepare($db, $sql);
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar el listado de PDFs generados.', 500);
+        }
+
+        mysqli_stmt_bind_param($stmt, 'si', $tipoDocumento, $idPrevisita);
+        if (!mysqli_stmt_execute($stmt)) {
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar el listado de PDFs generados.', 500);
+        }
+
+        $result = mysqli_stmt_get_result($stmt);
+        $documentos = [];
+        while ($result && ($row = mysqli_fetch_assoc($result))) {
+            $idDocumento = (int)($row['id_pedido_materiales_pedido_documento'] ?? 0);
+            $documentos[] = [
+                'id_pedido_materiales_pedido' => (int)$row['id_pedido_materiales_pedido'],
+                'id_pedido_materiales_pedido_documento' => $idDocumento > 0 ? $idDocumento : null,
+                'numero_pedido' => (int)$row['numero_pedido'],
+                'estado_pedido' => (string)$row['estado_pedido'],
+                'fecha_confirmacion' => (string)$row['fecha_confirmacion'],
+                'documento_generado' => $idDocumento > 0,
+                'nombre_archivo' => $idDocumento > 0 ? (string)$row['nombre_archivo'] : '',
+                'mime_type' => $idDocumento > 0 ? (string)$row['mime_type'] : '',
+                'tamano_bytes' => $idDocumento > 0 ? (int)$row['tamano_bytes'] : 0,
+                'hash_archivo' => $idDocumento > 0 ? (string)$row['hash_archivo'] : '',
+                'created_at' => $idDocumento > 0 ? (string)$row['created_at'] : '',
+                'fecha_generacion' => $idDocumento > 0 ? (string)$row['fecha_generacion'] : '',
+            ];
+        }
+        mysqli_stmt_close($stmt);
+
+        return $documentos;
     }
 }
 

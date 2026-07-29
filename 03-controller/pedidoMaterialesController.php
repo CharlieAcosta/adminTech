@@ -371,6 +371,43 @@ if (!pedidoMaterialesSnapshotTablasMinimasDisponibles($db)) {
 }
 
 try {
+    if ($accion === 'listar_pdfs_pedido_materiales') {
+        $idPrevisita = filter_var(
+            $input['id_previsita'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        if ($idPrevisita === false) {
+            responderPedidoMaterialesJson(
+                false,
+                'El ID de Pedido de Materiales informado no es valido.',
+                [],
+                ['id_previsita' => 'Debe ser un entero mayor que cero.'],
+                422
+            );
+        }
+
+        $idPrevisita = (int)$idPrevisita;
+        validarPrevisitaPedidoMaterialesController($db, $idPrevisita);
+        $documentos = listarDocumentosPdfPedidoMaterialesPorPrevisita(
+            $db,
+            $idPrevisita
+        );
+        $dataListado = [
+            'id_previsita' => $idPrevisita,
+            'documentos' => $documentos,
+        ];
+
+        responderPedidoMaterialesJson(
+            true,
+            'Listado de PDFs de Pedido de Materiales obtenido correctamente.',
+            $dataListado,
+            [],
+            200,
+            ['documentos' => $documentos]
+        );
+    }
+
     if ($accion === 'generar_pdf_pedido') {
         if (!pedidoMaterialesPdfTablasMinimasDisponibles($db)) {
             responderPedidoMaterialesJson(
