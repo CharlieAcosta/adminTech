@@ -6126,6 +6126,7 @@ $(document).ready(function() {
     var pedidoMaterialesTieneCambiosPendientes = false;
     var pedidoMaterialesGuardandoSnapshot = false;
     var pedidoMaterialesRestaurandoSnapshot = false;
+    var pedidoMaterialesProcesandoRealizacion = false;
     var PEDIDO_MATERIALES_MAXIMO = 5;
 
     function obtenerEndpointPedidoMateriales() {
@@ -6142,7 +6143,9 @@ $(document).ready(function() {
         return;
       }
 
-      var botonHabilitado = pedidoMaterialesTieneCambiosPendientes && !pedidoMaterialesGuardandoSnapshot;
+      var botonHabilitado = pedidoMaterialesTieneCambiosPendientes
+        && !pedidoMaterialesGuardandoSnapshot
+        && !pedidoMaterialesProcesandoRealizacion;
 
       $boton
         .prop('disabled', !botonHabilitado)
@@ -6542,7 +6545,11 @@ $(document).ready(function() {
         return;
       }
 
-      if (pedidoMaterialesEstaFinalizado() || pedidoMaterialesGuardandoSnapshot) {
+      if (
+        pedidoMaterialesEstaFinalizado()
+        || pedidoMaterialesGuardandoSnapshot
+        || pedidoMaterialesProcesandoRealizacion
+      ) {
         $boton
           .prop('disabled', true)
           .removeClass('btn-success')
@@ -6727,8 +6734,27 @@ $(document).ready(function() {
     }
 
     function ejecutarAccionesPosterioresConfirmacionPedidoMateriales(contexto) {
-      // Punto central reservado para futuras acciones y persistencia posteriores a la confirmacion.
-      return contexto;
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify({
+          accion: 'confirmar_pedido',
+          numero_pedido: contexto.numeroPedidoConfirmado,
+          snapshot: obtenerSnapshotPedidoMateriales()
+        })
+      }).then(function(resp) {
+        if (!resp || resp.success === false) {
+          var mensajeError = (resp && resp.message) || 'No se pudo confirmar el pedido de materiales.';
+          return $.Deferred().reject({
+            responseJSON: resp,
+            message: mensajeError
+          }).promise();
+        }
+
+        return resp;
+      });
     }
 
     function finalizarFlujoPedidoMateriales() {
@@ -6774,22 +6800,27 @@ $(document).ready(function() {
       marcarPedidoMaterialesConCambiosPendientes();
     }
 
-    function procesarConfirmacionPedidoMateriales() {
+    function procesarConfirmacionPedidoMateriales(contextoConfirmado) {
       if (pedidoMaterialesEstaFinalizado()) {
-        return;
+        return null;
       }
 
       var numeroPedidoConfirmado = obtenerNumeroPedidoMaterialesActivo();
       var esPedidoFinal = numeroPedidoConfirmado === PEDIDO_MATERIALES_MAXIMO;
-      var contexto = {
+      var contexto = contextoConfirmado || {
         numeroPedidoConfirmado: numeroPedidoConfirmado,
         esPedidoFinal: esPedidoFinal,
         numeroSiguientePedido: esPedidoFinal ? null : numeroPedidoConfirmado + 1
       };
 
+      if (contexto.numeroPedidoConfirmado !== numeroPedidoConfirmado) {
+        return null;
+      }
+
       congelarPedidoMateriales(numeroPedidoConfirmado);
-      ejecutarAccionesPosterioresConfirmacionPedidoMateriales(contexto);
       iniciarSiguienteCicloPedidoMateriales(numeroPedidoConfirmado);
+
+      return contexto;
     }
 
     function mostrarConfirmacionRealizarPedido() {
@@ -6837,35 +6868,96 @@ $(document).ready(function() {
           return;
         }
 
+        var numeroPedidoConfirmado = obtenerNumeroPedidoMaterialesActivo();
+        var esPedidoFinal = numeroPedidoConfirmado === PEDIDO_MATERIALES_MAXIMO;
+        var contextoConfirmacion = {
+          numeroPedidoConfirmado: numeroPedidoConfirmado,
+          esPedidoFinal: esPedidoFinal,
+          numeroSiguientePedido: esPedidoFinal ? null : numeroPedidoConfirmado + 1,
+          snapshotPrevioGuardado: false,
+          confirmacionBackendCompletada: false,
+          confirmacionYaExistia: false
+        };
+
+        pedidoMaterialesProcesandoRealizacion = true;
+        actualizarEstadoBotonGuardarPedidoMateriales();
+        actualizarEstadoBotonRealizarPedido();
+
         guardarSnapshotPedidoMateriales('realizar').then(function(resp) {
           if (!resp || resp.success === false) {
             throw resp;
           }
 
+          contextoConfirmacion.snapshotPrevioGuardado = true;
           limpiarCambiosPendientesPedidoMateriales();
-          procesarConfirmacionPedidoMateriales();
 
-          return guardarSnapshotPedidoMateriales('realizar').then(function(respPosterior) {
-            if (!respPosterior || respPosterior.success === false) {
-              throw respPosterior;
-            }
+          return ejecutarAccionesPosterioresConfirmacionPedidoMateriales(contextoConfirmacion);
+        }).then(function(respConfirmacion) {
+          contextoConfirmacion.confirmacionBackendCompletada = true;
+          contextoConfirmacion.confirmacionYaExistia = !!(
+            (respConfirmacion && respConfirmacion.ya_existia)
+            || (
+              respConfirmacion
+              && respConfirmacion.data
+              && respConfirmacion.data.ya_existia
+            )
+          );
 
-            limpiarCambiosPendientesPedidoMateriales();
-            mostrarExitoPedidoMateriales('Pedido realizado y estado guardado.');
-          });
+          if (!procesarConfirmacionPedidoMateriales(contextoConfirmacion)) {
+            throw {
+              message: 'El pedido fue confirmado, pero no se pudo avanzar el ciclo visual.'
+            };
+          }
+
+          return guardarSnapshotPedidoMateriales('realizar');
+        }).then(function(respPosterior) {
+          if (!respPosterior || respPosterior.success === false) {
+            throw respPosterior;
+          }
+
+          limpiarCambiosPendientesPedidoMateriales();
+          pedidoMaterialesProcesandoRealizacion = false;
+          actualizarEstadoBotonGuardarPedidoMateriales();
+          actualizarEstadoBotonRealizarPedido();
+          mostrarExitoPedidoMateriales(
+            contextoConfirmacion.confirmacionYaExistia
+              ? 'El pedido ya estaba confirmado. El estado visual fue recuperado y guardado.'
+              : 'Pedido confirmado y estado guardado correctamente.'
+          );
         }).catch(function(xhr) {
-          marcarPedidoMaterialesConCambiosPendientes();
+          pedidoMaterialesProcesandoRealizacion = false;
+
+          if (
+            !contextoConfirmacion.snapshotPrevioGuardado
+            || contextoConfirmacion.confirmacionBackendCompletada
+          ) {
+            marcarPedidoMaterialesConCambiosPendientes();
+          } else {
+            limpiarCambiosPendientesPedidoMateriales();
+          }
+
+          actualizarEstadoBotonGuardarPedidoMateriales();
+          actualizarEstadoBotonRealizarPedido();
           mostrarErrorPedidoMateriales(
-            (xhr && xhr.responseJSON && xhr.responseJSON.message)
-              || (xhr && xhr.message)
-              || 'No se pudo guardar el pedido de materiales.'
+            contextoConfirmacion.confirmacionBackendCompletada
+              ? 'El pedido quedo confirmado en backend, pero no se pudo guardar el avance visual. Usa Guardar pedido antes de recargar.'
+              : (
+                (xhr && xhr.responseJSON && xhr.responseJSON.message)
+                || (xhr && xhr.message)
+                || 'No se pudo confirmar el pedido de materiales.'
+              )
           );
         });
       });
     }
 
     $(document).on('click', '#pedido_materiales_ejecutar', function() {
-      if ($(this).prop('disabled') || pedidoMaterialesEstaFinalizado() || pedidoMaterialesGuardandoSnapshot) {
+      if (
+        $(this).prop('disabled')
+        || pedidoMaterialesEstaFinalizado()
+        || pedidoMaterialesGuardandoSnapshot
+        || pedidoMaterialesProcesandoRealizacion
+      ) {
         return;
       }
 

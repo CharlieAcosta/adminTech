@@ -10,6 +10,7 @@ require_once __DIR__ . '/../04-modelo/conectDB.php';
 require_once __DIR__ . '/../04-modelo/schemaIntrospectionModel.php';
 require_once __DIR__ . '/../04-modelo/ordenCompraWorkflowModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesSnapshotModel.php';
+require_once __DIR__ . '/../04-modelo/pedidoMaterialesPedidosModel.php';
 
 if (!function_exists('leerEntradaPedidoMaterialesController')) {
     function leerEntradaPedidoMaterialesController(): array
@@ -28,15 +29,22 @@ if (!function_exists('leerEntradaPedidoMaterialesController')) {
 }
 
 if (!function_exists('responderPedidoMaterialesJson')) {
-    function responderPedidoMaterialesJson(bool $success, string $message, array $data = [], array $errors = [], int $status = 200): void
+    function responderPedidoMaterialesJson(
+        bool $success,
+        string $message,
+        array $data = [],
+        array $errors = [],
+        int $status = 200,
+        array $extraTopLevel = []
+    ): void
     {
         http_response_code($status);
-        echo json_encode([
+        echo json_encode(array_merge([
             'success' => $success,
             'message' => $message,
             'data' => $data,
             'errors' => $errors,
-        ], JSON_UNESCAPED_UNICODE);
+        ], $extraTopLevel), JSON_UNESCAPED_UNICODE);
         exit;
     }
 }
@@ -216,6 +224,62 @@ if (!function_exists('validarSnapshotPedidoMaterialesController')) {
     }
 }
 
+if (!function_exists('validarConfirmacionPedidoMaterialesController')) {
+    function validarConfirmacionPedidoMaterialesController(
+        array $snapshot,
+        int $numeroPedido
+    ): array {
+        $errores = [];
+        $pedidoActivo = (int)($snapshot['pedido_activo'] ?? 0);
+        $pedidoMaximoVisible = (int)($snapshot['pedido_maximo_visible'] ?? 0);
+
+        if ($numeroPedido < 1 || $numeroPedido > 5) {
+            $errores['numero_pedido'] = 'Debe ser un numero entre 1 y 5.';
+        } elseif ($pedidoActivo !== $numeroPedido) {
+            $errores['numero_pedido'] = 'Debe coincidir con el pedido activo del snapshot.';
+        }
+
+        if ($pedidoMaximoVisible < $numeroPedido) {
+            $errores['pedido_maximo_visible'] = 'El pedido a confirmar debe estar visible.';
+        }
+
+        if (!empty($snapshot['finalizado'])) {
+            $errores['finalizado'] = 'El flujo de Pedido de Materiales ya esta finalizado.';
+        }
+
+        $tieneCantidadPedido = false;
+        $tieneAutorizacionPendiente = false;
+        $filas = array_merge(
+            (array)($snapshot['materiales_presupuestados'] ?? []),
+            (array)($snapshot['materiales_agregados'] ?? [])
+        );
+
+        foreach ($filas as $fila) {
+            if (($fila['estado_autorizacion'] ?? 'sin_solicitud') === 'pendiente') {
+                $tieneAutorizacionPendiente = true;
+            }
+
+            $pedidos = (array)($fila['pedidos'] ?? []);
+            $cantidadPedido = normalizarDecimalPedidoMaterialesSnapshotEntrada(
+                $pedidos[$numeroPedido] ?? $pedidos[(string)$numeroPedido] ?? 0
+            );
+            if ($cantidadPedido > 0) {
+                $tieneCantidadPedido = true;
+            }
+        }
+
+        if ($tieneAutorizacionPendiente) {
+            $errores['autorizaciones'] = 'No se puede confirmar mientras existan autorizaciones pendientes.';
+        }
+
+        if (!$tieneCantidadPedido) {
+            $errores['cantidades'] = 'El pedido debe contener al menos una cantidad mayor que cero.';
+        }
+
+        return $errores;
+    }
+}
+
 $usuario = validarSesionPedidoMaterialesController();
 $input = leerEntradaPedidoMaterialesController();
 $accion = trim((string)($input['accion'] ?? 'guardar_snapshot'));
@@ -238,6 +302,85 @@ try {
         );
     }
 
+    if ($accion === 'confirmar_pedido') {
+        if (!pedidoMaterialesPedidosTablasMinimasDisponibles($db)) {
+            responderPedidoMaterialesJson(
+                false,
+                'Las tablas de pedidos confirmados no estan disponibles. Debe aplicarse la migracion 2026-07-29-A_pedido_materiales_pedidos_confirmados.sql.',
+                [],
+                [],
+                409
+            );
+        }
+
+        $snapshotInput = isset($input['snapshot']) && is_array($input['snapshot'])
+            ? $input['snapshot']
+            : [];
+        $validacion = validarSnapshotPedidoMaterialesController($snapshotInput);
+        if (!empty($validacion['errores'])) {
+            responderPedidoMaterialesJson(
+                false,
+                'El snapshot contiene datos invalidos.',
+                [],
+                $validacion['errores'],
+                422
+            );
+        }
+
+        $numeroPedidoValidado = filter_var(
+            $input['numero_pedido'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 5]]
+        );
+        if ($numeroPedidoValidado === false) {
+            responderPedidoMaterialesJson(
+                false,
+                'El numero de pedido debe estar entre 1 y 5.',
+                [],
+                ['numero_pedido' => 'Valor invalido.'],
+                422
+            );
+        }
+        $numeroPedido = (int)$numeroPedidoValidado;
+
+        $erroresConfirmacion = validarConfirmacionPedidoMaterialesController(
+            $validacion['snapshot'],
+            $numeroPedido
+        );
+        if ($erroresConfirmacion) {
+            responderPedidoMaterialesJson(
+                false,
+                'El pedido no cumple las condiciones para confirmarse.',
+                [],
+                $erroresConfirmacion,
+                422
+            );
+        }
+
+        validarPrevisitaPedidoMaterialesController(
+            $db,
+            (int)$validacion['snapshot']['id_previsita']
+        );
+        $resultadoConfirmacion = confirmarPedidoMaterialesEnConexion(
+            $db,
+            $validacion['snapshot'],
+            $numeroPedido,
+            (int)$usuario['id_usuario']
+        );
+        $mensajeConfirmacion = !empty($resultadoConfirmacion['ya_existia'])
+            ? 'El pedido ya estaba confirmado y se recupero de forma idempotente.'
+            : 'Pedido confirmado correctamente.';
+
+        responderPedidoMaterialesJson(
+            true,
+            $mensajeConfirmacion,
+            $resultadoConfirmacion,
+            [],
+            200,
+            $resultadoConfirmacion
+        );
+    }
+
     if ($accion !== 'guardar_snapshot') {
         responderPedidoMaterialesJson(false, 'La accion solicitada no es valida.', [], ['accion' => 'Accion invalida.'], 422);
     }
@@ -257,7 +400,10 @@ try {
 
     responderPedidoMaterialesJson(true, 'Snapshot guardado correctamente.', ['snapshot' => $resultado]);
 } catch (Throwable $e) {
-    responderPedidoMaterialesJson(false, $e->getMessage(), [], [], 500);
+    $status = in_array((int)$e->getCode(), [400, 404, 409, 422], true)
+        ? (int)$e->getCode()
+        : 500;
+    responderPedidoMaterialesJson(false, $e->getMessage(), [], [], $status);
 } finally {
     mysqli_close($db);
 }
