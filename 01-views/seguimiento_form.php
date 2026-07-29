@@ -1680,6 +1680,13 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
         <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
           <button type="button"
+                  class="btn btn-outline-primary btn-uniform mr-2 d-none"
+                  id="pedido_materiales_enviar_correo"
+                  data-id-pedido-materiales-pedido=""
+                  disabled>
+            <i class="fas fa-envelope mr-1"></i> Enviar correo
+          </button>
+          <button type="button"
                   class="btn btn-outline-danger btn-uniform mr-2 d-none"
                   id="pedido_materiales_descargar_pdf"
                   data-id-pedido-materiales-pedido=""
@@ -6135,6 +6142,7 @@ $(document).ready(function() {
     var pedidoMaterialesRestaurandoSnapshot = false;
     var pedidoMaterialesProcesandoRealizacion = false;
     var pedidoMaterialesGenerandoPdf = false;
+    var pedidoMaterialesEnviandoCorreo = false;
     var idPedidoMaterialesConfirmadoParaPdf = 0;
     var PEDIDO_MATERIALES_MAXIMO = 5;
 
@@ -6155,6 +6163,28 @@ $(document).ready(function() {
       var disponible = idPedidoMaterialesConfirmadoParaPdf > 0;
       var habilitado = disponible
         && !pedidoMaterialesGenerandoPdf
+        && !pedidoMaterialesEnviandoCorreo
+        && !pedidoMaterialesProcesandoRealizacion;
+
+      $boton
+        .toggleClass('d-none', !disponible)
+        .prop('disabled', !habilitado)
+        .attr(
+          'data-id-pedido-materiales-pedido',
+          disponible ? String(idPedidoMaterialesConfirmadoParaPdf) : ''
+        );
+    }
+
+    function actualizarEstadoBotonCorreoPedidoMateriales() {
+      var $boton = $('#pedido_materiales_enviar_correo');
+      if (!$boton.length) {
+        return;
+      }
+
+      var disponible = idPedidoMaterialesConfirmadoParaPdf > 0;
+      var habilitado = disponible
+        && !pedidoMaterialesEnviandoCorreo
+        && !pedidoMaterialesGenerandoPdf
         && !pedidoMaterialesProcesandoRealizacion;
 
       $boton
@@ -6174,11 +6204,13 @@ $(document).ready(function() {
 
       idPedidoMaterialesConfirmadoParaPdf = idPedido;
       actualizarEstadoBotonPdfPedidoMateriales();
+      actualizarEstadoBotonCorreoPedidoMateriales();
     }
 
     function generarPdfPedidoMaterialesConfirmado(idPedido) {
       pedidoMaterialesGenerandoPdf = true;
       actualizarEstadoBotonPdfPedidoMateriales();
+      actualizarEstadoBotonCorreoPedidoMateriales();
 
       return $.ajax({
         type: 'POST',
@@ -6213,6 +6245,38 @@ $(document).ready(function() {
       }).always(function() {
         pedidoMaterialesGenerandoPdf = false;
         actualizarEstadoBotonPdfPedidoMateriales();
+        actualizarEstadoBotonCorreoPedidoMateriales();
+      });
+    }
+
+    function enviarCorreoPedidoMaterialesConfirmado(idPedido) {
+      pedidoMaterialesEnviandoCorreo = true;
+      actualizarEstadoBotonPdfPedidoMateriales();
+      actualizarEstadoBotonCorreoPedidoMateriales();
+
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify({
+          accion: 'enviar_correo_pedido',
+          id_pedido_materiales_pedido: idPedido
+        })
+      }).then(function(resp) {
+        if (!resp || resp.success === false) {
+          var mensajeError = (resp && resp.message) || 'No se pudo enviar el correo del pedido.';
+          return $.Deferred().reject({
+            responseJSON: resp,
+            message: mensajeError
+          }).promise();
+        }
+
+        return resp;
+      }).always(function() {
+        pedidoMaterialesEnviandoCorreo = false;
+        actualizarEstadoBotonPdfPedidoMateriales();
+        actualizarEstadoBotonCorreoPedidoMateriales();
       });
     }
 
@@ -6954,6 +7018,7 @@ $(document).ready(function() {
           esPedidoFinal: esPedidoFinal,
           numeroSiguientePedido: esPedidoFinal ? null : numeroPedidoConfirmado + 1,
           snapshotPrevioGuardado: false,
+          snapshotPosteriorGuardado: false,
           confirmacionBackendCompletada: false,
           confirmacionYaExistia: false,
           idPedidoMaterialesPedido: 0
@@ -6963,6 +7028,7 @@ $(document).ready(function() {
         actualizarEstadoBotonGuardarPedidoMateriales();
         actualizarEstadoBotonRealizarPedido();
         actualizarEstadoBotonPdfPedidoMateriales();
+        actualizarEstadoBotonCorreoPedidoMateriales();
 
         guardarSnapshotPedidoMateriales('realizar').then(function(resp) {
           if (!resp || resp.success === false) {
@@ -7006,20 +7072,32 @@ $(document).ready(function() {
             throw respPosterior;
           }
 
+          contextoConfirmacion.snapshotPosteriorGuardado = true;
           limpiarCambiosPendientesPedidoMateriales();
+
+          return enviarCorreoPedidoMaterialesConfirmado(
+            contextoConfirmacion.idPedidoMaterialesPedido
+          );
+        }).then(function(respCorreo) {
+          var datosCorreo = (respCorreo && respCorreo.data)
+            ? respCorreo.data
+            : (respCorreo || {});
           pedidoMaterialesProcesandoRealizacion = false;
           actualizarEstadoBotonGuardarPedidoMateriales();
           actualizarEstadoBotonRealizarPedido();
           actualizarEstadoBotonPdfPedidoMateriales();
+          actualizarEstadoBotonCorreoPedidoMateriales();
           mostrarExitoPedidoMateriales(
-            contextoConfirmacion.confirmacionYaExistia
-              ? 'El pedido ya estaba confirmado. El estado visual fue recuperado y guardado.'
-              : 'Pedido confirmado y estado guardado correctamente.'
+            datosCorreo.ya_enviado
+              ? 'Pedido confirmado y estado guardado. El correo ya habia sido enviado.'
+              : 'Pedido confirmado, estado guardado y correo enviado correctamente.'
           );
         }).catch(function(xhr) {
           pedidoMaterialesProcesandoRealizacion = false;
 
-          if (
+          if (contextoConfirmacion.snapshotPosteriorGuardado) {
+            limpiarCambiosPendientesPedidoMateriales();
+          } else if (
             !contextoConfirmacion.snapshotPrevioGuardado
             || contextoConfirmacion.confirmacionBackendCompletada
           ) {
@@ -7031,6 +7109,21 @@ $(document).ready(function() {
           actualizarEstadoBotonGuardarPedidoMateriales();
           actualizarEstadoBotonRealizarPedido();
           actualizarEstadoBotonPdfPedidoMateriales();
+          actualizarEstadoBotonCorreoPedidoMateriales();
+
+          if (contextoConfirmacion.snapshotPosteriorGuardado) {
+            mostrarErrorPedidoMateriales(
+              'Pedido confirmado, pero no se pudo enviar el correo. '
+              + (
+                (xhr && xhr.responseJSON && xhr.responseJSON.message)
+                || (xhr && xhr.message)
+                || 'Usa Enviar correo para reintentar.'
+              ),
+              6
+            );
+            return;
+          }
+
           mostrarErrorPedidoMateriales(
             contextoConfirmacion.confirmacionBackendCompletada
               ? 'El pedido quedo confirmado en backend, pero no se pudo guardar el avance visual. Usa Guardar pedido antes de recargar.'
@@ -7076,6 +7169,37 @@ $(document).ready(function() {
           (xhr && xhr.responseJSON && xhr.responseJSON.message)
             || (xhr && xhr.message)
             || 'No se pudo generar el PDF del pedido.'
+        );
+      });
+    });
+
+    $(document).on('click', '#pedido_materiales_enviar_correo', function() {
+      var idPedido = parseInt(
+        String($(this).attr('data-id-pedido-materiales-pedido') || '0'),
+        10
+      ) || 0;
+      if (
+        $(this).prop('disabled')
+        || idPedido <= 0
+        || pedidoMaterialesEnviandoCorreo
+        || pedidoMaterialesProcesandoRealizacion
+      ) {
+        return;
+      }
+
+      enviarCorreoPedidoMaterialesConfirmado(idPedido).then(function(resp) {
+        var datosCorreo = (resp && resp.data) ? resp.data : (resp || {});
+        mostrarExitoPedidoMateriales(
+          datosCorreo.ya_enviado
+            ? 'El correo ya habia sido enviado para este pedido.'
+            : 'Correo enviado correctamente.'
+        );
+      }).catch(function(xhr) {
+        mostrarErrorPedidoMateriales(
+          (xhr && xhr.responseJSON && xhr.responseJSON.message)
+            || (xhr && xhr.message)
+            || 'No se pudo enviar el correo del pedido.',
+          6
         );
       });
     });

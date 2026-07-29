@@ -12,6 +12,7 @@ require_once __DIR__ . '/../04-modelo/ordenCompraWorkflowModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesSnapshotModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPedidosModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPdfModel.php';
+require_once __DIR__ . '/../04-modelo/pedidoMaterialesEnviosModel.php';
 
 if (!function_exists('leerEntradaPedidoMaterialesController')) {
     function leerEntradaPedidoMaterialesController(): array
@@ -419,6 +420,45 @@ try {
             $input['id_pedido_materiales_pedido'] ?? null
         );
         descargarPdfPedidoMaterialesController($db, $idPedido);
+    }
+
+    if ($accion === 'enviar_correo_pedido') {
+        if (!pedidoMaterialesEnviosTablasMinimasDisponibles($db)) {
+            responderPedidoMaterialesJson(
+                false,
+                'La persistencia de envios de Pedido de Materiales no esta disponible. Debe aplicarse la migracion 2026-07-29-C_pedido_materiales_pedido_envios.sql.',
+                [],
+                [],
+                409
+            );
+        }
+
+        $idPedido = validarIdPedidoMaterialesController(
+            $input['id_pedido_materiales_pedido'] ?? null
+        );
+        $resultadoEnvio = enviarCorreoPedidoMaterialesConfirmado(
+            $db,
+            $idPedido,
+            (int)$usuario['id_usuario']
+        );
+        $dataEnvio = [
+            'id_pedido_materiales_pedido_envio' => (int)$resultadoEnvio['id_pedido_materiales_pedido_envio'],
+            'id_pedido_materiales_pedido_documento' => isset($resultadoEnvio['id_pedido_materiales_pedido_documento'])
+                ? (int)$resultadoEnvio['id_pedido_materiales_pedido_documento']
+                : null,
+            'id_pedido_materiales_pedido' => (int)$resultadoEnvio['id_pedido_materiales_pedido'],
+            'estado' => (string)$resultadoEnvio['estado'],
+            'ya_enviado' => !empty($resultadoEnvio['ya_enviado']),
+        ];
+
+        responderPedidoMaterialesJson(
+            true,
+            (string)$resultadoEnvio['mensaje'],
+            $dataEnvio,
+            [],
+            200,
+            $dataEnvio
+        );
     }
 
     if ($accion === 'obtener_snapshot') {
