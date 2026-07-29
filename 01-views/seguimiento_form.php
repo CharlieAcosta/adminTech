@@ -1680,6 +1680,13 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
         <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
           <button type="button"
+                  class="btn btn-outline-danger btn-uniform mr-2 d-none"
+                  id="pedido_materiales_descargar_pdf"
+                  data-id-pedido-materiales-pedido=""
+                  disabled>
+            <i class="fas fa-file-pdf mr-1"></i> Descargar PDF
+          </button>
+          <button type="button"
                   class="btn btn-secondary btn-uniform mr-2"
                   id="pedido_materiales_guardar"
                   disabled>
@@ -6127,6 +6134,8 @@ $(document).ready(function() {
     var pedidoMaterialesGuardandoSnapshot = false;
     var pedidoMaterialesRestaurandoSnapshot = false;
     var pedidoMaterialesProcesandoRealizacion = false;
+    var pedidoMaterialesGenerandoPdf = false;
+    var idPedidoMaterialesConfirmadoParaPdf = 0;
     var PEDIDO_MATERIALES_MAXIMO = 5;
 
     function obtenerEndpointPedidoMateriales() {
@@ -6135,6 +6144,76 @@ $(document).ready(function() {
         || window.PEDIDO_MATERIALES_ENDPOINT
         || '../03-controller/pedidoMaterialesController.php'
       );
+    }
+
+    function actualizarEstadoBotonPdfPedidoMateriales() {
+      var $boton = $('#pedido_materiales_descargar_pdf');
+      if (!$boton.length) {
+        return;
+      }
+
+      var disponible = idPedidoMaterialesConfirmadoParaPdf > 0;
+      var habilitado = disponible
+        && !pedidoMaterialesGenerandoPdf
+        && !pedidoMaterialesProcesandoRealizacion;
+
+      $boton
+        .toggleClass('d-none', !disponible)
+        .prop('disabled', !habilitado)
+        .attr(
+          'data-id-pedido-materiales-pedido',
+          disponible ? String(idPedidoMaterialesConfirmadoParaPdf) : ''
+        );
+    }
+
+    function habilitarPdfPedidoMaterialesConfirmado(idPedido) {
+      idPedido = parseInt(String(idPedido || '0'), 10);
+      if (!isFinite(idPedido) || idPedido <= 0) {
+        return;
+      }
+
+      idPedidoMaterialesConfirmadoParaPdf = idPedido;
+      actualizarEstadoBotonPdfPedidoMateriales();
+    }
+
+    function generarPdfPedidoMaterialesConfirmado(idPedido) {
+      pedidoMaterialesGenerandoPdf = true;
+      actualizarEstadoBotonPdfPedidoMateriales();
+
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify({
+          accion: 'generar_pdf_pedido',
+          id_pedido_materiales_pedido: idPedido
+        })
+      }).then(function(resp) {
+        if (!resp || resp.success === false) {
+          var mensajeError = (resp && resp.message) || 'No se pudo generar el PDF del pedido.';
+          return $.Deferred().reject({
+            responseJSON: resp,
+            message: mensajeError
+          }).promise();
+        }
+
+        var datosPdf = resp.data || resp;
+        if (!datosPdf.url_descarga) {
+          return $.Deferred().reject({
+            responseJSON: resp,
+            message: 'El backend no devolvio una URL de descarga valida.'
+          }).promise();
+        }
+
+        mostrarExitoPedidoMateriales('PDF generado correctamente.');
+        window.location.href = String(datosPdf.url_descarga);
+
+        return resp;
+      }).always(function() {
+        pedidoMaterialesGenerandoPdf = false;
+        actualizarEstadoBotonPdfPedidoMateriales();
+      });
     }
 
     function actualizarEstadoBotonGuardarPedidoMateriales() {
@@ -6876,12 +6955,14 @@ $(document).ready(function() {
           numeroSiguientePedido: esPedidoFinal ? null : numeroPedidoConfirmado + 1,
           snapshotPrevioGuardado: false,
           confirmacionBackendCompletada: false,
-          confirmacionYaExistia: false
+          confirmacionYaExistia: false,
+          idPedidoMaterialesPedido: 0
         };
 
         pedidoMaterialesProcesandoRealizacion = true;
         actualizarEstadoBotonGuardarPedidoMateriales();
         actualizarEstadoBotonRealizarPedido();
+        actualizarEstadoBotonPdfPedidoMateriales();
 
         guardarSnapshotPedidoMateriales('realizar').then(function(resp) {
           if (!resp || resp.success === false) {
@@ -6893,6 +6974,9 @@ $(document).ready(function() {
 
           return ejecutarAccionesPosterioresConfirmacionPedidoMateriales(contextoConfirmacion);
         }).then(function(respConfirmacion) {
+          var datosConfirmacion = (respConfirmacion && respConfirmacion.data)
+            ? respConfirmacion.data
+            : (respConfirmacion || {});
           contextoConfirmacion.confirmacionBackendCompletada = true;
           contextoConfirmacion.confirmacionYaExistia = !!(
             (respConfirmacion && respConfirmacion.ya_existia)
@@ -6901,6 +6985,13 @@ $(document).ready(function() {
               && respConfirmacion.data
               && respConfirmacion.data.ya_existia
             )
+          );
+          contextoConfirmacion.idPedidoMaterialesPedido = parseInt(
+            String(datosConfirmacion.id_pedido_materiales_pedido || '0'),
+            10
+          ) || 0;
+          habilitarPdfPedidoMaterialesConfirmado(
+            contextoConfirmacion.idPedidoMaterialesPedido
           );
 
           if (!procesarConfirmacionPedidoMateriales(contextoConfirmacion)) {
@@ -6919,6 +7010,7 @@ $(document).ready(function() {
           pedidoMaterialesProcesandoRealizacion = false;
           actualizarEstadoBotonGuardarPedidoMateriales();
           actualizarEstadoBotonRealizarPedido();
+          actualizarEstadoBotonPdfPedidoMateriales();
           mostrarExitoPedidoMateriales(
             contextoConfirmacion.confirmacionYaExistia
               ? 'El pedido ya estaba confirmado. El estado visual fue recuperado y guardado.'
@@ -6938,6 +7030,7 @@ $(document).ready(function() {
 
           actualizarEstadoBotonGuardarPedidoMateriales();
           actualizarEstadoBotonRealizarPedido();
+          actualizarEstadoBotonPdfPedidoMateriales();
           mostrarErrorPedidoMateriales(
             contextoConfirmacion.confirmacionBackendCompletada
               ? 'El pedido quedo confirmado en backend, pero no se pudo guardar el avance visual. Usa Guardar pedido antes de recargar.'
@@ -6962,6 +7055,29 @@ $(document).ready(function() {
       }
 
       mostrarConfirmacionRealizarPedido();
+    });
+
+    $(document).on('click', '#pedido_materiales_descargar_pdf', function() {
+      var idPedido = parseInt(
+        String($(this).attr('data-id-pedido-materiales-pedido') || '0'),
+        10
+      ) || 0;
+      if (
+        $(this).prop('disabled')
+        || idPedido <= 0
+        || pedidoMaterialesGenerandoPdf
+        || pedidoMaterialesProcesandoRealizacion
+      ) {
+        return;
+      }
+
+      generarPdfPedidoMaterialesConfirmado(idPedido).catch(function(xhr) {
+        mostrarErrorPedidoMateriales(
+          (xhr && xhr.responseJSON && xhr.responseJSON.message)
+            || (xhr && xhr.message)
+            || 'No se pudo generar el PDF del pedido.'
+        );
+      });
     });
 
     $(document).on('click', '#pedido_materiales_guardar', function() {

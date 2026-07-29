@@ -11,6 +11,7 @@ require_once __DIR__ . '/../04-modelo/schemaIntrospectionModel.php';
 require_once __DIR__ . '/../04-modelo/ordenCompraWorkflowModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesSnapshotModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPedidosModel.php';
+require_once __DIR__ . '/../04-modelo/pedidoMaterialesPdfModel.php';
 
 if (!function_exists('leerEntradaPedidoMaterialesController')) {
     function leerEntradaPedidoMaterialesController(): array
@@ -87,6 +88,85 @@ if (!function_exists('abrirConexionPedidoMaterialesController')) {
         mysqli_set_charset($db, 'utf8mb4');
 
         return $db;
+    }
+}
+
+if (!function_exists('validarIdPedidoMaterialesController')) {
+    function validarIdPedidoMaterialesController($valor): int
+    {
+        $idPedido = filter_var(
+            $valor,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        if ($idPedido === false) {
+            responderPedidoMaterialesJson(
+                false,
+                'El pedido confirmado informado no es valido.',
+                [],
+                ['id_pedido_materiales_pedido' => 'Debe ser un entero mayor que cero.'],
+                422
+            );
+        }
+
+        return (int)$idPedido;
+    }
+}
+
+if (!function_exists('descargarPdfPedidoMaterialesController')) {
+    function descargarPdfPedidoMaterialesController(mysqli $db, int $idPedido): void
+    {
+        if (!pedidoMaterialesPdfTablasMinimasDisponibles($db)) {
+            responderPedidoMaterialesJson(
+                false,
+                'La persistencia PDF de Pedido de Materiales no esta disponible. Debe aplicarse la migracion 2026-07-29-B_pedido_materiales_pedido_documentos.sql.',
+                [],
+                [],
+                409
+            );
+        }
+
+        $documento = obtenerDocumentoPdfPedidoMaterialesConfirmado($db, $idPedido);
+        if (!$documento) {
+            responderPedidoMaterialesJson(
+                false,
+                'El pedido confirmado todavia no tiene un PDF generado.',
+                [],
+                [],
+                404
+            );
+        }
+
+        $rutaAbsoluta = resolverRutaAbsolutaDocumentoPdfPedidoMateriales($documento);
+        $nombreArchivo = basename((string)($documento['nombre_archivo'] ?? 'pedido_materiales.pdf'));
+        if (!preg_match('/^[A-Za-z0-9_.-]+\.pdf$/', $nombreArchivo)) {
+            $nombreArchivo = 'pedido_materiales_' . $idPedido . '.pdf';
+        }
+
+        $archivo = fopen($rutaAbsoluta, 'rb');
+        if ($archivo === false) {
+            responderPedidoMaterialesJson(false, 'No se pudo abrir el PDF solicitado.', [], [], 404);
+        }
+        $firma = (string)fread($archivo, 4);
+        fclose($archivo);
+        if ($firma !== '%PDF') {
+            responderPedidoMaterialesJson(false, 'El archivo registrado no es un PDF valido.', [], [], 409);
+        }
+
+        $tamano = filesize($rutaAbsoluta);
+        if ($tamano === false || $tamano <= 0) {
+            responderPedidoMaterialesJson(false, 'El archivo PDF esta vacio.', [], [], 409);
+        }
+
+        header_remove('Content-Type');
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
+        header('Content-Length: ' . (int)$tamano);
+        header('Cache-Control: private, no-store, max-age=0');
+        header('Pragma: no-cache');
+        header('X-Content-Type-Options: nosniff');
+        readfile($rutaAbsoluta);
+        exit;
     }
 }
 
@@ -290,6 +370,57 @@ if (!pedidoMaterialesSnapshotTablasMinimasDisponibles($db)) {
 }
 
 try {
+    if ($accion === 'generar_pdf_pedido') {
+        if (!pedidoMaterialesPdfTablasMinimasDisponibles($db)) {
+            responderPedidoMaterialesJson(
+                false,
+                'La persistencia PDF de Pedido de Materiales no esta disponible. Debe aplicarse la migracion 2026-07-29-B_pedido_materiales_pedido_documentos.sql.',
+                [],
+                [],
+                409
+            );
+        }
+
+        $idPedido = validarIdPedidoMaterialesController(
+            $input['id_pedido_materiales_pedido'] ?? null
+        );
+        $resultadoPdf = generarPdfPedidoMaterialesConfirmado(
+            $db,
+            $idPedido,
+            (int)$usuario['id_usuario']
+        );
+        $urlDescarga = '../03-controller/pedidoMaterialesController.php'
+            . '?accion=descargar_pdf_pedido'
+            . '&id_pedido_materiales_pedido=' . $idPedido;
+
+        $dataPdf = [
+            'id_pedido_materiales_pedido_documento' => (int)$resultadoPdf['id_pedido_materiales_pedido_documento'],
+            'id_pedido_materiales_pedido' => (int)$resultadoPdf['id_pedido_materiales_pedido'],
+            'nombre_archivo' => (string)$resultadoPdf['nombre_archivo'],
+            'mime' => (string)$resultadoPdf['mime'],
+            'tamano' => (int)$resultadoPdf['tamano'],
+            'hash_archivo' => (string)$resultadoPdf['hash_archivo'],
+            'fecha_generacion' => (string)$resultadoPdf['fecha_generacion'],
+            'url_descarga' => $urlDescarga,
+        ];
+
+        responderPedidoMaterialesJson(
+            true,
+            'PDF generado correctamente.',
+            $dataPdf,
+            [],
+            200,
+            $dataPdf
+        );
+    }
+
+    if ($accion === 'descargar_pdf_pedido') {
+        $idPedido = validarIdPedidoMaterialesController(
+            $input['id_pedido_materiales_pedido'] ?? null
+        );
+        descargarPdfPedidoMaterialesController($db, $idPedido);
+    }
+
     if ($accion === 'obtener_snapshot') {
         $idPrevisita = (int)($input['id_previsita'] ?? 0);
         validarPrevisitaPedidoMaterialesController($db, $idPrevisita);
