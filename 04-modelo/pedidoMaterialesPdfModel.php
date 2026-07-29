@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/schemaIntrospectionModel.php';
+require_once __DIR__ . '/presupuestoDocumentosEmitidosModel.php';
 
 if (!function_exists('pedidoMaterialesPdfTablasMinimasDisponibles')) {
     function pedidoMaterialesPdfTablasMinimasDisponibles(mysqli $db): bool
@@ -8,6 +9,51 @@ if (!function_exists('pedidoMaterialesPdfTablasMinimasDisponibles')) {
         return tabla_existe($db, 'pedido_materiales_pedidos')
             && tabla_existe($db, 'pedido_materiales_pedido_detalles')
             && tabla_existe($db, 'pedido_materiales_pedido_documentos');
+    }
+}
+
+if (!function_exists('obtenerNumeroVisiblePresupuestoPedidoMateriales')) {
+    function obtenerNumeroVisiblePresupuestoPedidoMateriales(
+        mysqli $db,
+        int $idPresupuesto,
+        int $idPrevisita
+    ): array {
+        $resultado = [
+            'numero_visible' => '',
+            'id_documento_emitido' => null,
+            'nombre_archivo' => '',
+            'fuente' => '',
+        ];
+
+        if (
+            $idPresupuesto <= 0
+            || $idPrevisita <= 0
+            || !function_exists('resolverDocumentoAprobadoVigentePresupuestoEnConexion')
+            || !function_exists('extraerNumeroDocumentoEmitidoPresupuesto')
+        ) {
+            return $resultado;
+        }
+
+        $documento = resolverDocumentoAprobadoVigentePresupuestoEnConexion(
+            $db,
+            $idPresupuesto,
+            $idPrevisita
+        );
+        $nombreArchivo = trim((string)($documento['nombre_archivo'] ?? ''));
+        $numeroVisible = $nombreArchivo !== ''
+            ? trim(extraerNumeroDocumentoEmitidoPresupuesto($nombreArchivo))
+            : '';
+
+        if ($numeroVisible === '') {
+            return $resultado;
+        }
+
+        return [
+            'numero_visible' => $numeroVisible,
+            'id_documento_emitido' => (int)($documento['id_documento_emitido'] ?? 0) ?: null,
+            'nombre_archivo' => $nombreArchivo,
+            'fuente' => 'presupuesto_documentos_emitidos.nombre_archivo',
+        ];
     }
 }
 
@@ -79,6 +125,16 @@ if (!function_exists('obtenerPedidoMaterialesConfirmadoParaPdf')) {
         if (!$cabecera) {
             throw new RuntimeException('No se encontro el pedido de materiales confirmado.', 404);
         }
+
+        $presupuestoVisible = obtenerNumeroVisiblePresupuestoPedidoMateriales(
+            $db,
+            (int)$cabecera['id_presupuesto'],
+            (int)$cabecera['id_previsita']
+        );
+        $cabecera['numero_presupuesto_visible'] = $presupuestoVisible['numero_visible'];
+        $cabecera['id_documento_presupuesto_aprobado'] = $presupuestoVisible['id_documento_emitido'];
+        $cabecera['nombre_documento_presupuesto_aprobado'] = $presupuestoVisible['nombre_archivo'];
+        $cabecera['fuente_numero_presupuesto_visible'] = $presupuestoVisible['fuente'];
 
         $sqlDetalles = "
             SELECT
@@ -257,6 +313,28 @@ if (!class_exists('PedidoMaterialesPdfDocumento')) {
             );
         }
 
+        public function textoDerecha(
+            int $pagina,
+            float $xDerecha,
+            float $y,
+            string $texto,
+            float $tamano = 9,
+            bool $negrita = false,
+            array $color = [0.12, 0.12, 0.12]
+        ): void {
+            $factorAncho = $negrita ? 0.56 : 0.52;
+            $anchoEstimado = pedidoMaterialesPdfLongitud($texto) * $tamano * $factorAncho;
+            $this->texto(
+                $pagina,
+                max(36.0, $xDerecha - $anchoEstimado),
+                $y,
+                $texto,
+                $tamano,
+                $negrita,
+                $color
+            );
+        }
+
         public function linea(
             int $pagina,
             float $x1,
@@ -432,27 +510,44 @@ if (!function_exists('pedidoMaterialesPdfAgregarCabeceraPagina')) {
         bool $continuacion = false
     ): float {
         $numeroPedido = (int)$cabecera['numero_pedido'];
+        $clienteObra = trim((string)($cabecera['cliente_obra'] ?? '')) ?: '-';
+        $etiquetaPedido = 'Pedido #' . $numeroPedido . ($continuacion ? ' - continuacion' : '');
+
         $pdf->texto($pagina, 36, 807, 'Pedido de Materiales', 17, true, [0.06, 0.31, 0.55]);
+        $pdf->textoDerecha(
+            $pagina,
+            559,
+            807,
+            $etiquetaPedido,
+            12,
+            true,
+            [0.06, 0.31, 0.55]
+        );
         $pdf->texto(
             $pagina,
             36,
-            787,
-            'Pedido #' . $numeroPedido . ($continuacion ? ' - continuacion' : ''),
-            12,
+            786,
+            'Cliente / Obra: ' . $clienteObra,
+            9.5,
             true,
             [0.18, 0.18, 0.18]
         );
-        $pdf->linea($pagina, 36, 778, 559, 778, [0.06, 0.31, 0.55], 1.2);
+        $pdf->linea($pagina, 36, 776, 559, 776, [0.06, 0.31, 0.55], 1.2);
 
         if ($continuacion) {
-            return 760;
+            return 758;
         }
 
         $usuario = trim((string)($cabecera['usuario_confirmacion'] ?? ''));
         if ($usuario === '') {
-            $usuario = 'Usuario ID ' . (int)$cabecera['id_usuario_confirmacion'];
+            $usuarioPedido = 'Usuario ID ' . (int)$cabecera['id_usuario_confirmacion'];
+        } else {
+            $usuarioPedido = $usuario . ' (ID ' . (int)$cabecera['id_usuario_confirmacion'] . ')';
         }
-        $clienteObra = trim((string)($cabecera['cliente_obra'] ?? '')) ?: '-';
+        $numeroPresupuestoVisible = trim((string)($cabecera['numero_presupuesto_visible'] ?? ''));
+        if ($numeroPresupuestoVisible === '') {
+            $numeroPresupuestoVisible = 'No disponible';
+        }
         $numeroOc = trim((string)($cabecera['numero_oc'] ?? '')) ?: '-';
         $direccion = trim((string)($cabecera['direccion_entrega'] ?? ''));
         if ($direccion === '') {
@@ -470,21 +565,19 @@ if (!function_exists('pedidoMaterialesPdfAgregarCabeceraPagina')) {
         $direccion = $direccion !== '' ? $direccion : '-';
 
         $lineas = [
-            'Pedido interno: ' . (int)$cabecera['id_pedido_materiales_pedido']
-                . '    Fecha de confirmacion: ' . (string)$cabecera['fecha_confirmacion'],
-            'Previsita: ' . (int)$cabecera['id_previsita']
-                . '    Presupuesto: ' . (int)$cabecera['id_presupuesto']
-                . '    Orden de Compra: ' . (int)$cabecera['id_orden_compra']
+            'Pedido interno: ' . (int)$cabecera['id_pedido_materiales_pedido'],
+            'Fecha de confirmacion: ' . (string)$cabecera['fecha_confirmacion'],
+            'Previsita: ' . (int)$cabecera['id_previsita'],
+            'Presupuesto Nro.: ' . $numeroPresupuestoVisible,
+            'Orden de Compra: ' . (int)$cabecera['id_orden_compra']
                 . ' / Nro. ' . $numeroOc,
-            'Cliente / obra: ' . $clienteObra,
             'Ubicacion / entrega: ' . $direccion,
-            'Confirmado por: ' . $usuario
-                . ' (ID ' . (int)$cabecera['id_usuario_confirmacion'] . ')',
+            'Pedido realizado por: ' . $usuarioPedido,
             'Estado: ' . (string)$cabecera['estado']
                 . '    Referencia: ' . substr((string)$cabecera['snapshot_hash'], 0, 16),
         ];
 
-        $y = 762.0;
+        $y = 758.0;
         foreach ($lineas as $linea) {
             $segmentos = pedidoMaterialesPdfDividirTexto($linea, 100);
             foreach (array_slice($segmentos, 0, 2) as $segmento) {
