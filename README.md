@@ -136,7 +136,8 @@ Referencias de implementacion:
   - Endpoint: accion `enviar_correo_pedido` de `03-controller/pedidoMaterialesController.php`; recibe exclusivamente el ID del pedido confirmado. No acepta destinatarios, asunto, cuerpo, credenciales ni rutas desde el cliente.
   - Idempotencia: un envio `enviado` responde como ya realizado sin repetir SMTP, `procesando` bloquea un segundo intento concurrente y `error` permite reintentar manualmente.
   - Plantilla: `asunto_base` y `cuerpo_base` admiten `{numero_pedido}`, `{id_previsita}`, `{id_presupuesto}`, `{id_orden_compra}` y `{fecha_confirmacion}`. El cuerpo se envia como texto plano y el PDF se resuelve exclusivamente desde backend.
-  - Manejo de error: una falla de configuracion, PDF o SMTP se sanea y queda en estado `error`; no revierte el pedido confirmado, el snapshot posterior ni el documento generado. La UI conserva un boton manual **Enviar correo** para reintentar.
+  - Estado en pantalla: la seccion **PDFs generados** muestra tambien el estado persistido del envio por pedido. El boton manual se reserva para pedidos no enviados o con `error`; cuando el estado es `enviado`, la UI informa **Correo enviado** y evita presentarlo como accion pendiente.
+  - Manejo de error: una falla de configuracion, PDF o SMTP se sanea y queda en estado `error`; no revierte el pedido confirmado, el snapshot posterior ni el documento generado. La card del pedido ofrece **Reintentar correo** cuando corresponde.
   - Pendientes posteriores: prueba contra un SMTP real o sandbox autorizado, mejoras de plantilla, monitoreo y reintentos avanzados, CSRF y circuito real de autorizacion backend.
 
 - Cuando la OC queda lista para carga (`pendiente`) y el perfil puede editar (`Administrativo`, `Administrador` o `Super Administrador`), `collapse4_OC` debe mostrarse expandido inicialmente y tambien reabrirse al recalcular el estado desde backend; los perfiles tecnicos conservan solo lectura y no fuerzan apertura editable.

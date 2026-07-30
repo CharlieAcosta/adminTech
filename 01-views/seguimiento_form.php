@@ -1695,20 +1695,6 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
         <div class="pedido-materiales-ejecutar-wrapper d-flex justify-content-end mt-3">
           <button type="button"
-                  class="btn btn-outline-primary btn-uniform mr-2 d-none"
-                  id="pedido_materiales_enviar_correo"
-                  data-id-pedido-materiales-pedido=""
-                  disabled>
-            <i class="fas fa-envelope mr-1"></i> Enviar correo
-          </button>
-          <button type="button"
-                  class="btn btn-outline-danger btn-uniform mr-2 d-none"
-                  id="pedido_materiales_descargar_pdf"
-                  data-id-pedido-materiales-pedido=""
-                  disabled>
-            <i class="fas fa-file-pdf mr-1"></i> Descargar PDF
-          </button>
-          <button type="button"
                   class="btn btn-secondary btn-uniform mr-2"
                   id="pedido_materiales_guardar"
                   disabled>
@@ -3510,6 +3496,14 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
   .pedido-materiales-pdf-fecha {
     font-size: 0.72rem;
     min-height: 1.2em;
+  }
+
+  .pedido-materiales-pdf-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+    margin-top: auto;
   }
 
   @media (max-width: 1199.98px) {
@@ -6213,7 +6207,7 @@ $(document).ready(function() {
     var pedidoMaterialesGenerandoPdf = false;
     var pedidoMaterialesEnviandoCorreo = false;
     var pedidoMaterialesCargandoListadoPdfs = false;
-    var idPedidoMaterialesConfirmadoParaPdf = 0;
+    var pedidoMaterialesRecargarListadoPdfs = false;
     var PEDIDO_MATERIALES_MAXIMO = 5;
 
     function obtenerEndpointPedidoMateriales() {
@@ -6222,59 +6216,6 @@ $(document).ready(function() {
         || window.PEDIDO_MATERIALES_ENDPOINT
         || '../03-controller/pedidoMaterialesController.php'
       );
-    }
-
-    function actualizarEstadoBotonPdfPedidoMateriales() {
-      var $boton = $('#pedido_materiales_descargar_pdf');
-      if (!$boton.length) {
-        return;
-      }
-
-      var disponible = idPedidoMaterialesConfirmadoParaPdf > 0;
-      var habilitado = disponible
-        && !pedidoMaterialesGenerandoPdf
-        && !pedidoMaterialesEnviandoCorreo
-        && !pedidoMaterialesProcesandoRealizacion;
-
-      $boton
-        .toggleClass('d-none', !disponible)
-        .prop('disabled', !habilitado)
-        .attr(
-          'data-id-pedido-materiales-pedido',
-          disponible ? String(idPedidoMaterialesConfirmadoParaPdf) : ''
-        );
-    }
-
-    function actualizarEstadoBotonCorreoPedidoMateriales() {
-      var $boton = $('#pedido_materiales_enviar_correo');
-      if (!$boton.length) {
-        return;
-      }
-
-      var disponible = idPedidoMaterialesConfirmadoParaPdf > 0;
-      var habilitado = disponible
-        && !pedidoMaterialesEnviandoCorreo
-        && !pedidoMaterialesGenerandoPdf
-        && !pedidoMaterialesProcesandoRealizacion;
-
-      $boton
-        .toggleClass('d-none', !disponible)
-        .prop('disabled', !habilitado)
-        .attr(
-          'data-id-pedido-materiales-pedido',
-          disponible ? String(idPedidoMaterialesConfirmadoParaPdf) : ''
-        );
-    }
-
-    function habilitarPdfPedidoMaterialesConfirmado(idPedido) {
-      idPedido = parseInt(String(idPedido || '0'), 10);
-      if (!isFinite(idPedido) || idPedido <= 0) {
-        return;
-      }
-
-      idPedidoMaterialesConfirmadoParaPdf = idPedido;
-      actualizarEstadoBotonPdfPedidoMateriales();
-      actualizarEstadoBotonCorreoPedidoMateriales();
     }
 
     function formatearFechaPdfPedidoMateriales(fecha) {
@@ -6328,18 +6269,57 @@ $(document).ready(function() {
         var badge = generado
           ? '<span class="badge badge-success">PDF generado</span>'
           : '<span class="badge badge-secondary">Sin PDF</span>';
-        var accion = '';
+        var estadoEnvio = documento
+          ? String(documento.estado_envio || '').toLowerCase()
+          : '';
+        var ultimoErrorEnvio = documento
+          ? String(documento.ultimo_error_envio || '')
+          : '';
+        var fechaEnvio = documento
+          ? formatearFechaPdfPedidoMateriales(documento.fecha_envio)
+          : '';
+        var badgeCorreo = '<span class="badge badge-light">Correo no disponible</span>';
+        var accionPdf = '';
+        var accionCorreo = '';
 
         if (idPedido > 0) {
-          accion = ''
+          accionPdf = ''
             + '<button type="button"'
             + ' class="btn btn-sm ' + (generado ? 'btn-outline-danger' : 'btn-outline-primary')
-            + ' pedido-materiales-pdf-accion mt-auto"'
+            + ' pedido-materiales-pdf-accion"'
             + ' data-id-pedido-materiales-pedido="' + escapeHtmlOrdenCompra(idPedido) + '"'
             + ' data-accion-pdf="' + (generado ? 'descargar' : 'generar') + '">'
             + '<i class="fas fa-' + (generado ? 'download' : 'file-pdf') + ' mr-1"></i>'
             + (generado ? 'Descargar' : 'Generar PDF')
             + '</button>';
+
+          if (estadoEnvio === 'enviado') {
+            badgeCorreo = '<span class="badge badge-success">Correo enviado</span>';
+          } else if (estadoEnvio === 'procesando') {
+            badgeCorreo = '<span class="badge badge-info">Enviando...</span>';
+          } else if (estadoEnvio === 'error') {
+            badgeCorreo = '<span class="badge badge-danger"'
+              + (ultimoErrorEnvio
+                ? ' title="' + escapeHtmlOrdenCompra(ultimoErrorEnvio) + '"'
+                : '')
+              + '>Correo con error</span>';
+            accionCorreo = ''
+              + '<button type="button"'
+              + ' class="btn btn-sm btn-outline-warning pedido-materiales-correo-accion"'
+              + ' data-id-pedido-materiales-pedido="' + escapeHtmlOrdenCompra(idPedido) + '">'
+              + '<i class="fas fa-redo mr-1"></i>Reintentar correo'
+              + '</button>';
+          } else {
+            badgeCorreo = estadoEnvio === 'pendiente'
+              ? '<span class="badge badge-warning">Correo pendiente</span>'
+              : '<span class="badge badge-secondary">Correo no enviado</span>';
+            accionCorreo = ''
+              + '<button type="button"'
+              + ' class="btn btn-sm btn-outline-primary pedido-materiales-correo-accion"'
+              + ' data-id-pedido-materiales-pedido="' + escapeHtmlOrdenCompra(idPedido) + '">'
+              + '<i class="fas fa-envelope mr-1"></i>Enviar correo'
+              + '</button>';
+          }
         }
 
         tarjetas.push(
@@ -6354,7 +6334,14 @@ $(document).ready(function() {
               + '<div class="pedido-materiales-pdf-fecha text-muted mb-2">'
                 + (fecha ? 'Generado: ' + escapeHtmlOrdenCompra(fecha) : '&nbsp;')
               + '</div>'
-              + accion
+              + '<div class="mb-2">' + badgeCorreo + '</div>'
+              + '<div class="pedido-materiales-pdf-fecha text-muted mb-2">'
+                + (fechaEnvio ? 'Enviado: ' + escapeHtmlOrdenCompra(fechaEnvio) : '&nbsp;')
+              + '</div>'
+              + '<div class="pedido-materiales-pdf-acciones">'
+                + accionPdf
+                + accionCorreo
+              + '</div>'
             + '</div>'
           + '</div>'
         );
@@ -6379,9 +6366,14 @@ $(document).ready(function() {
       );
     }
 
-    function cargarListadoPdfsPedidoMateriales() {
+    function cargarListadoPdfsPedidoMateriales(forzarRecarga) {
       var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10) || 0;
-      if (idPrevisita <= 0 || pedidoMaterialesCargandoListadoPdfs) {
+      if (idPrevisita <= 0) {
+        return $.Deferred().resolve().promise();
+      }
+      if (pedidoMaterialesCargandoListadoPdfs) {
+        pedidoMaterialesRecargarListadoPdfs = pedidoMaterialesRecargarListadoPdfs
+          || !!forzarRecarga;
         return $.Deferred().resolve().promise();
       }
 
@@ -6415,6 +6407,10 @@ $(document).ready(function() {
         return null;
       }).always(function() {
         pedidoMaterialesCargandoListadoPdfs = false;
+        if (pedidoMaterialesRecargarListadoPdfs) {
+          pedidoMaterialesRecargarListadoPdfs = false;
+          cargarListadoPdfsPedidoMateriales(false);
+        }
       });
     }
 
@@ -6431,8 +6427,6 @@ $(document).ready(function() {
 
     function generarPdfPedidoMaterialesConfirmado(idPedido) {
       pedidoMaterialesGenerandoPdf = true;
-      actualizarEstadoBotonPdfPedidoMateriales();
-      actualizarEstadoBotonCorreoPedidoMateriales();
 
       return $.ajax({
         type: 'POST',
@@ -6461,21 +6455,17 @@ $(document).ready(function() {
         }
 
         mostrarExitoPedidoMateriales('PDF generado correctamente.');
-        cargarListadoPdfsPedidoMateriales();
+        cargarListadoPdfsPedidoMateriales(true);
         window.location.href = String(datosPdf.url_descarga);
 
         return resp;
       }).always(function() {
         pedidoMaterialesGenerandoPdf = false;
-        actualizarEstadoBotonPdfPedidoMateriales();
-        actualizarEstadoBotonCorreoPedidoMateriales();
       });
     }
 
     function enviarCorreoPedidoMaterialesConfirmado(idPedido) {
       pedidoMaterialesEnviandoCorreo = true;
-      actualizarEstadoBotonPdfPedidoMateriales();
-      actualizarEstadoBotonCorreoPedidoMateriales();
 
       return $.ajax({
         type: 'POST',
@@ -6498,9 +6488,7 @@ $(document).ready(function() {
         return resp;
       }).always(function() {
         pedidoMaterialesEnviandoCorreo = false;
-        actualizarEstadoBotonPdfPedidoMateriales();
-        actualizarEstadoBotonCorreoPedidoMateriales();
-        cargarListadoPdfsPedidoMateriales();
+        cargarListadoPdfsPedidoMateriales(true);
       });
     }
 
@@ -7251,8 +7239,6 @@ $(document).ready(function() {
         pedidoMaterialesProcesandoRealizacion = true;
         actualizarEstadoBotonGuardarPedidoMateriales();
         actualizarEstadoBotonRealizarPedido();
-        actualizarEstadoBotonPdfPedidoMateriales();
-        actualizarEstadoBotonCorreoPedidoMateriales();
 
         guardarSnapshotPedidoMateriales('realizar').then(function(resp) {
           if (!resp || resp.success === false) {
@@ -7280,9 +7266,6 @@ $(document).ready(function() {
             String(datosConfirmacion.id_pedido_materiales_pedido || '0'),
             10
           ) || 0;
-          habilitarPdfPedidoMaterialesConfirmado(
-            contextoConfirmacion.idPedidoMaterialesPedido
-          );
 
           if (!procesarConfirmacionPedidoMateriales(contextoConfirmacion)) {
             throw {
@@ -7309,12 +7292,10 @@ $(document).ready(function() {
           pedidoMaterialesProcesandoRealizacion = false;
           actualizarEstadoBotonGuardarPedidoMateriales();
           actualizarEstadoBotonRealizarPedido();
-          actualizarEstadoBotonPdfPedidoMateriales();
-          actualizarEstadoBotonCorreoPedidoMateriales();
           mostrarExitoPedidoMateriales(
             datosCorreo.ya_enviado
-              ? 'Pedido confirmado y estado guardado. El correo ya habia sido enviado.'
-              : 'Pedido confirmado, estado guardado y correo enviado correctamente.'
+              ? 'Pedido confirmado. El correo ya habia sido enviado.'
+              : 'Pedido confirmado y correo enviado correctamente.'
           );
         }).catch(function(xhr) {
           pedidoMaterialesProcesandoRealizacion = false;
@@ -7332,17 +7313,11 @@ $(document).ready(function() {
 
           actualizarEstadoBotonGuardarPedidoMateriales();
           actualizarEstadoBotonRealizarPedido();
-          actualizarEstadoBotonPdfPedidoMateriales();
-          actualizarEstadoBotonCorreoPedidoMateriales();
 
           if (contextoConfirmacion.snapshotPosteriorGuardado) {
             mostrarErrorPedidoMateriales(
               'Pedido confirmado, pero no se pudo enviar el correo. '
-              + (
-                (xhr && xhr.responseJSON && xhr.responseJSON.message)
-                || (xhr && xhr.message)
-                || 'Usa Enviar correo para reintentar.'
-              ),
+              + 'Usa Reintentar correo cuando la configuracion este disponible.',
               6
             );
             return;
@@ -7372,29 +7347,6 @@ $(document).ready(function() {
       }
 
       mostrarConfirmacionRealizarPedido();
-    });
-
-    $(document).on('click', '#pedido_materiales_descargar_pdf', function() {
-      var idPedido = parseInt(
-        String($(this).attr('data-id-pedido-materiales-pedido') || '0'),
-        10
-      ) || 0;
-      if (
-        $(this).prop('disabled')
-        || idPedido <= 0
-        || pedidoMaterialesGenerandoPdf
-        || pedidoMaterialesProcesandoRealizacion
-      ) {
-        return;
-      }
-
-      generarPdfPedidoMaterialesConfirmado(idPedido).catch(function(xhr) {
-        mostrarErrorPedidoMateriales(
-          (xhr && xhr.responseJSON && xhr.responseJSON.message)
-            || (xhr && xhr.message)
-            || 'No se pudo generar el PDF del pedido.'
-        );
-      });
     });
 
     $(document).on('click', '.pedido-materiales-pdf-accion', function() {
@@ -7427,19 +7379,24 @@ $(document).ready(function() {
       });
     });
 
-    $(document).on('click', '#pedido_materiales_enviar_correo', function() {
+    $(document).on('click', '.pedido-materiales-correo-accion', function() {
+      var $boton = $(this);
       var idPedido = parseInt(
-        String($(this).attr('data-id-pedido-materiales-pedido') || '0'),
+        String($boton.attr('data-id-pedido-materiales-pedido') || '0'),
         10
       ) || 0;
       if (
-        $(this).prop('disabled')
+        $boton.prop('disabled')
         || idPedido <= 0
         || pedidoMaterialesEnviandoCorreo
         || pedidoMaterialesProcesandoRealizacion
       ) {
         return;
       }
+
+      $boton
+        .prop('disabled', true)
+        .html('<i class="fas fa-spinner fa-spin mr-1"></i>Enviando...');
 
       enviarCorreoPedidoMaterialesConfirmado(idPedido).then(function(resp) {
         var datosCorreo = (resp && resp.data) ? resp.data : (resp || {});

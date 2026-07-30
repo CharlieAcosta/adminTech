@@ -799,6 +799,32 @@ if (!function_exists('listarDocumentosPdfPedidoMaterialesPorPrevisita')) {
         }
 
         $tipoDocumento = 'pedido_materiales_pdf';
+        $tipoEnvio = 'pedido_materiales_mail';
+        $tieneTablaEnvios = tabla_existe($db, 'pedido_materiales_pedido_envios');
+        $columnasEnvio = $tieneTablaEnvios
+            ? "
+                e.id_pedido_materiales_pedido_envio,
+                e.estado AS estado_envio,
+                e.intentos AS intentos_envio,
+                e.fecha_ultimo_intento,
+                e.fecha_envio,
+                e.ultimo_error AS ultimo_error_envio
+            "
+            : "
+                NULL AS id_pedido_materiales_pedido_envio,
+                NULL AS estado_envio,
+                0 AS intentos_envio,
+                NULL AS fecha_ultimo_intento,
+                NULL AS fecha_envio,
+                NULL AS ultimo_error_envio
+            ";
+        $joinEnvio = $tieneTablaEnvios
+            ? "
+                LEFT JOIN pedido_materiales_pedido_envios e
+                  ON e.id_pedido_materiales_pedido = p.id_pedido_materiales_pedido
+                 AND e.tipo_envio = ?
+            "
+            : '';
         $sql = "
             SELECT
                 p.id_pedido_materiales_pedido,
@@ -811,11 +837,13 @@ if (!function_exists('listarDocumentosPdfPedidoMaterialesPorPrevisita')) {
                 d.tamano_bytes,
                 d.hash_archivo,
                 d.created_at,
-                d.updated_at AS fecha_generacion
+                d.updated_at AS fecha_generacion,
+                {$columnasEnvio}
             FROM pedido_materiales_pedidos p
             LEFT JOIN pedido_materiales_pedido_documentos d
               ON d.id_pedido_materiales_pedido = p.id_pedido_materiales_pedido
              AND d.tipo_documento = ?
+            {$joinEnvio}
             WHERE p.id_previsita = ?
             ORDER BY p.numero_pedido ASC, p.id_pedido_materiales_pedido ASC
         ";
@@ -824,7 +852,17 @@ if (!function_exists('listarDocumentosPdfPedidoMaterialesPorPrevisita')) {
             throw new RuntimeException('No se pudo preparar el listado de PDFs generados.', 500);
         }
 
-        mysqli_stmt_bind_param($stmt, 'si', $tipoDocumento, $idPrevisita);
+        if ($tieneTablaEnvios) {
+            mysqli_stmt_bind_param(
+                $stmt,
+                'ssi',
+                $tipoDocumento,
+                $tipoEnvio,
+                $idPrevisita
+            );
+        } else {
+            mysqli_stmt_bind_param($stmt, 'si', $tipoDocumento, $idPrevisita);
+        }
         if (!mysqli_stmt_execute($stmt)) {
             mysqli_stmt_close($stmt);
             throw new RuntimeException('No se pudo consultar el listado de PDFs generados.', 500);
@@ -847,6 +885,14 @@ if (!function_exists('listarDocumentosPdfPedidoMaterialesPorPrevisita')) {
                 'hash_archivo' => $idDocumento > 0 ? (string)$row['hash_archivo'] : '',
                 'created_at' => $idDocumento > 0 ? (string)$row['created_at'] : '',
                 'fecha_generacion' => $idDocumento > 0 ? (string)$row['fecha_generacion'] : '',
+                'id_pedido_materiales_pedido_envio' => !empty($row['id_pedido_materiales_pedido_envio'])
+                    ? (int)$row['id_pedido_materiales_pedido_envio']
+                    : null,
+                'estado_envio' => trim((string)($row['estado_envio'] ?? '')),
+                'intentos_envio' => (int)($row['intentos_envio'] ?? 0),
+                'fecha_ultimo_intento' => (string)($row['fecha_ultimo_intento'] ?? ''),
+                'fecha_envio' => (string)($row['fecha_envio'] ?? ''),
+                'ultimo_error_envio' => (string)($row['ultimo_error_envio'] ?? ''),
             ];
         }
         mysqli_stmt_close($stmt);
