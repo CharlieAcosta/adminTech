@@ -486,6 +486,8 @@ try {
             'id_pedido_materiales_pedido' => (int)$resultadoEnvio['id_pedido_materiales_pedido'],
             'estado' => (string)$resultadoEnvio['estado'],
             'ya_enviado' => !empty($resultadoEnvio['ya_enviado']),
+            'simulado' => !empty($resultadoEnvio['simulado']),
+            'ya_simulado' => !empty($resultadoEnvio['ya_simulado']),
         ];
 
         responderPedidoMaterialesJson(

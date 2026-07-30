@@ -12,6 +12,39 @@ if (!function_exists('pedidoMaterialesEnviosTablasMinimasDisponibles')) {
     }
 }
 
+if (!function_exists('pedidoMaterialesMailSimulacionActiva')) {
+    function pedidoMaterialesMailSimulacionActiva(): bool
+    {
+        $valor = strtolower(trim((string)getenv(
+            'ADMINTECH_PEDIDO_MATERIALES_MAIL_SIMULACION'
+        )));
+        if (!in_array($valor, ['1', 'true', 'yes', 'on', 'si'], true)) {
+            return false;
+        }
+
+        if (function_exists('admintechEsEntornoNoProductivo')) {
+            return admintechEsEntornoNoProductivo();
+        }
+
+        $appEnv = strtolower(trim((string)(getenv('APP_ENV') ?: 'production')));
+        return in_array(
+            $appEnv,
+            [
+                'development',
+                'dev',
+                'local',
+                'test',
+                'testing',
+                'qa',
+                'staging',
+                'preproduction',
+                'preproduccion',
+            ],
+            true
+        );
+    }
+}
+
 if (!function_exists('normalizarDestinatariosEnvioPedidoMateriales')) {
     function normalizarDestinatariosEnvioPedidoMateriales(array $config): array
     {
@@ -253,6 +286,17 @@ if (!function_exists('reclamarIntentoEnvioPedidoMateriales')) {
                 ];
             }
 
+            if (($envio['estado'] ?? '') === 'simulado') {
+                mysqli_commit($db);
+
+                return [
+                    'reclamado' => false,
+                    'ya_enviado' => false,
+                    'ya_simulado' => true,
+                    'envio' => $envio,
+                ];
+            }
+
             if (($envio['estado'] ?? '') === 'procesando') {
                 mysqli_commit($db);
 
@@ -357,6 +401,30 @@ if (!function_exists('marcarEnvioPedidoMaterialesEnviado')) {
         if (!mysqli_stmt_execute($stmt) || mysqli_stmt_affected_rows($stmt) !== 1) {
             mysqli_stmt_close($stmt);
             throw new RuntimeException('No se pudo confirmar el estado final del envio.', 500);
+        }
+        mysqli_stmt_close($stmt);
+    }
+}
+
+if (!function_exists('marcarEnvioPedidoMaterialesSimulado')) {
+    function marcarEnvioPedidoMaterialesSimulado(mysqli $db, int $idEnvio): void
+    {
+        $stmt = mysqli_prepare(
+            $db,
+            "UPDATE pedido_materiales_pedido_envios
+             SET estado = 'simulado',
+                 ultimo_error = NULL,
+                 fecha_envio = NULL,
+                 updated_at = NOW()
+             WHERE id_pedido_materiales_pedido_envio = ? AND estado = 'procesando'"
+        );
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo actualizar el envio simulado.', 500);
+        }
+        mysqli_stmt_bind_param($stmt, 'i', $idEnvio);
+        if (!mysqli_stmt_execute($stmt) || mysqli_stmt_affected_rows($stmt) !== 1) {
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo confirmar el estado simulado del envio.', 500);
         }
         mysqli_stmt_close($stmt);
     }
@@ -596,6 +664,7 @@ if (!function_exists('enviarCorreoPedidoMaterialesConfirmado')) {
             );
         }
 
+        $modoSimulacion = pedidoMaterialesMailSimulacionActiva();
         $pedido = obtenerPedidoMaterialesConfirmadoParaPdf($db, $idPedido);
         $config = obtenerConfiguracionCorreoPedidoMaterialesActiva(true);
         $configPlantilla = $config ?: defaultsConfiguracionCorreoPedidoMateriales();
@@ -624,7 +693,27 @@ if (!function_exists('enviarCorreoPedidoMaterialesConfirmado')) {
                     : null,
                 'id_pedido_materiales_pedido' => $idPedido,
                 'estado' => 'enviado',
+                'simulado' => false,
+                'ya_simulado' => false,
                 'mensaje' => 'El correo ya habia sido enviado para este pedido.',
+            ];
+        }
+
+        if (!empty($reclamo['ya_simulado'])) {
+            $envioExistente = (array)($reclamo['envio'] ?? []);
+
+            return [
+                'ok' => true,
+                'ya_enviado' => false,
+                'id_pedido_materiales_pedido_envio' => (int)($envioExistente['id_pedido_materiales_pedido_envio'] ?? 0),
+                'id_pedido_materiales_pedido_documento' => isset($envioExistente['id_pedido_materiales_pedido_documento'])
+                    ? (int)$envioExistente['id_pedido_materiales_pedido_documento']
+                    : null,
+                'id_pedido_materiales_pedido' => $idPedido,
+                'estado' => 'simulado',
+                'simulado' => true,
+                'ya_simulado' => true,
+                'mensaje' => 'El correo ya habia sido simulado para este pedido.',
             ];
         }
 
@@ -640,6 +729,24 @@ if (!function_exists('enviarCorreoPedidoMaterialesConfirmado')) {
                 $idEnvio,
                 (int)$pdf['id_pedido_materiales_pedido_documento']
             );
+
+            if ($modoSimulacion) {
+                validarAdjuntoPdfEnvioPedidoMateriales($pdf);
+                marcarEnvioPedidoMaterialesSimulado($db, $idEnvio);
+
+                return [
+                    'ok' => true,
+                    'ya_enviado' => false,
+                    'id_pedido_materiales_pedido_envio' => $idEnvio,
+                    'id_pedido_materiales_pedido_documento' => (int)$pdf['id_pedido_materiales_pedido_documento'],
+                    'id_pedido_materiales_pedido' => $idPedido,
+                    'estado' => 'simulado',
+                    'simulado' => true,
+                    'ya_simulado' => false,
+                    'pdf_reutilizado' => !empty($pdf['reutilizado']),
+                    'mensaje' => 'Correo simulado correctamente.',
+                ];
+            }
 
             if (!$config) {
                 throw new RuntimeException(
@@ -669,6 +776,8 @@ if (!function_exists('enviarCorreoPedidoMaterialesConfirmado')) {
                 'id_pedido_materiales_pedido_documento' => (int)$pdf['id_pedido_materiales_pedido_documento'],
                 'id_pedido_materiales_pedido' => $idPedido,
                 'estado' => 'enviado',
+                'simulado' => false,
+                'ya_simulado' => false,
                 'pdf_reutilizado' => !empty($pdf['reutilizado']),
                 'mensaje' => 'Correo enviado correctamente.',
             ];

@@ -6293,7 +6293,9 @@ $(document).ready(function() {
             + (generado ? 'Descargar' : 'Generar PDF')
             + '</button>';
 
-          if (estadoEnvio === 'enviado') {
+          if (estadoEnvio === 'simulado') {
+            badgeCorreo = '<span class="badge badge-info">Correo simulado</span>';
+          } else if (estadoEnvio === 'enviado') {
             badgeCorreo = '<span class="badge badge-success">Correo enviado</span>';
           } else if (estadoEnvio === 'procesando') {
             badgeCorreo = '<span class="badge badge-info">Enviando...</span>';
@@ -7295,7 +7297,15 @@ $(document).ready(function() {
           mostrarExitoPedidoMateriales(
             datosCorreo.ya_enviado
               ? 'Pedido confirmado. El correo ya habia sido enviado.'
-              : 'Pedido confirmado y correo enviado correctamente.'
+              : (
+                datosCorreo.simulado
+                  ? (
+                    datosCorreo.ya_simulado
+                      ? 'Pedido confirmado. El correo ya habia sido simulado.'
+                      : 'Pedido confirmado y correo simulado correctamente.'
+                  )
+                  : 'Pedido confirmado y correo enviado correctamente.'
+              )
           );
         }).catch(function(xhr) {
           pedidoMaterialesProcesandoRealizacion = false;
@@ -7403,7 +7413,15 @@ $(document).ready(function() {
         mostrarExitoPedidoMateriales(
           datosCorreo.ya_enviado
             ? 'El correo ya habia sido enviado para este pedido.'
-            : 'Correo enviado correctamente.'
+            : (
+              datosCorreo.simulado
+                ? (
+                  datosCorreo.ya_simulado
+                    ? 'El correo ya habia sido simulado para este pedido.'
+                    : 'Correo simulado correctamente.'
+                )
+                : 'Correo enviado correctamente.'
+            )
         );
       }).catch(function(xhr) {
         mostrarErrorPedidoMateriales(
