@@ -1678,16 +1678,33 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           </div>
         </div>
 
-        <div class="card card-light mt-3 mb-0 pedido-materiales-pdfs-card">
-          <div class="card-header py-2">
-            <h5 class="card-title mb-0">
-              <i class="fas fa-file-pdf text-danger mr-2"></i>PDFs generados
-            </h5>
-          </div>
-          <div class="card-body py-3">
-            <div class="row pedido-materiales-pdfs-listado" id="pedido_materiales_pdfs_listado" aria-live="polite">
-              <div class="col-12 text-center text-muted py-2">
-                <i class="fas fa-spinner fa-spin mr-1"></i> Consultando PDFs generados...
+        <div class="accordion mt-3" id="pedidoMaterialesPdfsAccordion">
+          <div class="card card-light mb-0 pedido-materiales-pdfs-card">
+            <div class="card-header py-2" id="pedidoMaterialesPdfsHeader">
+              <h5 class="mb-0">
+                <button type="button"
+                        class="btn btn-link btn-block d-flex align-items-center justify-content-between p-0 text-left text-dark collapsed pedido-materiales-pdfs-toggle"
+                        data-toggle="collapse"
+                        data-target="#pedidoMaterialesPdfsCollapse"
+                        aria-expanded="false"
+                        aria-controls="pedidoMaterialesPdfsCollapse">
+                  <span>
+                    <i class="fas fa-file-pdf text-danger mr-2" aria-hidden="true"></i>PDFs generados
+                  </span>
+                  <i class="fas fa-chevron-down pedido-materiales-pdfs-chevron" aria-hidden="true"></i>
+                </button>
+              </h5>
+            </div>
+            <div id="pedidoMaterialesPdfsCollapse"
+                 class="collapse"
+                 aria-labelledby="pedidoMaterialesPdfsHeader"
+                 data-parent="#pedidoMaterialesPdfsAccordion">
+              <div class="card-body py-3" id="pedidoMaterialesPdfsBody">
+                <div class="row pedido-materiales-pdfs-listado" id="pedido_materiales_pdfs_listado" aria-live="polite">
+                  <div class="col-12 text-center text-muted py-2">
+                    <i class="fas fa-spinner fa-spin mr-1"></i> Consultando PDFs generados...
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -3468,6 +3485,21 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
   .pedido-materiales-pdfs-listado {
     margin-left: -0.35rem;
     margin-right: -0.35rem;
+  }
+
+  .pedido-materiales-pdfs-toggle,
+  .pedido-materiales-pdfs-toggle:hover,
+  .pedido-materiales-pdfs-toggle:focus {
+    color: #343a40;
+    text-decoration: none;
+  }
+
+  .pedido-materiales-pdfs-toggle .pedido-materiales-pdfs-chevron {
+    transition: transform 0.2s ease;
+  }
+
+  .pedido-materiales-pdfs-toggle:not(.collapsed) .pedido-materiales-pdfs-chevron {
+    transform: rotate(180deg);
   }
 
   .pedido-materiales-pdf-columna {
@@ -6233,6 +6265,15 @@ $(document).ready(function() {
         + ' ' + partes[4] + ':' + partes[5] + (partes[6] ? ':' + partes[6] : '');
     }
 
+    function abrirSeccionPdfsGeneradosPedidoMateriales() {
+      var $collapse = $('#pedidoMaterialesPdfsCollapse');
+      if (!$collapse.length || $collapse.hasClass('show')) {
+        return;
+      }
+
+      $collapse.collapse('show');
+    }
+
     function renderizarListadoPdfsPedidoMateriales(documentos) {
       var $contenedor = $('#pedido_materiales_pdfs_listado');
       if (!$contenedor.length) {
@@ -6457,6 +6498,7 @@ $(document).ready(function() {
         }
 
         mostrarExitoPedidoMateriales('PDF generado correctamente.');
+        abrirSeccionPdfsGeneradosPedidoMateriales();
         cargarListadoPdfsPedidoMateriales(true);
         window.location.href = String(datosPdf.url_descarga);
 
@@ -6490,6 +6532,7 @@ $(document).ready(function() {
         return resp;
       }).always(function() {
         pedidoMaterialesEnviandoCorreo = false;
+        abrirSeccionPdfsGeneradosPedidoMateriales();
         cargarListadoPdfsPedidoMateriales(true);
       });
     }
