@@ -46,6 +46,17 @@ if (!function_exists('perfilPuedeVerSeguimientoCompletoOrdenCompra')) {
     }
 }
 
+if (!function_exists('puedeAutorizarPedidoMateriales')) {
+    function puedeAutorizarPedidoMateriales(?string $perfil): bool
+    {
+        return in_array(
+            normalizarPerfilOrdenCompraSeguimiento($perfil),
+            ['Super Administrador', 'Administrador'],
+            true
+        );
+    }
+}
+
 if (!function_exists('perfilPuedeAccederSoloOrdenCompra')) {
     function perfilPuedeAccederSoloOrdenCompra(?string $perfil): bool
     {

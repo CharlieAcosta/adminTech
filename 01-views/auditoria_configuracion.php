@@ -85,6 +85,17 @@ registrarNavegacion('AUDITORIA Y CONFIGURACION');
         </div>
 
         <div class="col-12 col-sm-6 col-md-4">
+          <a href="../01-views/configuracion_mail_pedido_materiales.php">
+            <div class="info-box">
+              <span class="info-box-icon bg-info elevation-1"><i class="fas fa-paper-plane"></i></span>
+              <div class="info-box-content">
+                <h3 class="info-box-text d-flex align-items-center">Mail pedido materiales</h3>
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-4">
           <a href="../01-views/perfiles_panel.php">
             <div class="info-box">
               <span class="info-box-icon bg-success elevation-1"><i class="fas fa-users-cog"></i></span>
