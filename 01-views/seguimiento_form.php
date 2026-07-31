@@ -178,6 +178,7 @@ $puedeVerSeguimientoCompleto = perfilPuedeVerSeguimientoCompletoOrdenCompra($per
 $esPerfilAdministrativoSeguimiento = perfilPuedeAccederSoloOrdenCompra($perfilSesion);
 $puedeEditarOrdenCompra = perfilPuedeEditarOrdenCompra($perfilSesion);
 $puedeGestionarPedidoMateriales = $puedeVerSeguimientoCompleto;
+$puedeAutorizarPedidoMateriales = puedeAutorizarPedidoMateriales($perfilSesion);
 $ordenCompraSoloLectura = perfilSoloPuedeVerOrdenCompra($perfilSesion) || !$puedeEditarOrdenCompra;
 $aperturaExclusivaOrdenCompra = isset($_GET['oc']) && $_GET['oc'] === '1';
 $estadoOrdenCompraSeguimiento = resolverEstadoOrdenCompraCalculado(null);
@@ -1401,6 +1402,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
   window.SEGUIMIENTO_PEDIDO_MATERIALES = <?php echo jsonParaJsSeguro([
     'id_previsita' => $idPrevisitaPedidoMateriales,
     'url_guardar_snapshot' => '../03-controller/pedidoMaterialesController.php',
+    'puede_autorizar_pedido_materiales' => $puedeAutorizarPedidoMateriales,
   ], '{}'); ?>;
   window.PEDIDO_MATERIALES_TAREAS = <?php echo jsonParaJsSeguro($pedidoMaterialesTareasDisponibles, '[]'); ?>;
   window.PEDIDO_MATERIALES_SNAPSHOT = <?php echo jsonParaJsSeguro($pedidoMaterialesSnapshot, 'null'); ?>;
@@ -6868,7 +6870,10 @@ $(document).ready(function() {
 
       $contenedor.toggleClass('ml-1', $fila.find('.pedido-material-eliminar-fila').length > 0);
 
-      if (estadoNormalizado !== 'pendiente') {
+      if (
+        estadoNormalizado !== 'pendiente'
+        || pedidoMaterialesConfig.puede_autorizar_pedido_materiales !== true
+      ) {
         $contenedor.empty();
         return;
       }
@@ -7541,7 +7546,7 @@ $(document).ready(function() {
       marcarPedidoMaterialesConCambiosPendientes();
     }
 
-    function cambiarEstadoAutorizacionPedidoMaterialEnFila($fila, estado) {
+    function cambiarEstadoAutorizacionPedidoMaterialEnFila($fila, estado, marcarCambios) {
       limpiarTooltipsPedidoMaterialEnFila($fila);
 
       if (estado === 'rechazada') {
@@ -7555,23 +7560,119 @@ $(document).ready(function() {
       renderizarBadgeAutorizacionPedidoMaterial($fila, estado);
       renderizarAccionesAutorizacionPedidoMaterial($fila, estado);
       actualizarResumenVisualPedidoMaterialEnFila($fila);
-      marcarPedidoMaterialesConCambiosPendientes();
+      if (marcarCambios !== false) {
+        marcarPedidoMaterialesConCambiosPendientes();
+      }
+    }
+
+    function obtenerIdentidadFilaAutorizacionPedidoMaterial($fila) {
+      var $contenedorFilas = $fila.closest('tbody');
+      var tipoFila = $contenedorFilas.is('#pedidoMaterialesAgregadosTableBody')
+        ? 'agregado'
+        : 'presupuestado';
+      var ordenVisual = $contenedorFilas.find('tr[data-material-id]').index($fila) + 1;
+
+      return {
+        tipo_fila: tipoFila,
+        id_material: parseInt(String($fila.attr('data-material-id') || '0'), 10) || 0,
+        tarea_nro: parseInt(String($fila.attr('data-tarea-nro') || '0'), 10) || null,
+        orden_visual: ordenVisual
+      };
+    }
+
+    function resolverAutorizacionPedidoMateriales($fila, decision) {
+      var identidad = obtenerIdentidadFilaAutorizacionPedidoMaterial($fila);
+
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify({
+          accion: 'resolver_autorizacion_pedido_materiales',
+          id_previsita: parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10) || 0,
+          numero_pedido: obtenerNumeroPedidoMaterialesActivo(),
+          tipo_fila: identidad.tipo_fila,
+          id_material: identidad.id_material,
+          tarea_nro: identidad.tarea_nro,
+          orden_visual: identidad.orden_visual,
+          decision: decision
+        })
+      }).then(function(resp) {
+        if (!resp || resp.success === false) {
+          return $.Deferred().reject({
+            responseJSON: resp,
+            message: (resp && resp.message) || 'No se pudo resolver la autorizacion.'
+          }).promise();
+        }
+
+        return resp;
+      });
+    }
+
+    function mensajeErrorResolucionAutorizacionPedidoMateriales(xhr) {
+      var status = parseInt(String((xhr && xhr.status) || '0'), 10) || 0;
+      if (status === 403) {
+        return 'No tenes permisos para autorizar pedidos de materiales.';
+      }
+      if (status === 409) {
+        return 'La solicitud ya fue resuelta o cambio de estado. Recarga la informacion.';
+      }
+
+      return (xhr && xhr.responseJSON && xhr.responseJSON.message)
+        || (xhr && xhr.message)
+        || 'No se pudo resolver la autorizacion.';
+    }
+
+    function procesarDecisionAutorizacionPedidoMateriales($boton, decision) {
+      var $fila = $boton.closest('tr');
+      if (
+        pedidoMaterialesConfig.puede_autorizar_pedido_materiales !== true
+        || obtenerEstadoAutorizacionPedidoMaterialEnFila($fila) !== 'pendiente'
+      ) {
+        mostrarErrorPedidoMateriales('No tenes permisos para autorizar pedidos de materiales.');
+        return;
+      }
+
+      limpiarTooltipsPedidoMaterialEnFila($fila);
+      $fila.find('.pedido-material-autorizacion-autorizar, .pedido-material-autorizacion-rechazar')
+        .prop('disabled', true);
+
+      var guardadoPendiente = pedidoMaterialesTieneCambiosPendientes
+        ? guardarSnapshotPedidoMateriales('guardar')
+        : $.Deferred().resolve({ success: true }).promise();
+
+      guardadoPendiente.then(function(respSnapshot) {
+        if (!respSnapshot || respSnapshot.success === false) {
+          throw respSnapshot;
+        }
+
+        return resolverAutorizacionPedidoMateriales($fila, decision);
+      }).then(function(resp) {
+        var datos = (resp && resp.data) ? resp.data : (resp || {});
+        var estado = String(datos.estado_autorizacion || decision);
+
+        cambiarEstadoAutorizacionPedidoMaterialEnFila($fila, estado, false);
+        $fila.attr({
+          'data-material-autorizacion-usuario': String(datos.id_usuario_autorizacion || ''),
+          'data-material-autorizacion-fecha': String(datos.fecha_autorizacion || '')
+        });
+        limpiarCambiosPendientesPedidoMateriales();
+        mostrarExitoPedidoMateriales(
+          estado === 'autorizada' ? 'Autorizacion aprobada.' : 'Autorizacion rechazada.'
+        );
+      }).catch(function(xhr) {
+        renderizarAccionesAutorizacionPedidoMaterial($fila, 'pendiente');
+        mostrarErrorPedidoMateriales(mensajeErrorResolucionAutorizacionPedidoMateriales(xhr), 5);
+      });
     }
 
     $(document).on('click', '.pedido-material-autorizacion-autorizar', function() {
-      var $boton = $(this);
-      $boton.tooltip('hide');
-      $boton.tooltip('dispose');
-      cambiarEstadoAutorizacionPedidoMaterialEnFila($boton.closest('tr'), 'autorizada');
-      // TODO: persistir autorizacion aprobada cuando exista backend.
+      procesarDecisionAutorizacionPedidoMateriales($(this), 'autorizada');
     });
 
     $(document).on('click', '.pedido-material-autorizacion-rechazar', function() {
-      var $boton = $(this);
-      $boton.tooltip('hide');
-      $boton.tooltip('dispose');
-      cambiarEstadoAutorizacionPedidoMaterialEnFila($boton.closest('tr'), 'rechazada');
-      // TODO: persistir autorizacion rechazada cuando exista backend.
+      procesarDecisionAutorizacionPedidoMateriales($(this), 'rechazada');
     });
 
     function mostrarModalAutorizacionExcesoPedidoMaterial($fila, materialTexto, cantidadInicial, cantidadSolicitada, nuevaCantidadSolicitada) {

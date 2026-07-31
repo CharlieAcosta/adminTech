@@ -10,6 +10,7 @@ require_once __DIR__ . '/../04-modelo/conectDB.php';
 require_once __DIR__ . '/../04-modelo/schemaIntrospectionModel.php';
 require_once __DIR__ . '/../04-modelo/ordenCompraWorkflowModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesSnapshotModel.php';
+require_once __DIR__ . '/../04-modelo/pedidoMaterialesAutorizacionesModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPedidosModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPdfModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesEnviosModel.php';
@@ -371,6 +372,99 @@ if (!pedidoMaterialesSnapshotTablasMinimasDisponibles($db)) {
 }
 
 try {
+    if ($accion === 'resolver_autorizacion_pedido_materiales') {
+        if (!puedeAutorizarPedidoMateriales($usuario['perfil'])) {
+            responderPedidoMaterialesJson(
+                false,
+                'No tenes permisos para autorizar pedidos de materiales.',
+                [],
+                [],
+                403
+            );
+        }
+
+        $idPrevisita = filter_var(
+            $input['id_previsita'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $numeroPedido = filter_var(
+            $input['numero_pedido'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 5]]
+        );
+        $idMaterial = filter_var(
+            $input['id_material'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $ordenVisual = filter_var(
+            $input['orden_visual'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $tipoFila = trim((string)($input['tipo_fila'] ?? ''));
+        $decision = trim((string)($input['decision'] ?? ''));
+        $tareaNroEntrada = $input['tarea_nro'] ?? null;
+        $tareaNro = null;
+        if ($tareaNroEntrada !== null && $tareaNroEntrada !== '') {
+            $tareaNroValidada = filter_var(
+                $tareaNroEntrada,
+                FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 1]]
+            );
+            if ($tareaNroValidada === false) {
+                responderPedidoMaterialesJson(false, 'La tarea informada no es valida.', [], [], 422);
+            }
+            $tareaNro = (int)$tareaNroValidada;
+        }
+
+        if ($idPrevisita === false
+            || $numeroPedido === false
+            || $idMaterial === false
+            || $ordenVisual === false
+            || !in_array($tipoFila, ['presupuestado', 'agregado'], true)
+            || !in_array($decision, ['autorizada', 'rechazada'], true)) {
+            responderPedidoMaterialesJson(
+                false,
+                'Los datos de la autorizacion no son validos.',
+                [],
+                [],
+                422
+            );
+        }
+
+        validarPrevisitaPedidoMaterialesController($db, (int)$idPrevisita);
+        $resultadoAutorizacion = resolverAutorizacionPedidoMaterialesEnConexion(
+            $db,
+            (int)$idPrevisita,
+            (int)$numeroPedido,
+            $tipoFila,
+            (int)$idMaterial,
+            $tareaNro,
+            (int)$ordenVisual,
+            $decision,
+            isset($input['motivo']) ? (string)$input['motivo'] : null,
+            (int)$usuario['id_usuario']
+        );
+        $dataAutorizacion = [
+            'id_pedido_materiales_autorizacion' => (int)$resultadoAutorizacion['id_pedido_materiales_autorizacion'],
+            'estado_autorizacion' => (string)$resultadoAutorizacion['estado_autorizacion'],
+            'id_usuario_autorizacion' => (int)$resultadoAutorizacion['id_usuario_autorizacion'],
+            'fecha_autorizacion' => (string)$resultadoAutorizacion['fecha_autorizacion'],
+            'motivo_autorizacion' => $resultadoAutorizacion['motivo_autorizacion'],
+        ];
+
+        responderPedidoMaterialesJson(
+            true,
+            $decision === 'autorizada' ? 'Autorizacion aprobada.' : 'Autorizacion rechazada.',
+            $dataAutorizacion,
+            [],
+            200,
+            $dataAutorizacion
+        );
+    }
+
     if ($accion === 'listar_pdfs_pedido_materiales') {
         $idPrevisita = filter_var(
             $input['id_previsita'] ?? null,
@@ -610,7 +704,7 @@ try {
 
     responderPedidoMaterialesJson(true, 'Snapshot guardado correctamente.', ['snapshot' => $resultado]);
 } catch (Throwable $e) {
-    $status = in_array((int)$e->getCode(), [400, 404, 409, 422], true)
+    $status = in_array((int)$e->getCode(), [400, 403, 404, 409, 422], true)
         ? (int)$e->getCode()
         : 500;
     responderPedidoMaterialesJson(false, $e->getMessage(), [], [], $status);

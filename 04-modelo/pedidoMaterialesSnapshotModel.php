@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/schemaIntrospectionModel.php';
+require_once __DIR__ . '/pedidoMaterialesAutorizacionesModel.php';
 
 if (!function_exists('pedidoMaterialesSnapshotTablasMinimasDisponibles')) {
     function pedidoMaterialesSnapshotTablasMinimasDisponibles(mysqli $db): bool
@@ -265,19 +266,6 @@ if (!function_exists('guardarPedidoMaterialesSnapshotEnConexion')) {
 
         $finalizado = !empty($snapshot['finalizado']) ? 1 : 0;
         $accionGuardado = (($snapshot['accion_guardado'] ?? '') === 'realizar') ? 'realizar' : 'guardar';
-        $filas = [];
-
-        foreach ((array)($snapshot['materiales_presupuestados'] ?? []) as $indice => $fila) {
-            $fila['tipo_fila'] = 'presupuestado';
-            $fila['orden_visual'] = $indice + 1;
-            $filas[] = pedidoMaterialesSnapshotDetalleDesdeFila($fila);
-        }
-        foreach ((array)($snapshot['materiales_agregados'] ?? []) as $indice => $fila) {
-            $fila['tipo_fila'] = 'agregado';
-            $fila['orden_visual'] = $indice + 1;
-            $filas[] = pedidoMaterialesSnapshotDetalleDesdeFila($fila);
-        }
-
         mysqli_begin_transaction($db);
 
         try {
@@ -325,6 +313,23 @@ if (!function_exists('guardarPedidoMaterialesSnapshotEnConexion')) {
 
             $snapshotId = (int)mysqli_insert_id($db);
             mysqli_stmt_close($stmtCabecera);
+
+            $snapshot = protegerSnapshotConAutorizacionesFormalesPedidoMateriales(
+                $db,
+                $snapshot,
+                true
+            );
+            $filas = [];
+            foreach ((array)($snapshot['materiales_presupuestados'] ?? []) as $indice => $fila) {
+                $fila['tipo_fila'] = 'presupuestado';
+                $fila['orden_visual'] = $indice + 1;
+                $filas[] = pedidoMaterialesSnapshotDetalleDesdeFila($fila);
+            }
+            foreach ((array)($snapshot['materiales_agregados'] ?? []) as $indice => $fila) {
+                $fila['tipo_fila'] = 'agregado';
+                $fila['orden_visual'] = $indice + 1;
+                $filas[] = pedidoMaterialesSnapshotDetalleDesdeFila($fila);
+            }
 
             $stmtDelete = mysqli_prepare(
                 $db,

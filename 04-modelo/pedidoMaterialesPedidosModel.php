@@ -3,6 +3,7 @@
 require_once __DIR__ . '/schemaIntrospectionModel.php';
 require_once __DIR__ . '/ordenCompraWorkflowModel.php';
 require_once __DIR__ . '/pedidoMaterialesSnapshotModel.php';
+require_once __DIR__ . '/pedidoMaterialesAutorizacionesModel.php';
 
 if (!function_exists('pedidoMaterialesPedidosTablasMinimasDisponibles')) {
     function pedidoMaterialesPedidosTablasMinimasDisponibles(mysqli $db): bool
@@ -339,6 +340,19 @@ if (!function_exists('confirmarPedidoMaterialesEnConexion')) {
                     'total_detalles' => $totalDetallesExistente,
                 ];
             }
+
+            $snapshot = protegerSnapshotConAutorizacionesFormalesPedidoMateriales($db, $snapshot);
+            validarAutorizacionesFormalesConfirmacionPedidoMateriales(
+                $db,
+                $snapshot,
+                $numeroPedido
+            );
+            $detalles = obtenerDetallesConfirmacionPedidoMateriales($snapshot, $numeroPedido);
+            $snapshotHash = calcularHashConfirmacionPedidoMateriales(
+                $idPrevisita,
+                $numeroPedido,
+                $detalles
+            );
 
             $ordenCompra = obtenerOrdenCompraHabilitantePedidoMaterialesEnConexion(
                 $db,

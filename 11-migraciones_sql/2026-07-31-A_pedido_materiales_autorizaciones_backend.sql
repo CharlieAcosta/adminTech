@@ -1,0 +1,30 @@
+CREATE TABLE IF NOT EXISTS pedido_materiales_autorizaciones (
+    id_pedido_materiales_autorizacion INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    id_previsita INT UNSIGNED NOT NULL,
+    numero_pedido TINYINT UNSIGNED NOT NULL,
+    tipo_fila ENUM('presupuestado', 'agregado') NOT NULL,
+    id_material INT UNSIGNED NOT NULL,
+    tarea_nro INT UNSIGNED NULL,
+    orden_visual INT UNSIGNED NOT NULL,
+    clave_fila CHAR(64) NOT NULL,
+    estado_autorizacion ENUM('autorizada', 'rechazada') NOT NULL,
+    cantidad_inicial DECIMAL(14,4) NOT NULL DEFAULT 0,
+    cantidad_pedido DECIMAL(14,4) NOT NULL DEFAULT 0,
+    cantidad_acumulada DECIMAL(14,4) NOT NULL DEFAULT 0,
+    cantidad_pedido_previa DECIMAL(14,4) NOT NULL DEFAULT 0,
+    contexto_hash CHAR(64) NOT NULL,
+    id_usuario_autorizacion INT UNSIGNED NOT NULL,
+    fecha_autorizacion DATETIME NOT NULL,
+    motivo_autorizacion VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_pedido_materiales_autorizacion),
+    UNIQUE KEY uq_pm_autorizacion_fila_pedido (
+        id_previsita,
+        numero_pedido,
+        clave_fila
+    ),
+    KEY idx_pm_autorizacion_previsita_pedido (id_previsita, numero_pedido),
+    KEY idx_pm_autorizacion_usuario (id_usuario_autorizacion),
+    KEY idx_pm_autorizacion_estado (estado_autorizacion)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
