@@ -8,8 +8,6 @@
 //}
 
 include_once '../00-config/configIni.php';
-require_once __DIR__ . '/sesionSegura.php';
-require_once __DIR__ . '/csrf.php';
 
 //si existe una llamada a una funcion y no esta vacia o no es nula
 if(isset($_REQUEST['funcionCall']) && ($_REQUEST['funcionCall'] !== '' || $_REQUEST['funcionCall'] !== null)){ 
@@ -405,7 +403,7 @@ function opcionesCookieRecordarmeLogin(int $expira): array
     return [
         'expires' => $expira,
         'path' => '/',
-        'secure' => solicitudAdmintechUsaHttps(),
+        'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
         'httponly' => true,
         'samesite' => 'Lax',
     ];
@@ -541,18 +539,6 @@ function restaurarSesionDesdeRecordarmeLogin(): bool
         return false;
     }
 
-    $usuarioRecordado = $row;
-    unset(
-        $usuarioRecordado['id_token'],
-        $usuarioRecordado['token_hash'],
-        $usuarioRecordado['expires_at']
-    );
-    if (!reemplazarIdentidadAutenticadaAdmintech($usuarioRecordado)) {
-        mysqli_close($db);
-        limpiarCookieRecordarmeLogin();
-        return false;
-    }
-
     $nuevoValidador = bin2hex(random_bytes(32));
     $nuevoHash = hash('sha256', $nuevoValidador);
     $expiraTs = time() + duracionCookieRecordarmeLogin();
@@ -570,6 +556,8 @@ function restaurarSesionDesdeRecordarmeLogin(): bool
         $stmtUpdate->close();
     }
 
+    unset($row['id_token'], $row['token_hash'], $row['expires_at']);
+    $_SESSION['usuario'] = $row;
     if (!function_exists('base_url')) {
         include_once __DIR__ . '/base_url.php';
     }
@@ -585,10 +573,7 @@ function restaurarSesionDesdeRecordarmeLogin(): bool
 function sesion($url_destino = URL_LOGIN, $expira = SESION_TIME) {
     // Iniciar sesión si no está ya iniciada
     if (session_status() === PHP_SESSION_NONE) {
-        if (!iniciarSesionAdmintech()) {
-            header('Location: ' . $url_destino);
-            exit();
-        }
+        session_start();
     }
 
     if ((!isset($_SESSION['usuario']['id_usuario']) || $_SESSION['usuario']['id_usuario'] == '') && restaurarSesionDesdeRecordarmeLogin()) {
@@ -611,7 +596,7 @@ function sesion($url_destino = URL_LOGIN, $expira = SESION_TIME) {
             if (restaurarSesionDesdeRecordarmeLogin()) {
                 return;
             }
-            destruirSesionAdmintech(); // Destruir estado, cookie y sesión actual
+            session_destroy(); // Destruir la sesión actual
             header('Location: ' . $url_destino); // Redirigir al login
             exit();
         }

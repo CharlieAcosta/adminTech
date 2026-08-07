@@ -7,12 +7,6 @@
  * así como la capacidad de auditar la navegación dentro del sistema.
  */
 
-if (!class_exists('AuditoriaException')) {
-    class AuditoriaException extends RuntimeException
-    {
-    }
-}
-
 class Auditoria {
 
     private $conexion;
@@ -23,19 +17,10 @@ class Auditoria {
      * Recibe la conexión a la base de datos y verifica si la tabla de auditoría existe. Si no existe, la crea.
      *
      * @param mysqli $conexion Conexión a la base de datos MySQL
-     * @param bool $verificarEsquema Mantiene por defecto el comportamiento legacy.
-     *                               Debe ser false si el esquema ya fue validado
-     *                               antes de una transacción externa.
      */
-    public function __construct($conexion, $verificarEsquema = true) {
-        if (!$conexion instanceof mysqli) {
-            throw new InvalidArgumentException('La conexión de auditoría no es válida.');
-        }
-
+    public function __construct($conexion) {
         $this->conexion = $conexion;
-        if ($verificarEsquema) {
-            $this->crearTablaSiNoExiste();
-        }
+        $this->crearTablaSiNoExiste();
     }
 
     /**
@@ -84,52 +69,19 @@ class Auditoria {
      * Registrar acceso o acción del usuario
      */
     public function registrarAcceso($usuario, $accion, $modulo = null, $url = null, $id_usuario = null, $perfil = null) {
-        $ipOrigen = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
-        $dispositivoCompleto = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-        $dispositivo = $this->limitarTexto($dispositivoCompleto, 100);
-        $navegador = $this->obtenerNavegador($dispositivoCompleto);
+        $ipOrigen = $_SERVER['REMOTE_ADDR'];  
+        $dispositivo = $_SERVER['HTTP_USER_AGENT'];  
+        $navegador = $this->obtenerNavegador($dispositivo);  
         $metodoAcceso = 'WEB';  
 
         $sql = "INSERT INTO auditoria (id_usuario, email_usuario, perfil_usuario, accion_realizada, fecha_hora, ip_origen, dispositivo, navegador, modulo_afectado, metodo_acceso, url_acceso)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?)";
 
-        $usuario = $this->limitarTexto((string)$usuario, 255);
-        $perfil = $perfil === null ? null : $this->limitarTexto((string)$perfil, 255);
-        $modulo = $modulo === null ? null : $this->limitarTexto((string)$modulo, 100);
-        $url = $url === null ? null : $this->limitarTexto((string)$url, 255);
+        $stmt = $this->conexion->prepare($sql);
+        $stmt->bind_param('isssssssss', $id_usuario, $usuario, $perfil, $accion, $ipOrigen, $dispositivo, $navegador, $modulo, $metodoAcceso, $url);
 
-        $stmt = null;
-        try {
-            $stmt = $this->conexion->prepare($sql);
-            if (!$stmt) {
-                throw new AuditoriaException('No se pudo preparar el registro de auditoría.');
-            }
-            if (!$stmt->bind_param('isssssssss', $id_usuario, $usuario, $perfil, $accion, $ipOrigen, $dispositivo, $navegador, $modulo, $metodoAcceso, $url)) {
-                $stmt->close();
-                $stmt = null;
-                throw new AuditoriaException('No se pudieron vincular los datos de auditoría.');
-            }
-            if (!$stmt->execute() || $stmt->affected_rows !== 1) {
-                $stmt->close();
-                $stmt = null;
-                throw new AuditoriaException('No se pudo registrar la auditoría.');
-            }
-            if (!$stmt->close()) {
-                $stmt = null;
-                throw new AuditoriaException('No se pudo finalizar el registro de auditoría.');
-            }
-            $stmt = null;
-
-            return true;
-        } catch (AuditoriaException $error) {
-            $this->cerrarStatementSinInterrumpir($stmt);
-            error_log('ADMINTECH Auditoria: no se pudo registrar el acceso.');
-            return false;
-        } catch (Throwable $error) {
-            $this->cerrarStatementSinInterrumpir($stmt);
-            error_log('ADMINTECH Auditoria: no se pudo registrar el acceso.');
-            return false;
-        }
+        $stmt->execute();
+        $stmt->close();
     }
 
     /**
@@ -142,25 +94,6 @@ class Auditoria {
         if (strpos($userAgent, 'MSIE') !== false || strpos($userAgent, 'Trident') !== false) return 'Internet Explorer';
         if (strpos($userAgent, 'Edge') !== false) return 'Edge';
         return 'Desconocido';
-    }
-
-    private function limitarTexto($texto, $longitud) {
-        $texto = (string)$texto;
-        return function_exists('mb_substr')
-            ? mb_substr($texto, 0, (int)$longitud, 'UTF-8')
-            : substr($texto, 0, (int)$longitud);
-    }
-
-    private function cerrarStatementSinInterrumpir($stmt) {
-        if (!$stmt instanceof mysqli_stmt) {
-            return;
-        }
-
-        try {
-            $stmt->close();
-        } catch (Throwable $error) {
-            // Se preserva el error original de auditoría.
-        }
     }
 
     /**
@@ -230,7 +163,7 @@ class Auditoria {
      * @param string $descripcionCambio Descripción del cambio realizado
      */
     public function registrarAlta($id_usuario, $usuario, $perfil, $modulo, $url, $descripcionCambio) {
-        return $this->registrarAccion($id_usuario, $usuario, $perfil, 'INSERT', $modulo, $url, $descripcionCambio);
+        $this->registrarAccion($id_usuario, $usuario, $perfil, 'INSERT', $modulo, $url, $descripcionCambio);
     }
 
     /**
@@ -247,7 +180,7 @@ class Auditoria {
      * @param string $datosPrevios Valor anterior al cambio (dato previo)
      */
     public function registrarModificacion($id_usuario, $usuario, $perfil, $modulo, $url, $descripcionCambio, $datosPrevios) {
-        return $this->registrarAccion($id_usuario, $usuario, $perfil, 'UPDATE', $modulo, $url, $descripcionCambio, $datosPrevios);
+        $this->registrarAccion($id_usuario, $usuario, $perfil, 'UPDATE', $modulo, $url, $descripcionCambio, $datosPrevios);
     }
 
     /**
@@ -282,67 +215,36 @@ class Auditoria {
      * @param string|null $datosPrevios Valor anterior al cambio (solo se usa para modificaciones)
      */
     private function registrarAccion($id_usuario, $usuario, $perfil, $accion, $modulo, $url, $descripcionCambio, $datosPrevios = null) {
-        $ipOrigen = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
-        $dispositivoCompleto = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-        $dispositivo = $this->limitarTexto($dispositivoCompleto, 100);
-        $navegador = $this->obtenerNavegador($dispositivoCompleto); // Determinar el navegador
+        $ipOrigen = $_SERVER['REMOTE_ADDR'];             // Obtener la IP del usuario
+        $dispositivo = $_SERVER['HTTP_USER_AGENT'];      // Obtener el User-Agent del navegador
+        $navegador = $this->obtenerNavegador($dispositivo); // Determinar el navegador
         $metodoAcceso = 'WEB';                           // Método de acceso (WEB en este caso)
 
         // Consulta SQL para insertar el registro en la tabla de auditoría
         $sql = "INSERT INTO auditoria (id_usuario, email_usuario, perfil_usuario, accion_realizada, fecha_hora, ip_origen, dispositivo, navegador, modulo_afectado, metodo_acceso, url_acceso, descripcion_cambio, datos_previos)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-        $usuario = $this->limitarTexto((string)$usuario, 255);
-        $perfil = $this->limitarTexto((string)$perfil, 255);
-        $modulo = $this->limitarTexto((string)$modulo, 100);
-        $url = $this->limitarTexto((string)$url, 255);
+        // Preparar la consulta y asignar los valores correspondientes
+        $stmt = $this->conexion->prepare($sql);
+        $stmt->bind_param(
+            'isssssssssss',              // Tipos de parámetros (int y string)
+            $id_usuario,                 // ID del usuario
+            $usuario,                    // Email del usuario
+            $perfil,                     // Perfil del usuario
+            $accion,                     // Tipo de acción (INSERT, UPDATE, DELETE)
+            $ipOrigen,                   // IP del usuario
+            $dispositivo,                // User-Agent del navegador
+            $navegador,                  // Nombre del navegador
+            $modulo,                     // Módulo afectado
+            $metodoAcceso,               // Método de acceso
+            $url,                        // URL de acceso
+            $descripcionCambio,          // Descripción del cambio
+            $datosPrevios                // Dato previo (para modificaciones)
+        );
 
-        $stmt = null;
-        try {
-            $stmt = $this->conexion->prepare($sql);
-            if (!$stmt) {
-                throw new AuditoriaException('No se pudo preparar el registro de auditoría.');
-            }
-            if (!$stmt->bind_param(
-                'isssssssssss',
-                $id_usuario,
-                $usuario,
-                $perfil,
-                $accion,
-                $ipOrigen,
-                $dispositivo,
-                $navegador,
-                $modulo,
-                $metodoAcceso,
-                $url,
-                $descripcionCambio,
-                $datosPrevios
-            )) {
-                $stmt->close();
-                $stmt = null;
-                throw new AuditoriaException('No se pudieron vincular los datos de auditoría.');
-            }
-            if (!$stmt->execute() || $stmt->affected_rows !== 1) {
-                $stmt->close();
-                $stmt = null;
-                throw new AuditoriaException('No se pudo registrar la auditoría.');
-            }
-            if (!$stmt->close()) {
-                $stmt = null;
-                throw new AuditoriaException('No se pudo finalizar el registro de auditoría.');
-            }
-            $stmt = null;
-
-            return true;
-        } catch (AuditoriaException $error) {
-            $this->cerrarStatementSinInterrumpir($stmt);
-            error_log('ADMINTECH Auditoria: no se pudo registrar la acción.');
-            return false;
-        } catch (Throwable $error) {
-            $this->cerrarStatementSinInterrumpir($stmt);
-            error_log('ADMINTECH Auditoria: no se pudo registrar la acción.');
-            return false;
-        }
+        // Ejecutar la consulta
+        $stmt->execute();
+        $stmt->close(); // Cerrar la declaración
     }
 
     /**

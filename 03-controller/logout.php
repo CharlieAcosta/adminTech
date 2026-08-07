@@ -1,6 +1,5 @@
 <?php
-require_once __DIR__ . '/../06-funciones_php/sesionSegura.php';
-iniciarSesionAdmintech(); // Iniciar la sesión para poder destruirla
+session_start(); // Iniciar la sesión para poder destruirla
 
 include_once '../00-config/db.php';  // Incluir conexión a la base de datos
 include_once '../06-funciones_php/funciones.php';  // Incluir conexión a la base de datos
@@ -26,7 +25,8 @@ if (isset($_SESSION['usuario'])) {
 
 // Destruir la sesión
 eliminarTokenRecordarmeLoginActual();
-destruirSesionAdmintech();
+session_unset();
+session_destroy();
 
 // Redirigir al formulario de login después del logout
 header('Location: ../01-views/login.php');

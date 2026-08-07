@@ -4,7 +4,6 @@ include_once '../00-config/db.php';
 include_once '../06-funciones_php/cleanInput.php'; // limpia las variables input
 include_once '../06-funciones_php/base_url.php';
 include_once '../06-funciones_php/funciones.php'; // funciones útiles
-include_once '../06-funciones_php/csrf.php'; // ciclo del token ligado a la sesión autenticada
 include_once '../10-clases/Auditoria.php';  // Archivo con la clase Auditoria
 
 // Conectar a la base de datos
@@ -56,14 +55,10 @@ if (!$db) {
                 // Establecer duración máxima de la sesión en segundos (3600 = 1 hora)
                 ini_set('session.gc_maxlifetime', SESION_TIME);
 
-                if (!iniciarSesionAdmintech()
-                    || !reemplazarIdentidadAutenticadaAdmintech($rows[0])) {
-                    destruirSesionAdmintech();
-                    header('Location: ../01-views/login.php');
-                    exit;
-                }
+                session_start(); // Inicia la sesión
 
                 // Establecer variables de sesión
+                $_SESSION["usuario"] = $rows[0];
                 $_SESSION["base_url"] = base_url() . "/adminTech/";
 
                 if (!empty($_POST['recordarme'])) {
