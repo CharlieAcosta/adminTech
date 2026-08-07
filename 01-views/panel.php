@@ -3,6 +3,7 @@ session_start();
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../04-modelo/vigenciaCatalogosModel.php';
+include_once '../04-modelo/feriadosModel.php';
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
 sesion(); //Verifica si hay usuario sesionado
 
@@ -29,6 +30,7 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
+$mostrarFeriados = perfilPuedeAdministrarFeriados($perfil);
 $totalesVigenciaJornales = in_array($perfil, $tipoJornales, true) ? modGetTotalesVigenciaJornales() : null;
 $totalesVigenciaMateriales = in_array($perfil, $materiales, true) ? modGetTotalesVigenciaMateriales() : null;
 $ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
@@ -426,6 +428,20 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
           </div>
           <!-- /.info-box -->
           <?php } ?>           
+
+         <?php if ($mostrarFeriados){ ?>
+          <div class="col-12 col-sm-6 col-md-4">
+            <a href="../01-views/feriados_listado.php">
+              <div class="info-box modulo-card">
+                <span class="info-box-icon bg-indigo elevation-1"><i class="fas fa-calendar-day"></i></span>
+                <div class="info-box-content">
+                  <h3 class="info-box-text modulo-card__titulo">Feriados</h3>
+                  <div class="modulo-card__alertas"></div>
+                </div>
+              </div>
+            </a>
+          </div>
+         <?php } ?>
 
     </div>
         <!-- /.row -->

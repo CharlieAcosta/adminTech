@@ -1,0 +1,111 @@
+.feriados-cabecera-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+}
+
+.feriados-filtros {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.feriados-filtros .form-group {
+  width: 220px;
+}
+
+#feriadosTabla tbody td {
+  vertical-align: middle;
+}
+
+#feriadosTabla .feriados-fecha {
+  white-space: nowrap;
+}
+
+#feriadosTabla .feriados-acciones {
+  align-items: center;
+  display: grid;
+  gap: .25rem;
+  grid-template-columns: repeat(2, 2rem);
+  justify-content: center;
+  min-width: 4.25rem;
+}
+
+#feriadosTabla .feriados-accion {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  line-height: 1;
+  text-decoration: none;
+  width: 2rem;
+}
+
+#feriadosTabla .feriados-accion .v-icon-accion {
+  margin-right: 0;
+}
+
+#feriadosTabla .feriados-accion-editar .v-icon-accion {
+  color: #6c757d;
+}
+
+#feriadosTabla .feriados-accion-desactivar .v-icon-accion {
+  color: #dc3545;
+}
+
+#feriadosTabla .feriados-accion-reactivar .v-icon-accion {
+  color: #28a745;
+}
+
+#feriadosTabla .feriados-accion-editar:hover .v-icon-accion,
+#feriadosTabla .feriados-accion-editar:focus .v-icon-accion {
+  color: #007bff;
+}
+
+#feriadosTabla .feriados-accion-desactivar:hover .v-icon-accion,
+#feriadosTabla .feriados-accion-desactivar:focus .v-icon-accion {
+  color: #bd2130;
+}
+
+#feriadosTabla .feriados-accion-reactivar:hover .v-icon-accion,
+#feriadosTabla .feriados-accion-reactivar:focus .v-icon-accion {
+  color: #1e7e34;
+}
+
+#feriadosTabla .feriados-accion:focus {
+  box-shadow: none;
+  outline: 2px solid #007bff;
+  outline-offset: 1px;
+}
+
+#feriadosTabla tr.feriado-deshabilitado td {
+  color: #5f666d;
+}
+
+#feriadosEstadoCarga,
+#feriadosErrorCarga {
+  margin-bottom: 1rem;
+}
+
+#feriadosFormularioContexto {
+  padding: .65rem .8rem;
+}
+
+@media (max-width: 575.98px) {
+  .feriados-cabecera-acciones {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-top: .75rem;
+  }
+
+  .feriados-cabecera-acciones .btn {
+    flex: 1 1 100%;
+  }
+
+  .feriados-filtros,
+  .feriados-filtros .form-group {
+    width: 100%;
+  }
+
+}
