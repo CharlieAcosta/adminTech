@@ -31,7 +31,7 @@ $yearMonth = $year.'-'.$month;
 $eventos = json_encode(poblarCalendarByIdyMes($id_agente, $yearMonth,'php'));
 //dd($eventos);
 
-$feriados = db_select_with_filters_V2('feriados');
+$feriados = db_select_with_filters_V2('feriados', ['estado'], ['='], ['enabled']);
 
 $feriados_js = [];
 

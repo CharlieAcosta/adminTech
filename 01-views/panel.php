@@ -29,6 +29,7 @@ $materiales = array('Super Administrador','Administrador', 'Técnico','Tecnico A
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
 $tipoJornales = array('Super Administrador','Administrador','Administrativo');
+$feriados = array('Super Administrador','Administrador','Administrativo');
 $totalesVigenciaJornales = in_array($perfil, $tipoJornales, true) ? modGetTotalesVigenciaJornales() : null;
 $totalesVigenciaMateriales = in_array($perfil, $materiales, true) ? modGetTotalesVigenciaMateriales() : null;
 $ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
@@ -425,7 +426,25 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
             </a>
           </div>
           <!-- /.info-box -->
-          <?php } ?>           
+          <?php } ?>
+
+         <?php if (in_array($perfil, $feriados)){ ?>
+         <!-- /.info-box -->
+          <div class="col-12 col-sm-6 col-md-4">
+            <a href="../01-views/feriados_listado.php">
+               <div class="info-box modulo-card">
+                  <span class="info-box-icon bg-indigo elevation-1"><i class="fas fa-calendar-day"></i></span>
+                  <!-- .info-box-content -->
+                  <div class="info-box-content">
+                    <h3 class="info-box-text modulo-card__titulo">Feriados</h3>
+                    <div class="modulo-card__alertas"></div>
+                  </div>
+                <!-- /.info-box-content -->
+              </div>
+            </a>
+          </div>
+          <!-- /.info-box -->
+          <?php } ?>
 
     </div>
         <!-- /.row -->
