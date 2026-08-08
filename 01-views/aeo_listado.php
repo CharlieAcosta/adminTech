@@ -21,7 +21,7 @@ registrarNavegacion('AEO - listado');
 
 //*******************************************************************************************************
 
-$feriados = db_select_with_filters_V2('feriados');
+$feriados = db_select_with_filters_V2('feriados', ['estado'], ['='], ['enabled']);
 
 $feriados_js = [];
 
