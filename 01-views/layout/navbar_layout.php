@@ -62,6 +62,7 @@ $presupuestos = array('Super Administrador','Administrador','Administrativo','TÃ
 $materiales = array('Super Administrador','Administrador', 'TÃ©cnico','Tecnico Administrativo');
 $obras = array('Super Administrador','Administrador','Administrativo');
 $AEO = array('Super Administrador','Administrador','Administrativo','Tecnico Administrativo');
+$feriados = array('Super Administrador','Administrador','Administrativo');
 $ocPendientesSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? contarOrdenesCompraPendientes() : 0;
 $ocHabilitadasBandejaAdministrativaNavbar = perfilPuedeAccederSoloOrdenCompra($perfil)
     ? contarOrdenesCompraHabilitadasBandejaAdministrativa()
@@ -155,6 +156,14 @@ $iconoSeguimientoNavbar = perfilPuedeAccederSoloOrdenCompra($perfil) ? 'fa-solid
         <li class="nav-item">
             <a href="../01-views/jornales_listado.php" class="nav-link custom-button v-bg-verde-oscuro" data-toggle="tooltip" title="Tipos de jornales">
                 <i class="fa-solid fa-sack-dollar"></i>
+            </a>
+        </li>
+        <?php } ?>
+
+        <?php if (in_array($perfil, $feriados)){ ?>
+        <li class="nav-item">
+            <a href="../01-views/feriados_listado.php" class="nav-link custom-button bg-indigo" data-toggle="tooltip" title="Feriados">
+                <i class="fas fa-calendar-day"></i>
             </a>
         </li>
         <?php } ?>
