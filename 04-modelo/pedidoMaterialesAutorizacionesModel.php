@@ -89,9 +89,12 @@ if (!function_exists('obtenerContextoFilaAutorizacionPedidoMateriales')) {
         $cantidadPrevia = normalizarDecimalAutorizacionPedidoMateriales(
             $fila['pedido_autorizacion_previo'] ?? 0
         );
-        $requiereAutorizacion = $tipoFila === 'agregado'
-            ? $cantidadPedido > 0.00005
-            : $cantidadAcumulada > ($cantidadInicial + 0.00005);
+        // La autorizacion solo cubre el ciclo (numero_pedido) en el que fue otorgada: un excedente
+        // ya autorizado/confirmado en un pedido historico no debe volver a exigir autorizacion en un
+        // ciclo nuevo cuyo pedido activo todavia esta en 0. Por eso ambos tipos de fila exigen que la
+        // cantidad del pedido activo sea positiva antes de evaluar el excedente acumulado.
+        $requiereAutorizacion = $cantidadPedido > 0.00005
+            && ($tipoFila === 'agregado' || $cantidadAcumulada > ($cantidadInicial + 0.00005));
         $claveFila = construirClaveFilaAutorizacionPedidoMateriales($fila);
         $datosHash = [
             'clave_fila' => $claveFila,
