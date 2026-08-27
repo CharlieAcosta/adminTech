@@ -701,6 +701,12 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 								data-toggle="tooltip"
 								title="Gestionar orden de compra"></i>';
 				}
+
+				$filas .= '<i class="v-icon-accion p-1 fas fa-chart-line"
+							data-accion="dashboard_seguimiento"
+							data-id="'.$value_all_registros['id_previsita'].'"
+							data-toggle="tooltip"
+							title="Dashboard de seguimiento"></i>';
 				$filas .= '</td>';
 				$filas .='</tr>';
 				continue;
@@ -751,6 +757,12 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 							data-toggle="tooltip" 
 							title="Historial de presupuesto"></i>';
 			}
+
+			$filas .= '<i class="v-icon-accion p-1 fas fa-chart-line"
+						data-accion="dashboard_seguimiento"
+						data-id="'.$value_all_registros['id_previsita'].'"
+						data-toggle="tooltip"
+						title="Dashboard de seguimiento"></i>';
 
 			if (in_array($perfil, $deleteIcon)){ 				
 				$filas .= '<i class="v-icon-accion text-danger p-1 fas fa-trash-alt" 
