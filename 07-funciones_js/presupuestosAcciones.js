@@ -569,6 +569,23 @@ function resetearModalEnviarDocumentoEmitido() {
     $('#btnEnviarDocumentoEmitido').prop('disabled', false);
 }
 
+function resetearModalDashboardSeguimiento() {
+    const $modal = $('#modalDashboardSeguimiento');
+
+    $modal.removeData('id');
+    $('#modalDashboardSeguimientoContexto [data-dashboard-field="id_previsita"]').text('-');
+}
+
+function abrirModalDashboardSeguimientoDesdeListado(idPrevisita) {
+    resetearModalDashboardSeguimiento();
+
+    $('#modalDashboardSeguimiento')
+        .data('id', idPrevisita);
+
+    $('#modalDashboardSeguimientoContexto [data-dashboard-field="id_previsita"]').text(idPrevisita || '-');
+    $('#modalDashboardSeguimiento').modal('show');
+}
+
 function construirHtmlAccionesHistorialPresupuesto(acciones, idPrevisita, idPresupuesto) {
     if (!Array.isArray(acciones) || !acciones.length) {
         return '';
@@ -1803,6 +1820,11 @@ function presupuestoAcciones(elemento){
                 window.location.href='seguimiento_form.php?acci=e&id='+idOrdenCompraSeguimiento+'&oc=1#collapse4_OC';
             break;
 
+            case 'dashboard_seguimiento':
+                var idPrevisitaDashboard = Number($(elemento).data('id') || $(elemento).closest('tr').data('id') || 0);
+                abrirModalDashboardSeguimientoDesdeListado(idPrevisitaDashboard);
+            break;
+
             case 'pdf': // generar pdf del usuario
                 var id = $(elemento).closest('tr').data('id');
 
@@ -2098,6 +2120,10 @@ $(document).on('hidden.bs.modal', '#modalHistorialPresupuesto', function(){
     $(this).removeData('id').removeData('id-presupuesto');
     $('#modalHistorialContexto').removeData('base-context').html('');
     $('#modalHistorialPresupuestoBody').html('<div class="text-muted">Cargando historial...</div>');
+});
+
+$(document).on('hidden.bs.modal', '#modalDashboardSeguimiento', function(){
+    resetearModalDashboardSeguimiento();
 });
 
 $(document).on('hidden.bs.modal', '#modalEnviarDocumentoEmitidoPresupuesto', function(){
