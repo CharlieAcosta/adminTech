@@ -69,6 +69,53 @@ if (!function_exists('validarAccesoDocumentoAprobadoPresupuesto')) {
     }
 }
 
+if (!function_exists('leerEnteroPositivoSolicitudPresupuesto')) {
+    function leerEnteroPositivoSolicitudPresupuesto(string $campo): ?int
+    {
+        $valor = $_POST[$campo] ?? null;
+        if (!is_string($valor) && !is_int($valor)) {
+            return null;
+        }
+
+        $valor = trim((string)$valor);
+        if (!preg_match('/^[1-9]\d*$/D', $valor)) {
+            return null;
+        }
+
+        $entero = filter_var($valor, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1],
+        ]);
+
+        return $entero === false ? null : (int)$entero;
+    }
+}
+
+if (!function_exists('validarAccesoGenerarPresupuestoDesdeVisita')) {
+    function validarAccesoGenerarPresupuestoDesdeVisita(): array
+    {
+        $idUsuario = (int)($_SESSION['usuario']['id_usuario'] ?? 0);
+        $perfil = obtenerPerfilUsuarioSolicitudPresupuesto();
+
+        if ($idUsuario <= 0 || $perfil === '') {
+            return ['ok' => false, 'status' => 401, 'msg' => 'No hay sesion de usuario activa.'];
+        }
+
+        if (!perfilPuedeVerSeguimientoCompletoOrdenCompra($perfil)) {
+            return ['ok' => false, 'status' => 403, 'msg' => 'El perfil no tiene permiso para generar Presupuesto desde Visita.'];
+        }
+
+        return ['ok' => true, 'status' => 200, 'id_usuario' => $idUsuario, 'perfil' => $perfil];
+    }
+}
+
+if (!function_exists('responderJsonPresupuesto')) {
+    function responderJsonPresupuesto(array $payload, int $status = 200): void
+    {
+        http_response_code($status);
+        echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
 if (!function_exists('metadatosPublicosDocumentoAprobadoPresupuesto')) {
     function metadatosPublicosDocumentoAprobadoPresupuesto(array $documento): array
     {
@@ -160,6 +207,46 @@ try {
     $funcion = $_POST['funcion'] ?? '';
 
     switch ($funcion) {
+        case 'generarPresupuestoDesdeVisita':
+        case 'generar_presupuesto_desde_visita':
+            $accesoGeneracion = validarAccesoGenerarPresupuestoDesdeVisita();
+            if (empty($accesoGeneracion['ok'])) {
+                responderJsonPresupuesto([
+                    'ok' => false,
+                    'status' => false,
+                    'msg' => (string)$accesoGeneracion['msg'],
+                ], (int)$accesoGeneracion['status']);
+            }
+
+            $idPrevisita = leerEnteroPositivoSolicitudPresupuesto('id_previsita');
+            if ($idPrevisita === null) {
+                responderJsonPresupuesto([
+                    'ok' => false,
+                    'status' => false,
+                    'msg' => 'La pre-visita debe ser un entero positivo.',
+                ], 400);
+            }
+
+            try {
+                $resultado = generarPresupuestoDesdeVisita(
+                    $idPrevisita,
+                    (int)$accesoGeneracion['id_usuario']
+                );
+
+                responderJsonPresupuesto($resultado, 200);
+            } catch (Throwable $e) {
+                $codigo = (int)$e->getCode();
+                $httpStatus = in_array($codigo, [400, 401, 403, 404, 409, 422], true) ? $codigo : 500;
+                if ($httpStatus === 500) {
+                    error_log('generarPresupuestoDesdeVisita controller: ' . $e->getMessage());
+                }
+
+                responderJsonPresupuesto([
+                    'ok' => false,
+                    'status' => false,
+                    'msg' => $httpStatus === 500 ? 'No se pudo generar el Presupuesto desde la Visita.' : $e->getMessage(),
+                ], $httpStatus);
+            }
         case 'obtenerDisponibilidadPresupuestoAprobado':
             $accesoDocumento = validarAccesoDocumentoAprobadoPresupuesto();
             if (empty($accesoDocumento['ok'])) {

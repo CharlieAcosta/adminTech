@@ -5,6 +5,8 @@ require_once __DIR__ . '/conectDB.php';
 require_once __DIR__ . '/schemaIntrospectionModel.php';
 require_once __DIR__ . '/presupuestoComercialLockModel.php';
 require_once __DIR__ . '/previsitaWorkflowModel.php';
+require_once __DIR__ . '/visitaPresupuestoEventoModel.php';
+require_once __DIR__ . '/visitaModel.php';
 
 if (!function_exists('repararTextoMojibakePresupuesto')) {
     function repararTextoMojibakePresupuesto(?string $texto): string
@@ -1533,14 +1535,11 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
     }
 }
 
-function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
+function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
 {
     // Config de uploads (ajustá si querés)
     $ALLOWED_EXT = ['jpg','jpeg','png','webp','gif'];
     $MAX_SIZE    = 15 * 1024 * 1024; // 15 MB por archivo
-
-    $db = conectDB();
-    mysqli_begin_transaction($db);
 
     try {
         $id_previsita   = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : null;
@@ -1560,14 +1559,29 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             throw new RuntimeException('id_previsita es requerido');
         }
 
-        $bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId($id_previsita);
+        $estadoWorkflowPrevisita = obtenerEstadoWorkflowPrevisitaPorIdEnConexion($db, $id_previsita);
+        $bloqueoWorkflowPrevisita = snapshotWorkflowPrevisitaEstado($estadoWorkflowPrevisita);
         if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
             throw new RuntimeException(
                 $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? '')
             );
         }
 
-        $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita($id_previsita, $id_presupuesto);
+        $bloqueoEdicion = [
+            'bloqueado' => false,
+            'estado' => '',
+            'mensaje' => '',
+        ];
+        $modoCircuito = obtenerModoActivoCircuitoComercialPresupuestosLock($db);
+        $presupuestoBloqueo = obtenerPresupuestoActualEdicionComercialPresupuestoEnConexion($db, $id_previsita, $id_presupuesto);
+        if ($presupuestoBloqueo) {
+            $estadoBloqueo = resolverEstadoBloqueoEdicionComercialPresupuestoEnConexion($db, $presupuestoBloqueo, $modoCircuito);
+            $bloqueoEdicion['estado'] = $estadoBloqueo;
+            $bloqueoEdicion['bloqueado'] = estadoBloqueaEdicionComercialPresupuesto($estadoBloqueo);
+            $bloqueoEdicion['mensaje'] = $bloqueoEdicion['bloqueado']
+                ? mensajeBloqueoEdicionComercialPresupuesto($estadoBloqueo)
+                : '';
+        }
         if (!empty($bloqueoEdicion['bloqueado'])) {
             throw new RuntimeException(
                 $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? '')
@@ -2082,8 +2096,6 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         }
         mysqli_stmt_close($stmt);
 
-        mysqli_commit($db);
-
         return [
             'ok'             => true,
             'id_presupuesto' => $id_presupuesto,
@@ -2092,10 +2104,25 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             'lineas'         => $lineasInsertadas
         ];
     } catch (Throwable $e) {
+        throw $e;
+    }
+}
+
+function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
+{
+    $db = conectDB();
+    mysqli_begin_transaction($db);
+
+    try {
+        $resultado = guardarPresupuestoEnConexion($db, $payload, $archivosPorTarea, $eliminadasPorTarea);
+        mysqli_commit($db);
+
+        return $resultado;
+    } catch (Throwable $e) {
         mysqli_rollback($db);
         $codigo = (int)$e->getCode();
         $respuesta = ['ok' => false, 'msg' => $e->getMessage()];
-        if (in_array($codigo, [400, 404, 409], true)) {
+        if (in_array($codigo, [400, 401, 403, 404, 409, 422], true)) {
             $respuesta['http_status'] = $codigo;
         }
         return $respuesta;
@@ -2104,6 +2131,243 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
     }
 }
 
+if (!function_exists('nombreLockGenerarPresupuestoDesdeVisita')) {
+    function nombreLockGenerarPresupuestoDesdeVisita(int $idPrevisita): string
+    {
+        return 'admintech:generar-presupuesto:' . $idPrevisita;
+    }
+}
+
+if (!function_exists('adquirirLockGenerarPresupuestoDesdeVisita')) {
+    function adquirirLockGenerarPresupuestoDesdeVisita(mysqli $db, int $idPrevisita, int $timeoutSegundos = 10): string
+    {
+        $nombreLock = nombreLockGenerarPresupuestoDesdeVisita($idPrevisita);
+        $stmt = mysqli_prepare($db, 'SELECT GET_LOCK(?, ?) AS lock_obtenido');
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar el lock de generacion de Presupuesto.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'si', $nombreLock, $timeoutSegundos);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo obtener el lock de generacion de Presupuesto: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        if ((int)($row['lock_obtenido'] ?? 0) !== 1) {
+            throw new RuntimeException('La pre-visita esta siendo procesada por otra generacion de Presupuesto.', 409);
+        }
+
+        return $nombreLock;
+    }
+}
+
+if (!function_exists('liberarLockGenerarPresupuestoDesdeVisita')) {
+    function liberarLockGenerarPresupuestoDesdeVisita(mysqli $db, ?string $nombreLock): void
+    {
+        if (!$nombreLock) {
+            return;
+        }
+
+        $stmt = mysqli_prepare($db, 'SELECT RELEASE_LOCK(?)');
+        if (!$stmt) {
+            return;
+        }
+
+        mysqli_stmt_bind_param($stmt, 's', $nombreLock);
+        @mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
+}
+
+if (!function_exists('obtenerPrevisitaGenerarPresupuestoEnConexion')) {
+    function obtenerPrevisitaGenerarPresupuestoEnConexion(mysqli $db, int $idPrevisita): ?array
+    {
+        $stmt = mysqli_prepare($db, 'SELECT id_previsita, estado_visita FROM previsitas WHERE id_previsita = ? LIMIT 1');
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar la validacion de Pre-visita.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPrevisita);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar la Pre-visita: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('obtenerPresupuestoVigentePorPrevisitaEnConexion')) {
+    function obtenerPresupuestoVigentePorPrevisitaEnConexion(mysqli $db, int $idPrevisita): ?array
+    {
+        $stmt = mysqli_prepare($db, "
+            SELECT id_presupuesto, id_previsita, id_visita, estado, version, created_at, updated_at
+            FROM presupuestos
+            WHERE id_previsita = ?
+            ORDER BY version DESC, created_at DESC, id_presupuesto DESC
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar la consulta de Presupuesto vigente.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPrevisita);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar el Presupuesto vigente: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('obtenerPresupuestoBasicoPorIdEnConexion')) {
+    function obtenerPresupuestoBasicoPorIdEnConexion(mysqli $db, int $idPresupuesto): ?array
+    {
+        $stmt = mysqli_prepare($db, "
+            SELECT id_presupuesto, id_previsita, id_visita, estado, version, created_at, updated_at
+            FROM presupuestos
+            WHERE id_presupuesto = ?
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar la consulta de Presupuesto.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPresupuesto);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar el Presupuesto: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('respuestaGeneracionPresupuestoDesdeEvento')) {
+    function respuestaGeneracionPresupuestoDesdeEvento(array $evento, array $presupuesto, bool $idempotente): array
+    {
+        return [
+            'ok' => true,
+            'status' => true,
+            'idempotente' => $idempotente,
+            'id_previsita' => (int)$evento['id_previsita'],
+            'id_presupuesto' => (int)$evento['id_presupuesto'],
+            'estado' => strtoupper((string)($presupuesto['estado'] ?? '')),
+            'version' => isset($presupuesto['version']) ? (int)$presupuesto['version'] : null,
+            'evento' => [
+                'id_evento' => (int)$evento['id_evento'],
+                'tipo_evento' => (string)$evento['tipo_evento'],
+                'origen' => (string)$evento['origen'],
+                'created_at' => (string)$evento['created_at'],
+            ],
+        ];
+    }
+}
+
+if (!function_exists('generarPresupuestoDesdeVisita')) {
+    function generarPresupuestoDesdeVisita(int $idPrevisita, int $idUsuario): array
+    {
+        if ($idPrevisita <= 0) {
+            throw new RuntimeException('La pre-visita es obligatoria.', 400);
+        }
+        if ($idUsuario <= 0) {
+            throw new RuntimeException('No hay sesion de usuario activa.', 401);
+        }
+
+        $db = conectDB();
+        mysqli_set_charset($db, 'utf8mb4');
+        $nombreLock = null;
+
+        try {
+            $nombreLock = adquirirLockGenerarPresupuestoDesdeVisita($db, $idPrevisita, 10);
+            mysqli_begin_transaction($db);
+
+            $eventoExistente = obtenerEventoCongelamientoVisitaPorPrevisitaEnConexion($db, $idPrevisita);
+            if ($eventoExistente) {
+                $presupuestoEvento = obtenerPresupuestoBasicoPorIdEnConexion($db, (int)$eventoExistente['id_presupuesto']);
+                if (!$presupuestoEvento) {
+                    throw new RuntimeException('Existe evento de congelamiento sin Presupuesto asociado.', 409);
+                }
+
+                mysqli_commit($db);
+                return respuestaGeneracionPresupuestoDesdeEvento($eventoExistente, $presupuestoEvento, true);
+            }
+
+            $presupuestoExistente = obtenerPresupuestoVigentePorPrevisitaEnConexion($db, $idPrevisita);
+            if ($presupuestoExistente) {
+                throw new RuntimeException('Existe Presupuesto para la Pre-visita sin evento de congelamiento asociado.', 409);
+            }
+
+            $previsita = obtenerPrevisitaGenerarPresupuestoEnConexion($db, $idPrevisita);
+            if (!$previsita) {
+                throw new RuntimeException('No se encontro la Pre-visita informada.', 404);
+            }
+
+            $estadoPrevisita = (string)($previsita['estado_visita'] ?? '');
+            if (!estadoHabilitaVisitaWorkflowPrevisita($estadoPrevisita)) {
+                throw new RuntimeException('La Pre-visita debe estar Ejecutada para generar Presupuesto.', 409);
+            }
+
+            $payload = obtenerPayloadPresupuestoDesdeVisitaPersistidaEnConexion($db, $idPrevisita);
+            $resultadoPresupuesto = guardarPresupuestoEnConexion($db, $payload, [], []);
+            $idPresupuesto = (int)($resultadoPresupuesto['id_presupuesto'] ?? 0);
+            if ($idPresupuesto <= 0) {
+                throw new RuntimeException('No se pudo crear el Presupuesto BORRADOR.');
+            }
+
+            $evento = registrarEventoCongelamientoVisitaPresupuestoEnConexion(
+                $db,
+                $idPrevisita,
+                $idPresupuesto,
+                $idUsuario,
+                'GENERACION'
+            );
+
+            if (function_exists('insertarAccionIntervencionPresupuestoEnConexion')) {
+                insertarAccionIntervencionPresupuestoEnConexion($db, $idPresupuesto, $idPrevisita, $idUsuario, 'guardar');
+            }
+
+            $presupuestoCreado = obtenerPresupuestoBasicoPorIdEnConexion($db, $idPresupuesto);
+            if (!$presupuestoCreado) {
+                throw new RuntimeException('No se pudo recuperar el Presupuesto BORRADOR creado.');
+            }
+
+            mysqli_commit($db);
+            return respuestaGeneracionPresupuestoDesdeEvento($evento, $presupuestoCreado, false);
+        } catch (Throwable $e) {
+            if ($db instanceof mysqli) {
+                @mysqli_rollback($db);
+            }
+            throw $e;
+        } finally {
+            if ($db instanceof mysqli) {
+                liberarLockGenerarPresupuestoDesdeVisita($db, $nombreLock);
+                mysqli_close($db);
+            }
+        }
+    }
+}
 // === Helper: preparar statement o lanzar con el detalle real de MySQL ===
 if (!function_exists('stmt_or_throw')) {
     function stmt_or_throw(mysqli $db, string $sql): mysqli_stmt {

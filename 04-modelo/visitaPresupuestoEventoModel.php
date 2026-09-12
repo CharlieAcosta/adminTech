@@ -68,6 +68,60 @@ if (!function_exists('obtenerEventoCongelamientoVisitaPorPrevisitaEnConexion')) 
     }
 }
 
+
+if (!function_exists('registrarEventoCongelamientoVisitaPresupuestoEnConexion')) {
+    function registrarEventoCongelamientoVisitaPresupuestoEnConexion(
+        mysqli $db,
+        int $idPrevisita,
+        int $idPresupuesto,
+        ?int $idUsuario,
+        string $origen
+    ): array {
+        if ($idPrevisita <= 0 || $idPresupuesto <= 0) {
+            throw new RuntimeException('Los identificadores del evento de congelamiento son invalidos.', 400);
+        }
+
+        $origen = strtoupper(trim($origen));
+        if (!in_array($origen, ['LEGACY', 'GENERACION'], true)) {
+            throw new RuntimeException('El origen del evento de congelamiento es invalido.', 400);
+        }
+
+        $tipoEvento = tipoEventoCongelamientoVisitaPresupuesto();
+        $stmt = mysqli_prepare($db, "
+            INSERT INTO visita_presupuesto_eventos (
+                id_previsita,
+                tipo_evento,
+                id_presupuesto,
+                id_usuario,
+                origen,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE id_evento = LAST_INSERT_ID(id_evento)
+        ");
+
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar el evento de congelamiento de Visita.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'isiis', $idPrevisita, $tipoEvento, $idPresupuesto, $idUsuario, $origen);
+
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo registrar el evento de congelamiento de Visita: ' . $mensaje);
+        }
+
+        mysqli_stmt_close($stmt);
+
+        $evento = obtenerEventoCongelamientoVisitaPorPrevisitaEnConexion($db, $idPrevisita);
+        if (!$evento) {
+            throw new RuntimeException('No se pudo recuperar el evento de congelamiento de Visita.');
+        }
+
+        return $evento;
+    }
+}
 if (!function_exists('obtenerEventoCongelamientoVisitaPorPrevisita')) {
     function obtenerEventoCongelamientoVisitaPorPrevisita(int $idPrevisita): ?array
     {
