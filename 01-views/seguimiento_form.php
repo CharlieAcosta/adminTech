@@ -11,6 +11,7 @@ include_once '../04-modelo/callesModel.php'; //conecta a la tabla de usuarios
 include_once '../04-modelo/clientesModel.php'; //conecta a la tabla de clientes
 include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
+include_once '../04-modelo/visitaPresupuestoEventoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
@@ -237,6 +238,11 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
       $id_visita = $datos['id_previsita'];
 
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
+  }
+
+  $visitaCongeladaPorPresupuesto = false;
+  if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
+      $visitaCongeladaPorPresupuesto = visitaEstaCongeladaPorPresupuesto((int)$datos['id_previsita']);
   }
 
   
@@ -1062,6 +1068,9 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 ?>
 <script>
   const presupuestoGenerado = <?php echo jsonParaJsSeguro((bool)($presupuestoGenerado ?? false), 'false'); ?>;
+  window.presupuestoGeneradoInicial = presupuestoGenerado;
+  window.presupuestoGenerado = presupuestoGenerado;
+  window.VISITA_CONGELADA_POR_PRESUPUESTO = <?php echo jsonParaJsSeguro((bool)($visitaCongeladaPorPresupuesto ?? false), 'false'); ?>;
 </script>
 
 <!DOCTYPE html>
@@ -2462,7 +2471,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
 <?php if ($mostrarBloquesTecnicosSeguimiento && isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
   <!-- start accordion visita -->
-  <div class="accordion" id="accordionVisita">
+  <div class="accordion" id="accordionVisita" data-visita-congelada-presupuesto="<?php echo !empty($visitaCongeladaPorPresupuesto) ? '1' : '0'; ?>">
     <div class="card <?php echo $visita_card; ?> accordion_2">
     <div class="card-header" id="headingVisita">
       <h2 class="mb-0 d-flex align-items-center">
@@ -2501,6 +2510,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
     <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
         <div class="card-body">
+          <?php if (!empty($visitaCongeladaPorPresupuesto)): ?>
+            <div class="alert alert-info py-2 mb-3 visita-congelada-aviso" role="alert">
+              <i class="fa fa-lock mr-2"></i> Visita cerrada al generar el presupuesto.
+            </div>
+          <?php endif; ?>
 
           <!-- start accordion tareas -->
           <div class="accordion" id="accordionTareas">
@@ -2665,7 +2679,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           <div class="text-center">
             <button type="button" class="btn bg-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
             <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
-            <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
+            <?php echo ($presupuestoGenerado || !empty($visitaCongeladaPorPresupuesto)) ? 'disabled' : ''; ?>> Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
           </div>
 
@@ -2704,7 +2718,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           
           <!-- start card body accordion 1-->
           <div class="card-body">
-                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
+                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" data-visita-congelada-presupuesto="<?php echo !empty($visitaCongeladaPorPresupuesto) ? '1' : '0'; ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
                 <!-- /.row start-->
                 <div class="row pb-1">
 

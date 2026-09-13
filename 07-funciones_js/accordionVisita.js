@@ -15,9 +15,70 @@ window.presuFotosEliminadas  = {};     // { [nroTarea]: [ nombre:string ] }
 
 $(document).ready(function() {
     let modoVisualizacion = false;
-    let presupuestoGenerado = false;
-    window.presupuestoGenerado = window.presupuestoGenerado || false;
+    let presupuestoGenerado = !!window.presupuestoGeneradoInicial || !!window.presupuestoGenerado;
+    let visitaCongeladaPorPresupuesto = !!window.VISITA_CONGELADA_POR_PRESUPUESTO;
+    let generandoPresupuestoDesdeVisita = false;
+    let cargandoVisitaPersistida = false;
+    window.presupuestoGenerado = presupuestoGenerado;
     window.presupuestoDirty = window.presupuestoDirty || false;
+
+    function visitaCongeladaActiva() {
+      return visitaCongeladaPorPresupuesto && !cargandoVisitaPersistida;
+    }
+
+    function mostrarMensajeVisitaCongelada() {
+      const mensaje = 'La Visita ya esta cerrada porque tiene un Presupuesto generado.';
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({ icon: 'info', title: 'Visita cerrada', text: mensaje, confirmButtonText: 'OK' });
+        return;
+      }
+      if (typeof mostrarAdvertencia === 'function') {
+        mostrarAdvertencia(mensaje, 4);
+        return;
+      }
+      window.alert(mensaje);
+    }
+
+    function urlReingresoPresupuestoPersistido(idPrevisita) {
+      return `seguimiento_form.php?acci=e&id=${encodeURIComponent(idPrevisita)}#collapsePresupuesto`;
+    }
+
+    function aplicarModoVisitaCongeladaPorPresupuesto() {
+      if (!visitaCongeladaPorPresupuesto) return;
+
+      const $root = $('#accordionVisita');
+      if (!$root.length) return;
+
+      $root.attr('data-visita-congelada-presupuesto', '1');
+      $('#id_previsita').attr('data-visita-congelada-presupuesto', '1');
+      $root.find('textarea, input, select').prop('disabled', true);
+      $root.find('.material-select, .mano-obra-select').prop('disabled', true).trigger('change.select2');
+      $root.find('.agregar-material, .agregar-mano-obra, #btn-agregar-tarea, .btn-guardar-visita, .btn-generar-presupuesto')
+        .prop('disabled', true)
+        .addClass('disabled');
+      $root.find('.eliminar-tarea, .eliminar-material, .eliminar-mano-obra, .eliminar-imagen')
+        .addClass('d-none')
+        .css('pointer-events', 'none');
+      $root.find('.custom-file').hide();
+      $root.find('.material-select').closest('.form-row').hide();
+      $root.find('.mano-obra-select').closest('.form-row').hide();
+      $root.find('.btn-cancelar-visita').prop('disabled', false).removeClass('disabled').show().text('Volver');
+    }
+
+    window.aplicarModoVisitaCongeladaPorPresupuesto = aplicarModoVisitaCongeladaPorPresupuesto;
+
+    $(document).on(
+      'click input change',
+      '#accordionVisita textarea, #accordionVisita input, #accordionVisita select, #accordionVisita .agregar-material, #accordionVisita .eliminar-material, #accordionVisita .agregar-mano-obra, #accordionVisita .eliminar-mano-obra, #accordionVisita #btn-agregar-tarea, #accordionVisita .eliminar-tarea, #accordionVisita .eliminar-imagen, #accordionVisita .btn-guardar-visita, #accordionVisita .btn-generar-presupuesto',
+      function(e) {
+        if (!visitaCongeladaActiva()) return;
+        if ($(e.target).closest('.btn-cancelar-visita, [data-toggle="collapse"]').length) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.type === 'click') mostrarMensajeVisitaCongelada();
+        return false;
+      }
+    );
 
     function marcarPresupuestoComoModificado() {
       if (!$('#contenedorPresupuestoGenerado').length) return;
@@ -118,7 +179,7 @@ $(document).ready(function() {
         // - No estamos en modo visualización (modoVisualizacion === false)
         // - **No existe presupuesto generado** (!presupuestoGenerado)
       
-        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado && !edicionComercialBloqueada();
+        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado && !visitaCongeladaActiva() && !generandoPresupuestoDesdeVisita && !edicionComercialBloqueada();
       
         const $btn = $('#btn-generar-presupuesto');
         if ($btn.length) {
@@ -962,61 +1023,92 @@ $(document).ready(function() {
         }
     });
     
-    // Botón: Generar Presupuesto
+    // Boton: Generar Presupuesto
     $(document).on('click', '.btn-generar-presupuesto', function() {
+      const $btn = $(this);
+      const textoOriginal = $btn.data('texto-original') || $btn.text();
+      $btn.data('texto-original', textoOriginal);
+
+      if (visitaCongeladaPorPresupuesto) {
+        mostrarMensajeVisitaCongelada();
+        return;
+      }
+
+      if (generandoPresupuestoDesdeVisita || $btn.prop('disabled')) {
+        return;
+      }
+
       if (edicionComercialBloqueada()) {
         mostrarAlertaBloqueoEdicionComercial();
         return;
       }
 
-      presupuestoGenerado = true;
-      const cicloGeneracionActual = ++cicloAlertaGeneracionPresupuesto;
-      // 1. Si no existe el accordion, lo crea usando el template
-      if ($('#accordionPresupuesto').length === 0) {
-          const tpl = document.getElementById('tpl-accordion-presupuesto');
-          if (tpl) {
-              const clone = tpl.content.cloneNode(true);
-              // Insertarlo antes del accordion de Visita
-              $('#accordionVisita').before(clone);
-              if (typeof window.initPopoverIntervinoPresupuesto === 'function') {
-                window.initPopoverIntervinoPresupuesto();
-              }
+      const idPrevisita = parseInt($('#id_previsita').val(), 10) || 0;
+      if (idPrevisita <= 0) {
+        mostrarError('No se pudo identificar la Pre-visita para generar el Presupuesto.', 4);
+        return;
+      }
+
+      generandoPresupuestoDesdeVisita = true;
+      $btn.prop('disabled', true).removeClass('btn-info').addClass('btn-secondary').text('Generando...');
+
+      $.ajax({
+        url: '../03-controller/presupuestos_guardar.php',
+        method: 'POST',
+        dataType: 'json',
+        data: {
+          via: 'ajax',
+          funcion: 'generarPresupuestoDesdeVisita',
+          id_previsita: idPrevisita
+        }
+      }).done(function(resp) {
+        if (resp && (resp.status === true || resp.ok === true)) {
+          presupuestoGenerado = true;
+          visitaCongeladaPorPresupuesto = true;
+          window.presupuestoGenerado = true;
+          window.presupuestoDirty = false;
+          window.VISITA_CONGELADA_POR_PRESUPUESTO = true;
+          aplicarModoVisitaCongeladaPorPresupuesto();
+
+          const destino = urlReingresoPresupuestoPersistido(idPrevisita);
+          const mensaje = resp.idempotente
+            ? 'El Presupuesto ya estaba generado. Se actualizará la pantalla.'
+            : 'Presupuesto generado correctamente.';
+
+          if (window.Swal && typeof Swal.fire === 'function') {
+            Swal.fire({ icon: 'success', title: 'Accion completada', text: mensaje, confirmButtonText: 'OK' })
+              .then(() => { window.location.href = destino; });
+          } else {
+            if (typeof mostrarExito === 'function') mostrarExito(mensaje, 3);
+            window.location.href = destino;
           }
-      }
+          return;
+        }
 
-      // 2. Colapsar Visita y expandir Presupuesto
-      $('#collapseVisita').collapse('hide');
-      setTimeout(() => {
-          $('#collapsePresupuesto').collapse('show');
-      }, 150);
-
-      // 3. Recolección de datos y render dinámico
-      const datosExtraidos = recolectarDatosParaPresupuesto();
-      renderizarPresupuestoDesdeDatos(datosExtraidos);
-      marcarPresupuestoComoModificado();
-
-      // 🔗 NUEVO: preparar bloque de fotos para drag&drop y selección
-      if (window.PresupuestoFotos && typeof PresupuestoFotos.refresh === 'function') {
-        PresupuestoFotos.refresh();
-      }
-
-      mostrarAlertaVencidosUnaVezPorGeneracion(cicloGeneracionActual);
-
-      // 5. Deshabilitar el botón para evitar doble click
-      $(this).prop('disabled', true);
-
-      // 6. Scroll suave al Presupuesto
-      setTimeout(() => {
-          $('html, body').animate({
-              scrollTop: $("#headingPresupuesto").offset().top - 80
-          }, 600);
-      }, 300);
+        const msg = resp && resp.msg ? resp.msg : 'No se pudo generar el Presupuesto.';
+        mostrarError(msg, 4);
+      }).fail(function(xhr) {
+        let msg = 'No se pudo generar el Presupuesto.';
+        if (xhr && xhr.responseJSON && xhr.responseJSON.msg) {
+          msg = xhr.responseJSON.msg;
+        } else if (xhr && xhr.responseText) {
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (parsed && parsed.msg) msg = parsed.msg;
+          } catch (e) {}
+        }
+        mostrarError(msg, 4);
+      }).always(function() {
+        if (!visitaCongeladaPorPresupuesto) {
+          generandoPresupuestoDesdeVisita = false;
+          $btn.text(textoOriginal);
+          controlarBotonGenerarPresupuesto();
+        }
+      });
     });
-
-    // ======= POBLAR DESDE EL BACKEND =======
-    
     if (typeof tareasVisitadas !== 'undefined' && tareasVisitadas.length) {
         modoVisualizacion = $('form').find('.v-id').data('visualiza') === 'on';
+        cargandoVisitaPersistida = true;
 
         // Reiniciamos trackers
         Object.keys(fotosEliminadasPorTarea).forEach(k => delete fotosEliminadasPorTarea[k]);
@@ -1164,7 +1256,9 @@ $(document).ready(function() {
     }
 
     // ======= FIN POBLACIÓN BACKEND =======
+    cargandoVisitaPersistida = false;
     hayCambios = false;
+    aplicarModoVisitaCongeladaPorPresupuesto();
     controlarBotonGenerarPresupuesto(); 
     
     function obtenerTextoVisibleSelect(selector, placeholders = []) {
