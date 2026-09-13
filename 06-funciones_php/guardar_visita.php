@@ -4,25 +4,31 @@ session_start();
 //  guardar_visita.php
 // —————————————————————————————
 
-file_put_contents('../log/log_fotos.txt', print_r($_FILES, true)); // log inicial
 ob_start();
-file_put_contents('../log/log_fotos.txt', "--- NUEVO INGRESO ---\n", FILE_APPEND);
-file_put_contents('../log/log_fotos.txt', "🟠 _POST:\n" . print_r($_POST, true), FILE_APPEND);
-file_put_contents('../log/log_fotos.txt', "🔵 _FILES:\n" . print_r($_FILES, true), FILE_APPEND);
 
 include_once '../06-funciones_php/funciones.php';
 include_once '../04-modelo/conectDB.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
-$db = conectDB();
-if (!$db) {
-    ob_end_clean();
-    echo json_encode(['status' => false, 'mensaje' => 'Fallo al conectar con la base de datos.']);
-    exit;
-}
+include_once '../04-modelo/visitaPresupuestoEventoModel.php';
 
 header('Content-Type: application/json; charset=utf-8');
 $response = ['status' => false, 'mensaje' => 'No se pudo procesar la solicitud.'];
+
+function responderGuardarVisita(array $payload, int $httpStatus = 200): void {
+    http_response_code($httpStatus);
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+function registrarPayloadValidadoGuardarVisita(): void {
+    file_put_contents('../log/log_fotos.txt', "--- NUEVO INGRESO VALIDADO ---\n", FILE_APPEND);
+    file_put_contents('../log/log_fotos.txt', "POST:\n" . print_r($_POST, true), FILE_APPEND);
+    file_put_contents('../log/log_fotos.txt', "FILES:\n" . print_r($_FILES, true), FILE_APPEND);
+}
 
 /**
  * Elimina todas las fotos (DB + físicas) de una tarea dada.
@@ -56,33 +62,66 @@ function eliminarFotosDeTarea($db, $tareaId) {
     mysqli_stmt_close($stmt2);
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Metodo no permitido.'], 405);
+}
+
+$idUsuarioSesion = isset($_SESSION['usuario']['id_usuario']) ? intval($_SESSION['usuario']['id_usuario']) : 0;
+if ($idUsuarioSesion <= 0) {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Sesion no valida.'], 401);
+}
+
 // Acepta tanto 'id_visita' como 'id_previsita'
 if (isset($_POST['id_visita'])) {
     $id_visita = intval($_POST['id_visita']);
 } elseif (isset($_POST['id_previsita'])) {
     $id_visita = intval($_POST['id_previsita']);
 } else {
-    echo json_encode(['status' => false, 'mensaje' => 'ID de visita no recibido.']);
-    exit;
+    responderGuardarVisita(['status' => false, 'mensaje' => 'ID de visita no recibido.'], 400);
+}
+
+if ($id_visita <= 0) {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'ID de visita invalido.'], 400);
+}
+
+$db = conectDB();
+if (!$db) {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Fallo al conectar con la base de datos.'], 500);
+}
+mysqli_set_charset($db, 'utf8mb4');
+
+$estadoWorkflowPrevisita = obtenerEstadoWorkflowPrevisitaPorIdEnConexion($db, (int)$id_visita);
+if ($estadoWorkflowPrevisita === '') {
+    mysqli_close($db);
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Pre-visita no encontrada.'], 404);
+}
+
+if (visitaEstaCongeladaPorPresupuestoEnConexion($db, (int)$id_visita)) {
+    mysqli_close($db);
+    responderGuardarVisita([
+        'status' => false,
+        'mensaje' => 'La visita quedo cerrada al generar el presupuesto y ya no admite modificaciones.',
+    ], 409);
+}
+
+if (!estadoHabilitaVisitaWorkflowPrevisita($estadoWorkflowPrevisita)) {
+    mysqli_close($db);
+    responderGuardarVisita([
+        'status' => false,
+        'mensaje' => 'La Pre-visita no esta en estado Ejecutada y no admite guardar Visita.',
+    ], 409);
 }
 
 $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$id_visita);
 if (!empty($bloqueoEdicion['bloqueado'])) {
-    echo json_encode([
+    mysqli_close($db);
+    responderGuardarVisita([
         'status' => false,
         'mensaje' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+    ], 409);
 }
 
-$bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId((int)$id_visita);
-if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
-    echo json_encode([
-        'status' => false,
-        'mensaje' => $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? ''),
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+registrarPayloadValidadoGuardarVisita();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tareas = $_POST['tareas'] ?? [];
