@@ -764,6 +764,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $jId      = $mo['id_jornal'] ?? $mo['jornal_id'] ?? null;
             $idPtmo   = $mo['id_ptmo'] ?? null;
             $ordenMo  = $mo['orden'] ?? null;
+            $observacionMo = $mo['observacion'] ?? '';
 
             // vigencia: updated_at_origen preferente, si no updated_at
             $fechaRef = $mo['updated_at_origen'] ?? $mo['updated_at'] ?? null;
@@ -802,8 +803,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             }
 
             $rowsMo[] = '
-            <tr data-jornal_id="'. $e($jId) .'" data-orden="'. $e($ordenMo) .'">
-              <td>'. $e($nombre) .'</td>
+            <tr data-jornal_id="'. $e($jId) .'" data-id-ptmo="'. $e($idPtmo) .'" data-orden="'. $e($ordenMo) .'">
+              <td><span class="mano-obra-nombre-presupuesto">'. $e($nombre) .'</span></td>
 
               <!-- Operarios -->
               <td>
@@ -840,6 +841,19 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </td>
 
               <td class="text-right subtotal-mano">$'. $e(number_format((float)$subNum, 2, '.', '')) .'</td>
+
+              <td>
+                <input type="text" class="form-control form-control-sm observacion-mano-obra"
+                      value="'. $e($observacionMo) .'" maxlength="255" '. $disabledAttr .'>
+              </td>
+
+              <td class="text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-mano-obra-presupuesto"
+                        data-id-ptmo="'. $e($idPtmo) .'" '. $disabledAttr .'
+                        title="Eliminar mano de obra" aria-label="Eliminar mano de obra">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
             </tr>';
         }
 
@@ -961,6 +975,27 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 <!-- Mano de Obra -->
                 <div class="tarea-mano-obra">
                   <div class="bloque-titulo mt-0">Mano de Obra</div>
+                  <div class="form-row align-items-end mb-2 presu-mano-obra-add-row">
+                    <div class="col-md-5 form-group mb-1">
+                      <select class="form-control form-control-sm presu-mano-obra-select" '. $disabledAttr .'>
+                        <option value="">Tipo de jornal</option>
+                        '. ($opcionesJornales ?? '') .'
+                      </select>
+                    </div>
+                    <div class="col-md-2 form-group mb-1">
+                      <input type="number" class="form-control form-control-sm presu-mano-obra-operarios"
+                             min="0.01" step="any" placeholder="Operarios" '. $disabledAttr .'>
+                    </div>
+                    <div class="col-md-2 form-group mb-1">
+                      <input type="number" class="form-control form-control-sm presu-mano-obra-dias"
+                             min="0.01" step="any" placeholder="Dias" '. $disabledAttr .'>
+                    </div>
+                    <div class="col-md-3 form-group mb-1">
+                      <button type="button" class="btn btn-outline-success btn-sm btn-block presu-agregar-mano-obra" '. $disabledAttr .'>
+                        <i class="fas fa-plus"></i> Agregar mano de obra
+                      </button>
+                    </div>
+                  </div>
                   <table class="tabla-presupuesto tabla-presupuesto-sm">
                     <thead>
                       <tr>
@@ -971,6 +1006,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <th>Valor Jornal</th>
                         <th>% Extra</th>
                         <th>Subtotal</th>
+                        <th>Observacion</th>
+                        <th>Accion</th>
                       </tr>
                     </thead>                
                     <tbody>'
@@ -988,6 +1025,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                               class="form-control form-control-sm input-otros-mano"
                               id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'" '. $disabledAttr .'>
                       </td>
+                      <td></td>
+                      <td></td>
                     </tr>
                     <tr class="fila-subtotal">
                       <td colspan="5" class="text-right"><b>Subtotal Mano de Obra</b></td>
@@ -996,6 +1035,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                               min="0" '. $roUtil .' value="'. $e($utilMoPct ?? '') .'" placeholder="%">
                       </td>
                       <td class="text-right"><b>$0.00</b></td>
+                      <td></td>
+                      <td></td>
                     </tr>                  
                     </tbody>
                   </table>
