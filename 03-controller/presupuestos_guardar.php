@@ -815,88 +815,13 @@ try {
         throw new RuntimeException('Payload JSON inv�lido: ' . json_last_error_msg());
     }
 
-    // --------------------------------------------------------------------
-    // 1) Normalizar archivos por tarea: $_FILES['fotos_tarea_{N}'][] ...
-    // --------------------------------------------------------------------
-    // Resultado esperado:
-    // $archivosPorTarea = [
-    //   <nroTarea:int> => [
-    //      [ 'name'=>string, 'type'=>string, 'tmp_name'=>string, 'error'=>int, 'size'=>int ],
-    //      ...
-    //   ],
-    //   ...
-    // ];
-    $archivosPorTarea = [];
-
-    foreach ($_FILES as $key => $fileBag) {
-        // Matchea fotos_tarea_12  (con o sin [] lo maneja PHP internamente)
-        if (preg_match('/^fotos_tarea_(\d+)$/', $key, $m)) {
-            $nro = (int)$m[1];
-
-            // Puede venir agrupado en arrays paralelos (name[], type[], tmp_name[]...)
-            if (isset($fileBag['name']) && is_array($fileBag['name'])) {
-                $count = count($fileBag['name']);
-                for ($i = 0; $i < $count; $i++) {
-                    if (
-                        !isset($fileBag['tmp_name'][$i]) ||
-                        !isset($fileBag['error'][$i]) ||
-                        $fileBag['error'][$i] !== UPLOAD_ERR_OK
-                    ) {
-                        continue;
-                    }
-                    $archivosPorTarea[$nro][] = [
-                        'name'     => (string)$fileBag['name'][$i],
-                        'type'     => (string)($fileBag['type'][$i] ?? ''),
-                        'tmp_name' => (string)$fileBag['tmp_name'][$i],
-                        'error'    => (int)$fileBag['error'][$i],
-                        'size'     => (int)($fileBag['size'][$i] ?? 0),
-                    ];
-                }
-            } else {
-                // Caso single (menos com�n, pero v�lido)
-                if (($fileBag['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
-                    $archivosPorTarea[$nro][] = [
-                        'name'     => (string)($fileBag['name'] ?? ''),
-                        'type'     => (string)($fileBag['type'] ?? ''),
-                        'tmp_name' => (string)($fileBag['tmp_name'] ?? ''),
-                        'error'    => (int)$fileBag['error'],
-                        'size'     => (int)($fileBag['size'] ?? 0),
-                    ];
-                }
-            }
-        }
-    }
-
-    // --------------------------------------------------------------------
-    // 2) Normalizar eliminadas por tarea: fotos_eliminadas_tarea_{N}[]
-    // --------------------------------------------------------------------
-    // Resultado esperado:
-    // $eliminadasPorTarea = [
-    //   <nroTarea:int> => ['nombre1.jpg','nombre2.png', ...],
-    //   ...
-    // ];
-    $eliminadasPorTarea = [];
-
-    foreach ($_POST as $key => $val) {
-        if (preg_match('/^fotos_eliminadas_tarea_(\d+)$/', $key, $m) && is_array($val)) {
-            $nro = (int)$m[1];
-            $eliminadasPorTarea[$nro] = array_values(
-                array_filter(
-                    array_map('strval', $val),
-                    static fn($s) => $s !== ''
-                )
-            );
-        }
-    }
-
-
 // 2) Mapear archivos por tarea (acepta nombres con o sin [])
 $archivosPorTarea = [];
 
 foreach ($_FILES as $key => $fileBag) {
     // Matchea: fotos_tarea_12  o  fotos_tarea_12[]
-    if (preg_match('/^fotos_tarea_(\d+)(?:\[\])?$/', $key, $m)) {
-        $nro = (int)$m[1];
+    if (preg_match('/^fotos_tarea_([A-Za-z0-9_-]+)(?:\[\])?$/', $key, $m)) {
+        $nro = (string)$m[1];
 
         // Normalizar a arrays paralelos
         $names = isset($fileBag['name']) ? (array)$fileBag['name'] : [];
@@ -925,8 +850,8 @@ foreach ($_FILES as $key => $fileBag) {
 $eliminadasPorTarea = [];
 foreach ($_POST as $key => $val) {
     // Acepta fotos_eliminadas_tarea_12  o  fotos_eliminadas_tarea_12[]
-    if (preg_match('/^fotos_eliminadas_tarea_(\d+)(?:\[\])?$/', $key, $m)) {
-        $nro = (int)$m[1];
+    if (preg_match('/^fotos_eliminadas_tarea_([A-Za-z0-9_-]+)(?:\[\])?$/', $key, $m)) {
+        $nro = (string)$m[1];
         $arr = is_array($val) ? $val : [$val];
         $eliminadasPorTarea[$nro] = array_values(
             array_filter(

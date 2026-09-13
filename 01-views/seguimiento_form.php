@@ -689,6 +689,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
     foreach ($tareas as $t) {
         $nro          = (int)($t['nro'] ?? 0);
+        $idPresuTarea = (int)($t['id_presu_tarea'] ?? 0);
+        $clientKeyTarea = $idPresuTarea > 0 ? 'pt_' . $idPresuTarea : 'tmp_' . $nro;
         $descripcion  = $t['descripcion'] ?? '';
         $descripcionHtml = function_exists('sanitizarHtmlDetalleTareaPresupuesto')
             ? sanitizarHtmlDetalleTareaPresupuesto((string)$descripcion)
@@ -837,7 +839,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
         $roUtil    = $mostrarVistaDetallada ? $readonlyUtilClass : 'readonly input-sololectura';
 
         $html[] = '
-        <div class="tarea-card">
+        <div class="tarea-card" data-id-presu-tarea="'. $e($idPresuTarea) .'" data-presu-client-key="'. $e($clientKeyTarea) .'">
           <div class="tarea-encabezado">
             <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b></span>
             <label class="incluir-presupuesto-label">
@@ -859,10 +861,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   <label class="mb-0"><b>Imágenes</b></label>
 
                   <input type="file" class="presu-fotos d-none" id="presu_fotos_tarea_'. $e($nro) .'"
-                         multiple accept="image/*" data-index="'. $e($nro) .'" '. $disabledAttr .'/>
+                         multiple accept="image/*" data-index="'. $e($nro) .'" data-client-key="'. $e($clientKeyTarea) .'" '. $disabledAttr .'/>
 
                   <div class="presu-dropzone border rounded bg-light p-3 text-muted mb-2"
-                       data-index="'. $e($nro) .'" style="min-height:100px;">
+                       data-index="'. $e($nro) .'" data-client-key="'. $e($clientKeyTarea) .'" style="min-height:100px;">
                     <div class="w-100 d-flex align-items-center justify-content-center text-center">
                       <em>Arrastre aquí las imágenes o haga click.</em>
                     </div>
@@ -998,7 +1000,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 id="btnGuardarTarea_'. $e($nro) .'"
                 class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
                 data-nro="'. $e($nro) .'"
-                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                data-id-presu-tarea="'. $e($idPresuTarea) .'" '. $disabledAttr .'>
                 <i class="fas fa-save"></i> Guardar tarea
               </button>
               <button
@@ -1006,8 +1008,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 id="btnTraerTarea_'. $e($nro) .'"
                 class="btn btn-warning btn-traer-tarea btn-tarea"
                 data-nro="'. $e($nro) .'"
-                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                data-id-presu-tarea="'. $e($idPresuTarea) .'" '. $disabledAttr .'>
                 <i class="fas fa-download"></i> Traer tarea
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-danger ml-2 btn-eliminar-tarea-presupuesto btn-tarea"
+                data-nro="'. $e($nro) .'"
+                data-id-presu-tarea="'. $e($idPresuTarea) .'" '. $disabledAttr .'>
+                <i class="fas fa-trash"></i> Eliminar tarea
               </button>
             </div>
 
@@ -1033,6 +1042,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
+            <button id="btn-agregar-tarea-presupuesto" type="button" class="btn btn-outline-primary mr-2" '. $disabledAttr .'>
+              <i class="fas fa-plus"></i> Agregar tarea
+            </button>
+
             <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2" '. $disabledAttr .'>
               <i class="fas fa-save"></i> Guardar
             </button>

@@ -529,11 +529,16 @@
     const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
     const $btnEmitir = $('.btn-emitir-presupuesto');
 
+    const $btnAgregarTarea = $('#btn-agregar-tarea-presupuesto');
+
     if (presupuestoEdicionComercialBloqueada()) {
       $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
       $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
+      $btnAgregarTarea.prop('disabled', true).addClass('disabled');
       return;
     }
+
+    $btnAgregarTarea.prop('disabled', false).removeClass('disabled');
 
     $btnGuardar
       .prop('disabled', !presupuestoDirty)
@@ -554,6 +559,68 @@
     actualizarEstadoAccionesPresupuestoSilencioso();
   }
   window.marcarPresupuestoComoModificadoSilencioso = marcarPresupuestoComoModificadoSilencioso;
+
+
+  let contadorClientKeyTareaPresupuesto = 0;
+
+  function generarClientKeyTareaPresupuesto() {
+    contadorClientKeyTareaPresupuesto += 1;
+    return 'tmp_' + Date.now() + '_' + contadorClientKeyTareaPresupuesto;
+  }
+
+  function obtenerClientKeyTareaPresupuesto($card) {
+    let key = String($card.attr('data-presu-client-key') || $card.data('presu-client-key') || '').trim();
+    if (!key) {
+      key = generarClientKeyTareaPresupuesto();
+      $card.attr('data-presu-client-key', key).data('presu-client-key', key);
+    }
+    return key;
+  }
+
+  function obtenerIdPresuTareaCard($card) {
+    const raw = String($card.attr('data-id-presu-tarea') || $card.data('id-presu-tarea') || '').trim();
+    const id = parseInt(raw, 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+
+  function setIdentidadPresuTareaCard($card, idPresuTarea, clientKey) {
+    const id = parseInt(idPresuTarea, 10) || 0;
+    const key = clientKey || (id > 0 ? 'pt_' + id : obtenerClientKeyTareaPresupuesto($card));
+    $card.attr('data-id-presu-tarea', id > 0 ? String(id) : '').data('id-presu-tarea', id > 0 ? id : '');
+    $card.attr('data-presu-client-key', key).data('presu-client-key', key);
+    $card.find('.btn-tarea')
+      .attr('data-id-presu-tarea', id > 0 ? String(id) : '')
+      .data('id-presu-tarea', id > 0 ? id : '');
+    return key;
+  }
+
+  function sincronizarDatosTareaPresupuesto($card, nro) {
+    const key = obtenerClientKeyTareaPresupuesto($card);
+    const $titulo = $card.find('.tarea-encabezado b').first();
+    if ($titulo.length) {
+      const tituloActual = ($titulo.text() || '').replace(/^Tarea\s+\d+:\s*/i, '').trim();
+      $titulo.text('Tarea ' + nro + (tituloActual ? ': ' + tituloActual : ':'));
+    }
+    $card.find('.btn-tarea').attr('data-nro', String(nro)).data('nro', nro);
+    $card.find('.presu-fotos')
+      .attr('id', 'presu_fotos_tarea_' + nro)
+      .attr('data-index', String(nro))
+      .attr('data-client-key', key)
+      .data('index', nro)
+      .data('client-key', key);
+    $card.find('.presu-dropzone')
+      .attr('data-index', String(nro))
+      .attr('data-client-key', key)
+      .data('index', nro)
+      .data('client-key', key);
+    $card.find('.presu-preview-fotos').attr('id', 'presu_preview_' + nro);
+  }
+
+  function renumerarTareasPresupuesto() {
+    $('#contenedorPresupuestoGenerado .tarea-card').each(function (index) {
+      sincronizarDatosTareaPresupuesto($(this), index + 1);
+    });
+  }
 
   function obtenerResumenPreciosVencidosPresupuesto() {
     const $root = $('#contenedorPresupuestoGenerado');
@@ -602,6 +669,83 @@
     .off('change.presu', '.presu-fotos')
     .off('click.presu',  '.presu-eliminar-imagen')
     .off('click.presu', '#btn-guardar-presupuesto')
+    .off('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto')
+    .off('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto')
+    .on('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $root = $('#contenedorPresupuestoGenerado');
+      const $base = $root.find('.tarea-card').last();
+      if (!$base.length) return;
+
+      const $nueva = $base.clone(false, false);
+      const key = generarClientKeyTareaPresupuesto();
+      setIdentidadPresuTareaCard($nueva, null, key);
+      window.fotosNuevasPorTarea[key] = [];
+      window.fotosEliminadasPorTarea[key] = [];
+
+      if (typeof window.setDetalleTareaEditorValue === 'function') {
+        window.setDetalleTareaEditorValue($nueva, '', { triggerInput: false });
+      } else {
+        $nueva.find('textarea.tarea-descripcion').val('');
+        $nueva.find('.tarea-descripcion-editor').empty();
+      }
+      $nueva.find('.incluir-en-total').prop('checked', true);
+      $nueva.find('.utilidad-global-materiales, .utilidad-global-mano-obra').val('');
+      $nueva.find('.input-otros-materiales, .input-otros-mano').val('0');
+      $nueva.find('.tarea-materiales tbody tr').not('.fila-otros-materiales,.fila-subtotal').remove();
+      $nueva.find('.tarea-mano-obra tbody tr').not('.fila-otros-mano,.fila-subtotal').remove();
+      $nueva.find('.presu-preview-fotos').empty();
+      $nueva.find('.presu-fotos').val('');
+
+      $root.find('.presupuesto-total-card').before($nueva);
+      renumerarTareasPresupuesto();
+      initDetalleTareaRichEditors($nueva, { triggerInput: false });
+      syncTituloCardPresupuesto($nueva);
+      _safeActualizarSubtotalesBloque($nueva, $nueva[0]);
+      _safeActualizarTotalesPorTarea($nueva, $nueva[0]);
+      _safeActualizarTotalGeneral();
+      marcarPresupuestoComoModificadoSilencioso();
+    })
+    .on('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $card = $(this).closest('.tarea-card');
+      const confirmar = () => {
+        const key = obtenerClientKeyTareaPresupuesto($card);
+        delete window.fotosNuevasPorTarea[key];
+        delete window.fotosEliminadasPorTarea[key];
+        $card.remove();
+        renumerarTareasPresupuesto();
+        _safeActualizarTotalGeneral();
+        marcarPresupuestoComoModificadoSilencioso();
+      };
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Eliminar tarea?',
+          text: 'La baja se aplicara al guardar el presupuesto.',
+          showCancelButton: true,
+          confirmButtonText: 'Eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then((res) => { if (res.isConfirmed) confirmar(); });
+      } else if (window.confirm('Eliminar tarea?')) {
+        confirmar();
+      }
+    })
     .on('click.presu', '#btn-guardar-presupuesto', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1224,15 +1368,17 @@
   $(document).on('change.presu', '.presu-fotos', function (e) {
     e.stopPropagation();
     const idx = $(this).data('index');
+    const $card = $(this).closest('.tarea-card');
+    const key = obtenerClientKeyTareaPresupuesto($card);
     const files = Array.from(this.files || []);
     if (!idx || !files.length) return;
     const $preview = $('#presu_preview_' + idx);
     if (!$preview.length) return;
 
-    if (!window.fotosNuevasPorTarea[idx]) window.fotosNuevasPorTarea[idx] = [];
+    if (!window.fotosNuevasPorTarea[key]) window.fotosNuevasPorTarea[key] = [];
     files.forEach((file, i) => {
       const tempId = 'tmp_' + Date.now() + '_' + i;
-      window.fotosNuevasPorTarea[idx].push({ tempId, file });
+      window.fotosNuevasPorTarea[key].push({ tempId, file });
       const url = URL.createObjectURL(file);
       $preview.append(
         `<div class="preview-img-container position-relative d-inline-block m-1" data-temp-id="${tempId}">
@@ -1253,12 +1399,13 @@
     e.stopPropagation();
 
     const $wrap = $(this).closest('.preview-img-container');
-    const idx   = $wrap.closest('.presu-dropzone').data('index');
+    const $card = $wrap.closest('.tarea-card');
+    const key   = obtenerClientKeyTareaPresupuesto($card);
     const nombre = $wrap.data('nombre-archivo'); // existente
 
     if (nombre) {
-      if (!window.fotosEliminadasPorTarea[idx]) window.fotosEliminadasPorTarea[idx] = [];
-      window.fotosEliminadasPorTarea[idx].push(nombre);
+      if (!window.fotosEliminadasPorTarea[key]) window.fotosEliminadasPorTarea[key] = [];
+      window.fotosEliminadasPorTarea[key].push(nombre);
       $wrap.remove();
 
       marcarPresupuestoComoModificadoSilencioso();
@@ -1266,8 +1413,8 @@
     }
 
     const tempId = $wrap.data('temp-id'); // nueva
-    if (tempId && window.fotosNuevasPorTarea[idx]) {
-      window.fotosNuevasPorTarea[idx] = window.fotosNuevasPorTarea[idx].filter(x => x.tempId !== tempId);
+    if (tempId && window.fotosNuevasPorTarea[key]) {
+      window.fotosNuevasPorTarea[key] = window.fotosNuevasPorTarea[key].filter(x => x.tempId !== tempId);
       $wrap.remove();
 
       marcarPresupuestoComoModificadoSilencioso();
@@ -1277,6 +1424,9 @@
 // === Guardar tarea (VISTA) — SweetAlert con input, único para backend + visita ===
 // === Helper: serializa UNA sola tarea-card (mismos selectores que presupuestoGuardar) ===
 window._presuSerializarCard = function ($card, nro) {
+  const id_presu_tarea = obtenerIdPresuTareaCard($card);
+  const client_key = obtenerClientKeyTareaPresupuesto($card);
+
   // Descripción (prioriza textarea; si no, el título)
   const descTextarea = obtenerDetalleTareaHtml($card);
   const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
@@ -1342,6 +1492,8 @@ window._presuSerializarCard = function ($card, nro) {
 
   // Nota: fotos quedan fuera para tareas archivadas
   return {
+    id_presu_tarea,
+    client_key,
     nro,
     descripcion,
     incluir_en_total,
@@ -1487,17 +1639,40 @@ $(document)
   function aplicarMapeoLineasPresupuestoGuardado(mapeo) {
     if (!mapeo || typeof mapeo !== 'object') return;
 
+    (mapeo.tareas || []).forEach((item, indice) => {
+      const idNuevo = item && item.id_presu_tarea ? String(item.id_presu_tarea) : '';
+      if (!idNuevo) return;
+
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const $cards = $('#contenedorPresupuestoGenerado .tarea-card');
+      const $card = key
+        ? $cards.filter(function () { return String($(this).attr('data-presu-client-key') || '') === key; }).first()
+        : $cards.eq(indice);
+
+      if ($card.length) {
+        setIdentidadPresuTareaCard($card, idNuevo, 'pt_' + idNuevo);
+      }
+    });
+
     const $materialesDom = $('#contenedorPresupuestoGenerado .precio-unitario');
     (mapeo.materiales || []).forEach((item, indice) => {
       const idAnterior = item && item.id_ptm_anterior ? String(item.id_ptm_anterior) : '';
       const idNuevo = item && item.id_ptm ? String(item.id_ptm) : '';
       if (!idNuevo) return;
 
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const indiceLocal = item && item.indice !== undefined ? Number(item.indice) : indice;
+      const $scopeMateriales = key
+        ? $('#contenedorPresupuestoGenerado .tarea-card').filter(function () {
+            return String($(this).attr('data-presu-client-key') || '') === key;
+          }).first().find('.precio-unitario')
+        : $materialesDom;
+
       const $input = idAnterior
-        ? $materialesDom.filter(function () {
+        ? $scopeMateriales.filter(function () {
             return String($(this).data('id-ptm') || '') === idAnterior;
           }).first()
-        : $materialesDom.eq(indice);
+        : $scopeMateriales.eq(indiceLocal);
 
       if ($input.length) {
         $input.attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
@@ -1510,11 +1685,19 @@ $(document)
       const idNuevo = item && item.id_ptmo ? String(item.id_ptmo) : '';
       if (!idNuevo) return;
 
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const indiceLocal = item && item.indice !== undefined ? Number(item.indice) : indice;
+      const $scopeJornales = key
+        ? $('#contenedorPresupuestoGenerado .tarea-card').filter(function () {
+            return String($(this).attr('data-presu-client-key') || '') === key;
+          }).first().find('.valor-jornal')
+        : $jornalesDom;
+
       const $input = idAnterior
-        ? $jornalesDom.filter(function () {
+        ? $scopeJornales.filter(function () {
             return String($(this).data('id-ptmo') || '') === idAnterior;
           }).first()
-        : $jornalesDom.eq(indice);
+        : $scopeJornales.eq(indiceLocal);
 
       if ($input.length) {
         $input.attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
@@ -1543,6 +1726,9 @@ $(document)
       $root.find('.tarea-card').each(function (index) {
         const $card = $(this);
         const nro = index + 1;
+        sincronizarDatosTareaPresupuesto($card, nro);
+        const id_presu_tarea = obtenerIdPresuTareaCard($card);
+        const client_key = obtenerClientKeyTareaPresupuesto($card);
   
         // descripción igual que tu versión “buena” (textarea o título)
         const descTextarea = obtenerDetalleTareaHtml($card);
@@ -1616,10 +1802,12 @@ $(document)
         });
          
         // Contadores (buffers reales del dropzone actual)
-        const nuevas     = (window.fotosNuevasPorTarea && window.fotosNuevasPorTarea[nro]) ? window.fotosNuevasPorTarea[nro] : [];
-        const eliminadas = (window.fotosEliminadasPorTarea && window.fotosEliminadasPorTarea[nro]) ? window.fotosEliminadasPorTarea[nro] : [];
+        const nuevas     = (window.fotosNuevasPorTarea && window.fotosNuevasPorTarea[client_key]) ? window.fotosNuevasPorTarea[client_key] : [];
+        const eliminadas = (window.fotosEliminadasPorTarea && window.fotosEliminadasPorTarea[client_key]) ? window.fotosEliminadasPorTarea[client_key] : [];
   
         tareas.push({
+          id_presu_tarea,
+          client_key,
           nro,
           descripcion,
           incluir_en_total,
@@ -1691,6 +1879,7 @@ $(document)
         window.fotosEliminadasPorTarea = {};
 
         aplicarMapeoLineasPresupuestoGuardado(resp.lineas || null);
+        renumerarTareasPresupuesto();
 
         window.presupuestoDirty = false;
         actualizarEstadoAccionesPresupuestoSilencioso();
