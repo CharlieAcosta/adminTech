@@ -1315,6 +1315,7 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
                 throw new RuntimeException('La estructura de una tarea del presupuesto es invalida.', 400);
             }
 
+            $materialesVistosTarea = [];
             foreach (($t['materiales'] ?? []) as $indiceMaterial => $m) {
                 if (!is_array($m)) {
                     throw new RuntimeException('La estructura de un material del presupuesto es invalida.', 400);
@@ -1331,6 +1332,11 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
                 if ($idMaterial === false) {
                     throw new RuntimeException('El identificador de un material es invalido.', 400);
                 }
+
+                if (isset($materialesVistosTarea[$idMaterial])) {
+                    throw new RuntimeException('No se puede repetir el mismo material dentro de una tarea del presupuesto.', 422);
+                }
+                $materialesVistosTarea[$idMaterial] = true;
 
                 $precioPayload = $m['precio_unitario'] ?? null;
                 $idPtmRaw = $m['id_ptm'] ?? null;
@@ -1757,8 +1763,8 @@ function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivo
             }
             mysqli_stmt_close($stmt);
 
-            // Borramos SOLO detalle recalculable (materiales/MO). Fotos NO.
-            borrarDetalleRecalculableDeTarea($db, $id_presu_tarea);
+            // P15: materiales se reconcilian por id_ptm; mano de obra conserva el flujo previo hasta P16.
+            mysqli_query($db, "DELETE FROM presupuesto_tarea_mano_obra WHERE id_presu_tarea = " . (int)$id_presu_tarea);
 
         } else {
             $stmt = mysqli_prepare($db, "
@@ -1792,8 +1798,47 @@ function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivo
             // === Materiales
             $suma_mat_filas = 0.0;
             $materiales = $t['materiales'] ?? [];
+
+            $idsPtmExistentesTarea = [];
+            if ($idTareaPayload) {
+                $stmtExistentesMaterial = mysqli_prepare($db, "
+                    SELECT id_ptm
+                    FROM presupuesto_tarea_material
+                    WHERE id_presu_tarea = ?
+                    ORDER BY orden ASC, id_ptm ASC
+                ");
+                if (!$stmtExistentesMaterial) {
+                    throw new RuntimeException('Error al preparar lectura de materiales existentes: ' . mysqli_error($db));
+                }
+                mysqli_stmt_bind_param($stmtExistentesMaterial, "i", $id_presu_tarea);
+                if (!mysqli_stmt_execute($stmtExistentesMaterial)) {
+                    throw new RuntimeException('Error al leer materiales existentes: ' . (mysqli_stmt_error($stmtExistentesMaterial) ?: mysqli_error($db)));
+                }
+                $resExistentesMaterial = mysqli_stmt_get_result($stmtExistentesMaterial);
+                while ($rowMaterialExistente = $resExistentesMaterial ? mysqli_fetch_assoc($resExistentesMaterial) : null) {
+                    $idsPtmExistentesTarea[] = (int)$rowMaterialExistente['id_ptm'];
+                }
+                mysqli_stmt_close($stmtExistentesMaterial);
+            }
+
+            $idsPtmRecibidosTarea = [];
+            foreach ($materiales as $mRecibido) {
+                if (!empty($mRecibido['id_ptm'])) {
+                    $idsPtmRecibidosTarea[] = (int)$mRecibido['id_ptm'];
+                }
+            }
+            $idsPtmRecibidosTarea = array_values(array_unique(array_filter($idsPtmRecibidosTarea)));
+            $idsPtmOmitidosTarea = array_values(array_diff($idsPtmExistentesTarea, $idsPtmRecibidosTarea));
+            if ($idsPtmOmitidosTarea) {
+                $inPtmOmitidos = implode(',', array_map('intval', $idsPtmOmitidosTarea));
+                if (!mysqli_query($db, "DELETE FROM presupuesto_tarea_material WHERE id_presu_tarea = " . (int)$id_presu_tarea . " AND id_ptm IN ($inPtmOmitidos)")) {
+                    throw new RuntimeException('Error al eliminar materiales omitidos: ' . mysqli_error($db));
+                }
+            }
+
             foreach ($materiales as $indiceMaterial => $m) {
                 $id_material       = !empty($m['id_material']) ? (int)$m['id_material'] : null;
+                $idPtmAnterior     = !empty($m['id_ptm']) ? (int)$m['id_ptm'] : null;
                 $nombre_material   = trim((string)($m['nombre'] ?? ''));
                 $cantidad          = isset($m['cantidad']) ? (float)$m['cantidad'] : 0.0;
                 $catalogoMaterialValidado = $catalogosValidados['materiales'][$indiceTarea][$indiceMaterial] ?? null;
@@ -1814,53 +1859,112 @@ function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivo
                 }
                 $suma_mat_filas += $subtotal_fila;
 
-                if ($tieneOrdenMaterialesPresupuesto) {
-                    $stmt = mysqli_prepare($db, "
-                        INSERT INTO presupuesto_tarea_material
-                        (id_presu_tarea, id_material, orden, nombre_material, unidad_venta, unidad_medida,
-                         cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
-                         created_at, updated_at)
-                        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iiisddddss",
-                        $id_presu_tarea, $id_material, $orden, $nombre_material,
-                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
-                        $log_alta_material, $log_edicion_material
-                    );
+                if ($idPtmAnterior) {
+                    if ($tieneOrdenMaterialesPresupuesto) {
+                        $stmt = mysqli_prepare($db, "
+                            UPDATE presupuesto_tarea_material
+                            SET orden = ?,
+                                nombre_material = ?,
+                                cantidad = ?,
+                                precio_unitario_usado = ?,
+                                porcentaje_extra = ?,
+                                subtotal_fila = ?,
+                                log_alta = ?,
+                                log_edicion = ?,
+                                updated_at = NOW()
+                            WHERE id_ptm = ?
+                              AND id_presu_tarea = ?
+                              AND id_material = ?
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "isddddssiii",
+                            $orden, $nombre_material, $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material, $idPtmAnterior, $id_presu_tarea, $id_material
+                        );
+                    } else {
+                        $stmt = mysqli_prepare($db, "
+                            UPDATE presupuesto_tarea_material
+                            SET nombre_material = ?,
+                                cantidad = ?,
+                                precio_unitario_usado = ?,
+                                porcentaje_extra = ?,
+                                subtotal_fila = ?,
+                                log_alta = ?,
+                                log_edicion = ?,
+                                updated_at = NOW()
+                            WHERE id_ptm = ?
+                              AND id_presu_tarea = ?
+                              AND id_material = ?
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "sddddssiii",
+                            $nombre_material, $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material, $idPtmAnterior, $id_presu_tarea, $id_material
+                        );
+                    }
+                    if (!$stmt) {
+                        throw new RuntimeException('Error al preparar actualizacion de material: ' . mysqli_error($db));
+                    }
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('Error al actualizar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                    }
+                    if (mysqli_stmt_affected_rows($stmt) < 0) {
+                        throw new RuntimeException('No se pudo actualizar el material del Presupuesto.');
+                    }
+                    mysqli_stmt_close($stmt);
+                    $idPtmPersistido = $idPtmAnterior;
                 } else {
-                    $stmt = mysqli_prepare($db, "
-                        INSERT INTO presupuesto_tarea_material
-                        (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
-                         cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
-                         created_at, updated_at)
-                        VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iisddddss",
-                        $id_presu_tarea, $id_material, $nombre_material,
-                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
-                        $log_alta_material, $log_edicion_material
-                    );
+                    if ($tieneOrdenMaterialesPresupuesto) {
+                        $stmt = mysqli_prepare($db, "
+                            INSERT INTO presupuesto_tarea_material
+                            (id_presu_tarea, id_material, orden, nombre_material, unidad_venta, unidad_medida,
+                             cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
+                             created_at, updated_at)
+                            VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "iiisddddss",
+                            $id_presu_tarea, $id_material, $orden, $nombre_material,
+                            $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material
+                        );
+                    } else {
+                        $stmt = mysqli_prepare($db, "
+                            INSERT INTO presupuesto_tarea_material
+                            (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
+                             cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
+                             created_at, updated_at)
+                            VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "iisddddss",
+                            $id_presu_tarea, $id_material, $nombre_material,
+                            $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material
+                        );
+                    }
+                    if (!$stmt) {
+                        throw new RuntimeException('Error al preparar insercion de material: ' . mysqli_error($db));
+                    }
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('Error al insertar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                    }
+                    $idPtmPersistido = mysqli_insert_id($db);
+                    mysqli_stmt_close($stmt);
                 }
-                if (!mysqli_stmt_execute($stmt)) {
-                    throw new RuntimeException('Error al insertar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
-                }
-                $idPtmNuevo = mysqli_insert_id($db);
-                $idPtmAnterior = !empty($m['id_ptm']) ? (int)$m['id_ptm'] : null;
-                if ($idPtmNuevo > 0) {
-                    $lineasInsertadas['materiales'][] = [
-                        'client_key' => $clientKeyTarea,
-                        'nro' => $nro,
-                        'indice' => $indiceMaterial,
-                        'id_ptm_anterior' => $idPtmAnterior,
-                        'id_ptm' => $idPtmNuevo,
-                        'id_material' => $id_material,
-                    ];
-                }
-                mysqli_stmt_close($stmt);
+
+                $lineasInsertadas['materiales'][] = [
+                    'client_key' => $clientKeyTarea,
+                    'nro' => $nro,
+                    'indice' => $indiceMaterial,
+                    'id_ptm_anterior' => $idPtmAnterior,
+                    'id_ptm' => $idPtmPersistido,
+                    'id_material' => $id_material,
+                ];
             }
 
             // === Mano de Obra

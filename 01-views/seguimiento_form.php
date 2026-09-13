@@ -649,6 +649,8 @@ function renderizar_editor_detalle_tarea_presupuesto(string $descripcion, bool $
 
 function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true, bool $soloLectura = false): string
 {
+    global $opcionesMateriales;
+
     $hoy = new DateTimeImmutable('now');
 
     $e = function ($v): string {
@@ -719,8 +721,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             [$clase, $ro] = $vigencia($fechaRef);
 
             $rowsMat[] = '
-            <tr data-material-id="'. $e($idMat) .'" data-orden="'. $e($ordenMat) .'">
-              <td>'. $e($nombre) .'</td>
+            <tr data-material-id="'. $e($idMat) .'" data-orden="'. $e($ordenMat) .'" data-id-ptm="'. $e($idPtm) .'">
+              <td><span class="material-nombre-presupuesto">'. $e($nombre) .'</span></td>
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-material"
                        value="'. $e($cant) .'" min="0" step="any" '. $disabledAttr .'>
@@ -740,6 +742,13 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                        value="'. $e($pctExtra) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
               <td class="text-right subtotal-material">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
+              <td class="text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-material-presupuesto"
+                        data-id-ptm="'. $e($idPtm) .'" '. $disabledAttr .'
+                        title="Eliminar material" aria-label="Eliminar material">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
             </tr>';
 
         }
@@ -893,6 +902,23 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+                <div class="form-row align-items-end mb-2 presu-material-add-row">
+                  <div class="col-md-7 form-group mb-1">
+                    <select class="form-control form-control-sm presu-material-select" '. $disabledAttr .'>
+                      <option value="">Material</option>
+                      '. ($opcionesMateriales ?? '') .'
+                    </select>
+                  </div>
+                  <div class="col-md-2 form-group mb-1">
+                    <input type="number" class="form-control form-control-sm presu-material-cantidad"
+                           min="0.01" step="any" placeholder="Cantidad" '. $disabledAttr .'>
+                  </div>
+                  <div class="col-md-3 form-group mb-1">
+                    <button type="button" class="btn btn-outline-success btn-sm btn-block presu-agregar-material" '. $disabledAttr .'>
+                      <i class="fas fa-plus"></i> Agregar material
+                    </button>
+                  </div>
+                </div>
                 <table class="tabla-presupuesto tabla-presupuesto-sm">
                   <thead>
                     <tr>
@@ -901,6 +927,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                       <th>Precio Unitario</th>
                       <th>% Extra</th>
                       <th>Subtotal</th>
+                      <th>Accion</th>
                     </tr>
                   </thead>
                   <tbody>'
@@ -916,6 +943,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                                class="form-control form-control-sm input-otros-materiales"
                                id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'" '. $disabledAttr .'>
                       </td>
+                      <td></td>
                     </tr>
                     <tr class="fila-subtotal">
                       <td colspan="3" class="text-right"><b>Subtotal Materiales</b></td>
@@ -924,6 +952,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                                min="0" '. $roUtil .' value="'. $e($utilMatPct ?? '') .'" placeholder="%">
                       </td>
                       <td class="text-right"><b>$0.00</b></td>
+                      <td></td>
                     </tr>
                   </tbody>
                 </table>

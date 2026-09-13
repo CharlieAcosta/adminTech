@@ -530,15 +530,21 @@
     const $btnEmitir = $('.btn-emitir-presupuesto');
 
     const $btnAgregarTarea = $('#btn-agregar-tarea-presupuesto');
+    const $accionesMaterial = $(`${rootSel} .presu-agregar-material, ${rootSel} .btn-eliminar-material-presupuesto`);
+    const $inputsAltaMaterial = $(`${rootSel} .presu-material-select, ${rootSel} .presu-material-cantidad`);
 
     if (presupuestoEdicionComercialBloqueada()) {
       $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
       $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
       $btnAgregarTarea.prop('disabled', true).addClass('disabled');
+      $accionesMaterial.prop('disabled', true).addClass('disabled');
+      $inputsAltaMaterial.prop('disabled', true);
       return;
     }
 
     $btnAgregarTarea.prop('disabled', false).removeClass('disabled');
+    $accionesMaterial.prop('disabled', false).removeClass('disabled');
+    $inputsAltaMaterial.prop('disabled', false);
 
     $btnGuardar
       .prop('disabled', !presupuestoDirty)
@@ -622,6 +628,239 @@
     });
   }
 
+  const ENDPOINT_PRESUPUESTO_GUARDAR = '../03-controller/presupuestos_guardar.php';
+
+  function mostrarMensajeMaterialPresupuesto(tipo, mensaje) {
+    if (tipo === 'error' && typeof mostrarError === 'function') {
+      mostrarError(mensaje, 4);
+      return;
+    }
+    if (tipo === 'warning' && typeof mostrarAdvertencia === 'function') {
+      mostrarAdvertencia(mensaje, 4);
+      return;
+    }
+    if (window.toastr && typeof toastr[tipo] === 'function') {
+      toastr[tipo](mensaje);
+      return;
+    }
+    window.alert(mensaje);
+  }
+
+  function parseNumeroPresupuesto(valor) {
+    const n = parseFloat(String(valor == null ? '' : valor).replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function escaparHtmlPresupuesto(valor) {
+    return $('<div>').text(String(valor == null ? '' : valor)).html();
+  }
+
+  function fechaCatalogoVencidaPresupuesto(fecha) {
+    if (!fecha) return true;
+    const base = new Date(String(fecha).replace(' ', 'T'));
+    if (Number.isNaN(base.getTime())) return true;
+    const diffDias = (Date.now() - base.getTime()) / 86400000;
+    return diffDias > 30;
+  }
+
+  function solicitarContextoMaterialPresupuesto(idMaterial) {
+    return $.ajax({
+      url: ENDPOINT_PRESUPUESTO_GUARDAR,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'obtenerContextoPrecioCatalogoPresupuestoDinamico',
+        tipo: 'material',
+        id_catalogo: idMaterial
+      }
+    });
+  }
+
+  function confirmarContextoMaterialPresupuesto(contexto, importe, accionResolucion) {
+    return $.ajax({
+      url: ENDPOINT_PRESUPUESTO_GUARDAR,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'confirmarPrecioCatalogoPresupuestoDinamico',
+        tipo: 'material',
+        id_catalogo: contexto.id_catalogo || contexto.id_material,
+        importe: importe,
+        accion_resolucion: accionResolucion || 'CONFIRMAR_VIGENCIA_CATALOGO',
+        precio_catalogo_esperado: contexto.precio_catalogo || contexto.precio_unitario || contexto.precio || '',
+        fecha_catalogo_esperada: contexto.fecha_catalogo || contexto.fecha_actualizacion || contexto.log_edicion || contexto.log_alta || ''
+      }
+    });
+  }
+
+  async function pedirNuevoPrecioMaterialPresupuesto(contexto) {
+    const actual = parseNumeroPresupuesto(contexto.precio_unitario || contexto.precio);
+    const resp = await Swal.fire({
+      icon: 'question',
+      title: 'Actualizar precio',
+      text: 'Ingrese el precio vigente para este material.',
+      input: 'number',
+      inputValue: actual,
+      inputAttributes: { min: '0', step: 'any' },
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: (value) => {
+        const n = parseNumeroPresupuesto(value);
+        if (!(n > 0)) {
+          Swal.showValidationMessage('Ingrese un precio mayor a cero.');
+          return false;
+        }
+        return n;
+      }
+    });
+    return resp.isConfirmed ? resp.value : null;
+  }
+
+  async function resolverPrecioMaterialNuevoPresupuesto(idMaterial) {
+    const contextoResp = await solicitarContextoMaterialPresupuesto(idMaterial);
+    if (!contextoResp || contextoResp.ok === false || contextoResp.status === false) {
+      throw new Error((contextoResp && (contextoResp.mensaje || contextoResp.error)) || 'No se pudo obtener el precio del material.');
+    }
+
+    const contexto = contextoResp.contexto || contextoResp.data || contextoResp;
+    const precio = parseNumeroPresupuesto(contexto.precio_catalogo || contexto.precio_unitario || contexto.precio);
+    const fecha = contexto.fecha_catalogo || contexto.fecha_actualizacion || contexto.log_edicion || contexto.log_alta || '';
+
+    if (!fechaCatalogoVencidaPresupuesto(fecha)) {
+      return { precio, fecha, contexto };
+    }
+
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      throw new Error('El precio del material esta vencido y debe confirmarse antes de agregarlo.');
+    }
+
+    const decision = await Swal.fire({
+      icon: 'warning',
+      title: 'Precio vencido',
+      text: 'El precio del material tiene mas de 30 dias. Confirme el valor actual o cargue uno nuevo antes de agregarlo.',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'Usar precio actual',
+      denyButtonText: 'Ingresar nuevo',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (decision.isDismissed) return null;
+
+    let precioConfirmado = precio;
+    let accion = 'CONFIRMAR_VIGENCIA_CATALOGO';
+    if (decision.isDenied) {
+      const nuevo = await pedirNuevoPrecioMaterialPresupuesto(contexto);
+      if (nuevo == null) return null;
+      precioConfirmado = nuevo;
+      accion = 'ACTUALIZAR_PRECIO_CATALOGO';
+    }
+
+    const confirmacion = await confirmarContextoMaterialPresupuesto(contexto, precioConfirmado, accion);
+    if (!confirmacion || confirmacion.ok === false || confirmacion.status === false) {
+      throw new Error((confirmacion && (confirmacion.mensaje || confirmacion.error)) || 'No se pudo confirmar el precio del material.');
+    }
+
+    const confirmado = confirmacion.contexto || confirmacion.data || confirmacion;
+    return {
+      precio: parseNumeroPresupuesto(confirmado.importe_persistido || confirmado.precio_catalogo || confirmado.precio_unitario || confirmado.precio || precioConfirmado),
+      fecha: confirmado.fecha_actualizacion || confirmado.fecha_catalogo || confirmado.log_edicion || confirmado.log_alta || '',
+      contexto: confirmado
+    };
+  }
+
+  function materialYaExisteEnTarea($card, idMaterial) {
+    const idBuscado = String(idMaterial);
+    let existe = false;
+    $card.find('.tarea-materiales tbody tr[data-material-id]').each(function () {
+      if (String($(this).attr('data-material-id') || $(this).data('material-id') || '') === idBuscado) {
+        existe = true;
+        return false;
+      }
+      return true;
+    });
+    return existe;
+  }
+
+  function renumerarMaterialesPresupuesto($card) {
+    $card.find('.tarea-materiales tbody tr[data-material-id]').each(function (index) {
+      $(this).attr('data-orden', String(index + 1)).data('orden', index + 1);
+    });
+  }
+
+  function crearFilaMaterialPresupuesto(datos) {
+    const idPtm = datos.id_ptm ? String(datos.id_ptm) : '';
+    const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || '';
+    const fecha = datos.fecha_actualizacion || datos.log_edicion || datos.log_alta || '';
+    const precioVencido = fechaCatalogoVencidaPresupuesto(fecha);
+    const clasePrecio = precioVencido ? 'bg-danger' : 'bg-success';
+    const nombre = escaparHtmlPresupuesto(datos.nombre || datos.descripcion || 'Material');
+    const cantidad = parseNumeroPresupuesto(datos.cantidad);
+    const precio = parseNumeroPresupuesto(datos.precio_unitario || datos.precio_unitario_usado);
+    const extra = parseNumeroPresupuesto(datos.porcentaje_extra);
+
+    const $fila = $(
+      '<tr data-material-id="' + escaparHtmlPresupuesto(datos.id_material) + '" data-id-ptm="' + escaparHtmlPresupuesto(idPtm) + '" data-orden="' + escaparHtmlPresupuesto(datos.orden || '') + '">' +
+        '<td><span class="material-nombre-presupuesto">' + nombre + '</span></td>' +
+        '<td><input type="number" class="form-control form-control-sm cantidad-material" min="0" step="any"></td>' +
+        '<td><input type="number" class="form-control form-control-sm precio-unitario ' + clasePrecio + '" min="0" step="any" readonly></td>' +
+        '<td><input type="number" class="form-control form-control-sm porcentaje-extra" min="0" step="any"></td>' +
+        '<td class="text-right subtotal-material"></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-material-presupuesto" title="Eliminar material"><i class="fas fa-trash"></i></button></td>' +
+      '</tr>'
+    );
+
+    $fila.attr('data-log_alta', datos.log_alta || '').attr('data-log_edicion', datos.log_edicion || fecha || '');
+    $fila.find('.cantidad-material').val(cantidad);
+    $fila.find('.precio-unitario')
+      .val(precio)
+      .attr('data-id-presupuesto', idPresupuesto)
+      .attr('data-id-ptm', idPtm)
+      .attr('data-id-material', datos.id_material)
+      .attr('data-fecha-actualizacion', fecha)
+      .attr('data-confirmar-precio-tipo', 'material')
+      .data('id-presupuesto', idPresupuesto)
+      .data('id-ptm', idPtm)
+      .data('id-material', datos.id_material)
+      .data('fecha-actualizacion', fecha)
+      .data('confirmar-precio-tipo', 'material');
+    $fila.find('.porcentaje-extra').val(extra);
+    return $fila;
+  }
+
+  function insertarFilaMaterialPresupuesto($card, datos) {
+    const $tbody = $card.find('.tarea-materiales tbody').first();
+    const $fila = crearFilaMaterialPresupuesto(datos);
+    const $referencia = $tbody.find('tr.fila-otros-materiales, tr.fila-subtotal').first();
+    if ($referencia.length) $referencia.before($fila); else $tbody.append($fila);
+    renumerarMaterialesPresupuesto($card);
+    if (typeof window.calcularFilaMaterial === 'function') window.calcularFilaMaterial($fila);
+    _safeActualizarSubtotalesBloque($card, $card[0]);
+    _safeActualizarTotalesPorTarea($card, $card[0]);
+    _safeActualizarTotalGeneral();
+    marcarPresupuestoComoModificadoSilencioso();
+    actualizarEstadoAccionesPresupuestoSilencioso();
+    return $fila;
+  }
+
+  function inicializarSelectMaterialesPresupuesto($scope) {
+    const $root = $scope && $scope.length ? $scope : $('#contenedorPresupuestoGenerado');
+    const opciones = $('#opcionesMaterialBase').html() || '';
+    $root.find('.presu-material-select').each(function () {
+      const $select = $(this);
+      if (!$select.find('option[value!=""]').length && opciones) {
+        $select.append(opciones);
+      }
+      if ($.fn.select2 && !$select.data('select2')) {
+        $select.select2({ width: '100%', placeholder: 'Material', allowClear: true });
+      }
+    });
+  }
+
+
   function obtenerResumenPreciosVencidosPresupuesto() {
     const $root = $('#contenedorPresupuestoGenerado');
     const contarLineas = function (selector) {
@@ -670,6 +909,8 @@
     .off('click.presu',  '.presu-eliminar-imagen')
     .off('click.presu', '#btn-guardar-presupuesto')
     .off('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto')
+    .off('click.presu-agregar-material', '#contenedorPresupuestoGenerado .presu-agregar-material')
+    .off('click.presu-eliminar-material', '#contenedorPresupuestoGenerado .btn-eliminar-material-presupuesto')
     .off('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto')
     .on('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto', function (e) {
       e.preventDefault();
@@ -685,6 +926,12 @@
       if (!$base.length) return;
 
       const $nueva = $base.clone(false, false);
+      $nueva.find('.select2-container').remove();
+      $nueva.find('.presu-material-select')
+        .removeClass('select2-hidden-accessible')
+        .removeAttr('data-select2-id tabindex aria-hidden')
+        .val('');
+
       const key = generarClientKeyTareaPresupuesto();
       setIdentidadPresuTareaCard($nueva, null, key);
       window.fotosNuevasPorTarea[key] = [];
@@ -703,15 +950,108 @@
       $nueva.find('.tarea-mano-obra tbody tr').not('.fila-otros-mano,.fila-subtotal').remove();
       $nueva.find('.presu-preview-fotos').empty();
       $nueva.find('.presu-fotos').val('');
+      $nueva.find('.presu-material-select').val('');
+      $nueva.find('.presu-material-cantidad').val('1');
 
       $root.find('.presupuesto-total-card').before($nueva);
       renumerarTareasPresupuesto();
       initDetalleTareaRichEditors($nueva, { triggerInput: false });
+      inicializarSelectMaterialesPresupuesto($nueva);
       syncTituloCardPresupuesto($nueva);
       _safeActualizarSubtotalesBloque($nueva, $nueva[0]);
       _safeActualizarTotalesPorTarea($nueva, $nueva[0]);
       _safeActualizarTotalGeneral();
       marcarPresupuestoComoModificadoSilencioso();
+    })
+    .on('click.presu-agregar-material', '#contenedorPresupuestoGenerado .presu-agregar-material', async function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $btn = $(this);
+      const $card = $btn.closest('.tarea-card');
+      const $filaAlta = $btn.closest('.presu-material-add-row');
+      const $select = $filaAlta.find('.presu-material-select').first();
+      const $cantidad = $filaAlta.find('.presu-material-cantidad').first();
+      const idMaterial = parseInt($select.val(), 10) || 0;
+      const cantidad = parseNumeroPresupuesto($cantidad.val());
+
+      if (!(idMaterial > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Seleccione un material.');
+        return;
+      }
+      if (!(cantidad > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ingrese una cantidad mayor a cero.');
+        return;
+      }
+      if (materialYaExisteEnTarea($card, idMaterial)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ese material ya existe en la tarea. Para reemplazarlo, elimine la linea anterior y agregue el nuevo material.');
+        return;
+      }
+
+      const $option = $select.find('option:selected');
+      $btn.prop('disabled', true).addClass('disabled');
+      try {
+        const precioResuelto = await resolverPrecioMaterialNuevoPresupuesto(idMaterial);
+        if (!precioResuelto) return;
+
+        insertarFilaMaterialPresupuesto($card, {
+          id_ptm: null,
+          id_material: idMaterial,
+          nombre: ($option.text() || '').trim(),
+          cantidad,
+          precio_unitario: precioResuelto.precio,
+          porcentaje_extra: 0,
+          fecha_actualizacion: precioResuelto.fecha,
+          log_alta: obtenerDatoOptionMaterial($option, 'log_alta'),
+          log_edicion: precioResuelto.fecha || obtenerDatoOptionMaterial($option, 'log_edicion')
+        });
+
+        $select.val('').trigger('change');
+        $cantidad.val('1');
+      } catch (err) {
+        mostrarMensajeMaterialPresupuesto('error', err && err.message ? err.message : 'No se pudo agregar el material.');
+      } finally {
+        $btn.prop('disabled', false).removeClass('disabled');
+        actualizarEstadoAccionesPresupuestoSilencioso();
+      }
+    })
+    .on('click.presu-eliminar-material', '#contenedorPresupuestoGenerado .btn-eliminar-material-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $fila = $(this).closest('tr');
+      const $card = $fila.closest('.tarea-card');
+      const eliminar = () => {
+        $fila.remove();
+        renumerarMaterialesPresupuesto($card);
+        _safeActualizarSubtotalesBloque($card, $card[0]);
+        _safeActualizarTotalesPorTarea($card, $card[0]);
+        _safeActualizarTotalGeneral();
+        marcarPresupuestoComoModificadoSilencioso();
+      };
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Eliminar material?',
+          text: 'La baja se aplicara al guardar el presupuesto.',
+          showCancelButton: true,
+          confirmButtonText: 'Eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then((res) => { if (res.isConfirmed) eliminar(); });
+      } else if (window.confirm('Eliminar material?')) {
+        eliminar();
+      }
     })
     .on('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto', function (e) {
       e.preventDefault();
@@ -826,6 +1166,8 @@
 
   $(function () {
     initDetalleTareaRichEditors(document, { triggerInput: false });
+    inicializarSelectMaterialesPresupuesto($('#contenedorPresupuestoGenerado'));
+    actualizarEstadoAccionesPresupuestoSilencioso();
   });
 
     // === Recalculo en vivo para presupuesto cargado del backend ===
@@ -1443,13 +1785,17 @@ window._presuSerializarCard = function ($card, nro) {
     const id_material = $tr.data('material-id');
     if (!id_material) return;
 
-    const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+    const id_ptm = $tr.find('.precio-unitario').data('id-ptm') || $tr.attr('data-id-ptm') || null;
+    const orden = parseInt($tr.attr('data-orden') || $tr.data('orden') || (materiales.length + 1), 10) || (materiales.length + 1);
+    const nombre = ($tr.find('.material-nombre-presupuesto').first().text() || $tr.find('td').eq(0).text() || '').trim();
     const cantidad         = parseFloat($tr.find('.cantidad-material').val()) || 0;
     const precio_unitario  = parseFloat($tr.find('.precio-unitario').val()) || 0;
     const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
 
     materiales.push({
+      id_ptm: id_ptm ? String(id_ptm) : null,
       id_material: String(id_material),
+      orden,
       nombre,
       cantidad,
       precio_unitario,
@@ -1676,6 +2022,8 @@ $(document)
 
       if ($input.length) {
         $input.attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
+        $input.closest('tr').attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
+        $input.closest('tr').find('.btn-eliminar-material-presupuesto').attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
       }
     });
 
@@ -1756,8 +2104,9 @@ $(document)
           const id_material = $tr.data('material-id');
           if (!id_material) return;
   
-          const id_ptm          = $tr.find('.precio-unitario').data('id-ptm') || null;
-          const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+          const id_ptm = $tr.find('.precio-unitario').data('id-ptm') || $tr.attr('data-id-ptm') || null;
+          const orden = parseInt($tr.attr('data-orden') || $tr.data('orden') || (materiales.length + 1), 10) || (materiales.length + 1);
+          const nombre = ($tr.find('.material-nombre-presupuesto').first().text() || $tr.find('td').eq(0).text() || '').trim();
           const cantidad         = parseFloat($tr.find('.cantidad-material').val()) || 0;
           const precio_unitario  = parseFloat($tr.find('.precio-unitario').val()) || 0;
           const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
@@ -1765,6 +2114,7 @@ $(document)
           materiales.push({
             id_ptm: id_ptm ? String(id_ptm) : null,
             id_material: String(id_material),
+            orden,
             nombre,
             cantidad,
             precio_unitario,
@@ -2251,31 +2601,19 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   const $matSubtotal = $tbMat.find('tr.fila-subtotal').first().detach();
   $tbMat.empty();
 
-  (tareaPlantilla.materiales || []).forEach(m => {
-    const idMat = (m.id_material != null ? m.id_material : '');
-    const nombre = (m.nombre || '');
-    const cantidad = (m.cantidad != null ? m.cantidad : 0);
-    const precio = (m.precio_unitario != null ? m.precio_unitario : 0);
-    const extra = (m.porcentaje_extra != null ? m.porcentaje_extra : 0);
-
-    const row = `
-      <tr data-material-id="${idMat}">
-        <td>${nombre}</td>
-        <td>
-          <input type="number" class="form-control form-control-sm cantidad-material"
-                 value="${cantidad}" min="0" step="any">
-        </td>
-        <td>
-          <input type="number" class="form-control form-control-sm precio-unitario bg-success"
-                 value="${precio}" min="0" step="any" readonly>
-        </td>
-        <td>
-          <input type="number" class="form-control form-control-sm porcentaje-extra"
-                 value="${extra}" min="0" step="any">
-        </td>
-        <td class="text-right subtotal-material"></td>
-      </tr>`;
-    $tbMat.append(row);
+  (tareaPlantilla.materiales || []).forEach((m, indice) => {
+    insertarFilaMaterialPresupuesto($card, {
+      id_ptm: null,
+      id_material: (m.id_material != null ? m.id_material : ''),
+      orden: indice + 1,
+      nombre: (m.nombre || ''),
+      cantidad: (m.cantidad != null ? m.cantidad : 0),
+      precio_unitario: (m.precio_unitario != null ? m.precio_unitario : 0),
+      porcentaje_extra: (m.porcentaje_extra != null ? m.porcentaje_extra : 0),
+      fecha_actualizacion: m.fecha_actualizacion || m.log_edicion || m.log_alta || '',
+      log_alta: m.log_alta || '',
+      log_edicion: m.log_edicion || ''
+    });
   });
 
   if ($matOtros && $matOtros.length) $tbMat.append($matOtros);
