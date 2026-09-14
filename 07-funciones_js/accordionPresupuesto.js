@@ -903,6 +903,11 @@
     };
   }
 
+  // Las plantillas se aplican fuera de este closure, pero deben reutilizar
+  // exactamente la misma resolucion de catalogo que las altas manuales.
+  window.resolverPrecioMaterialNuevoPresupuesto = resolverPrecioMaterialNuevoPresupuesto;
+  window.resolverPrecioJornalNuevoPresupuesto = resolverPrecioJornalNuevoPresupuesto;
+
   function materialYaExisteEnTarea($card, idMaterial) {
     const idBuscado = String(idMaterial);
     let existe = false;
@@ -1071,6 +1076,9 @@
     actualizarEstadoAccionesPresupuestoSilencioso();
     return $fila;
   }
+
+  window.insertarFilaMaterialPresupuesto = insertarFilaMaterialPresupuesto;
+  window.insertarFilaManoObraPresupuesto = insertarFilaManoObraPresupuesto;
 
   function inicializarSelectManoObraPresupuesto($scope) {
     const $root = $scope && $scope.length ? $scope : $('#contenedorPresupuestoGenerado');
@@ -2398,6 +2406,19 @@ $(document)
     });
   }
 
+  function obtenerMensajeErrorGuardarPresupuesto(err) {
+    let mensaje = err && err.responseJSON && (err.responseJSON.msg || err.responseJSON.mensaje);
+    if (!mensaje && err && err.responseText) {
+      try {
+        const respuesta = JSON.parse(err.responseText);
+        mensaje = respuesta.msg || respuesta.mensaje;
+      } catch (_) {
+        mensaje = err.responseText;
+      }
+    }
+    return mensaje || (err && err.message) || 'Error al guardar el presupuesto.';
+  }
+
   window.presupuestoGuardar = async function (idPresuOpcional) {
     try {
       if (presupuestoEdicionComercialBloqueada()) {
@@ -2593,9 +2614,10 @@ $(document)
       }
   
     } catch (err) {
-      console.error('Error al guardar presupuesto (unificado):', err);
-      if (typeof mostrarError === 'function') mostrarError('Error al guardar el presupuesto.');
-      else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: 'Error al guardar el presupuesto.' });
+      const mensaje = obtenerMensajeErrorGuardarPresupuesto(err);
+      console.error('Error al guardar presupuesto (unificado):', mensaje, err);
+      if (typeof mostrarError === 'function') mostrarError(mensaje);
+      else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: mensaje });
     } finally {
       actualizarEstadoAccionesPresupuestoSilencioso();
     }
@@ -2883,13 +2905,22 @@ function obtenerYAplicarPlantilla(id_arch_tarea, $card) {
       id_arch_tarea
     }
   })
-  .done(function (resp) {
+  .done(async function (resp) {
     if (!resp || !resp.ok || !resp.tarea) {
       console.error('obtener_tarea_archivada → respuesta no OK:', resp);
       if (window.mostrarError) mostrarError('No se pudo obtener la plantilla.');
       return;
     }
-    aplicarPlantillaEnCard(resp.tarea, $card);
+    try {
+      const aplicada = await aplicarPlantillaEnCard(resp.tarea, $card);
+      if (!aplicada && window.mostrarAdvertencia) {
+        mostrarAdvertencia('Se cancelo la importacion. La tarea original no fue modificada.');
+      }
+    } catch (err) {
+      const mensaje = err && err.message ? err.message : 'No se pudo preparar la plantilla con los precios actuales.';
+      console.error('aplicarPlantillaEnCard → error:', mensaje, err);
+      if (window.mostrarError) mostrarError(mensaje);
+    }
   })
   .fail(function (xhr) {
     console.error('obtener_tarea_archivada → error:', xhr.responseText || xhr.statusText);
@@ -2897,9 +2928,65 @@ function obtenerYAplicarPlantilla(id_arch_tarea, $card) {
   });
 }
 
-// === Helper: aplica materiales + MO + utilidades/otros en la card destino ===
-function aplicarPlantillaEnCard(tareaPlantilla, $card) {
-  if (!$card || !$card.length) return;
+function validarDuplicadosPlantilla(items, campoId, etiqueta) {
+  const encontrados = new Set();
+  (items || []).forEach((item) => {
+    const id = parseInt(item && item[campoId], 10) || 0;
+    if (!(id > 0)) {
+      throw new Error(`La plantilla contiene ${etiqueta} sin identificador de catalogo.`);
+    }
+    if (encontrados.has(id)) {
+      throw new Error(`La plantilla contiene ${etiqueta} duplicados.`);
+    }
+    encontrados.add(id);
+  });
+}
+
+async function prepararPlantillaConCatalogosActuales(tareaPlantilla) {
+  const materialesOrigen = Array.isArray(tareaPlantilla.materiales) ? tareaPlantilla.materiales : [];
+  const manoObraOrigen = Array.isArray(tareaPlantilla.mano_obra) ? tareaPlantilla.mano_obra : [];
+
+  validarDuplicadosPlantilla(materialesOrigen, 'id_material', 'materiales');
+  validarDuplicadosPlantilla(manoObraOrigen, 'jornal_id', 'tipos de jornal');
+
+  const materiales = [];
+  for (let indice = 0; indice < materialesOrigen.length; indice += 1) {
+    const material = materialesOrigen[indice];
+    const precioResuelto = await window.resolverPrecioMaterialNuevoPresupuesto(material.id_material);
+    if (!precioResuelto) return null;
+    materiales.push({
+      ...material,
+      id_ptm: null,
+      orden: material.orden || (indice + 1),
+      precio_unitario: precioResuelto.precio,
+      fecha_actualizacion: precioResuelto.fecha
+    });
+  }
+
+  const manoObra = [];
+  for (let indice = 0; indice < manoObraOrigen.length; indice += 1) {
+    const jornal = manoObraOrigen[indice];
+    const precioResuelto = await window.resolverPrecioJornalNuevoPresupuesto(jornal.jornal_id);
+    if (!precioResuelto) return null;
+    manoObra.push({
+      ...jornal,
+      id_ptmo: null,
+      orden: jornal.orden || (indice + 1),
+      jornal_valor: precioResuelto.precio,
+      fecha_actualizacion: precioResuelto.fecha
+    });
+  }
+
+  return { ...tareaPlantilla, materiales, mano_obra: manoObra };
+}
+
+// === Helper: resuelve catalogos y aplica materiales + MO + utilidades/otros ===
+async function aplicarPlantillaEnCard(tareaPlantilla, $card) {
+  if (!$card || !$card.length) return false;
+
+  const tareaPreparada = await prepararPlantillaConCatalogosActuales(tareaPlantilla);
+  if (!tareaPreparada) return false;
+  tareaPlantilla = tareaPreparada;
 
   // 0) Título de la tarea = nombre de la plantilla
   const $titulo = $card.find('.tarea-encabezado b');
@@ -2951,13 +3038,13 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   $tbMat.empty();
 
   (tareaPlantilla.materiales || []).forEach((m, indice) => {
-    insertarFilaMaterialPresupuesto($card, {
+    window.insertarFilaMaterialPresupuesto($card, {
       id_ptm: null,
       id_material: (m.id_material != null ? m.id_material : ''),
-      orden: indice + 1,
+      orden: m.orden || (indice + 1),
       nombre: (m.nombre || ''),
       cantidad: (m.cantidad != null ? m.cantidad : 0),
-      precio_unitario: (m.precio_unitario != null ? m.precio_unitario : 0),
+      precio_unitario: m.precio_unitario,
       porcentaje_extra: (m.porcentaje_extra != null ? m.porcentaje_extra : 0),
       fecha_actualizacion: m.fecha_actualizacion || m.log_edicion || m.log_alta || '',
       log_alta: m.log_alta || '',
@@ -2977,14 +3064,14 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   $tbMo.empty();
 
   (tareaPlantilla.mano_obra || []).forEach((o, indice) => {
-    insertarFilaManoObraPresupuesto($card, {
+    window.insertarFilaManoObraPresupuesto($card, {
       id_ptmo: null,
       jornal_id: (o.jornal_id != null ? o.jornal_id : ''),
-      orden: indice + 1,
+      orden: o.orden || (indice + 1),
       nombre: (o.nombre || o.nombre_jornal || ''),
       cantidad: (o.cantidad != null ? o.cantidad : 0),
       dias: (o.dias != null ? o.dias : 1),
-      jornal_valor: (o.jornal_valor != null ? o.jornal_valor : (o.valor_jornal_usado != null ? o.valor_jornal_usado : 0)),
+      jornal_valor: o.jornal_valor,
       porcentaje_extra: (o.porcentaje_extra != null ? o.porcentaje_extra : 0),
       observacion: (o.observacion != null ? o.observacion : ''),
       fecha_actualizacion: o.fecha_actualizacion || o.updated_at_origen || o.updated_at || ''
@@ -3017,6 +3104,7 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   if (window.mostrarExito) {
     mostrarExito('Plantilla aplicada a la tarea.');
   }
+  return true;
 }
 
 
