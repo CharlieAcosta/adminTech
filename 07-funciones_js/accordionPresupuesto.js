@@ -2336,21 +2336,12 @@ $(document)
   function aplicarMapeoLineasPresupuestoGuardado(mapeo) {
     if (!mapeo || typeof mapeo !== 'object') return;
 
-    (mapeo.tareas || []).forEach((item, indice) => {
-      const idNuevo = item && item.id_presu_tarea ? String(item.id_presu_tarea) : '';
-      if (!idNuevo) return;
-
-      const key = item && item.client_key ? String(item.client_key) : '';
-      const $cards = $('#contenedorPresupuestoGenerado .tarea-card');
-      const $card = key
-        ? $cards.filter(function () { return String($(this).attr('data-presu-client-key') || '') === key; }).first()
-        : $cards.eq(indice);
-
-      if ($card.length) {
-        setIdentidadPresuTareaCard($card, idNuevo, 'pt_' + idNuevo);
-      }
-    });
-
+    // IMPORTANTE: los mappings de materiales y mano de obra ubican la card de su tarea
+    // por el mismo client_key con el que fue enviada en el request (p.ej. "tmp_...").
+    // El mapping de tareas es el único paso que muta ese client_key (a "pt_<id>").
+    // Por eso materiales/MO deben aplicarse ANTES de tocar el client_key de la tarea:
+    // si se cambia primero, el lookup de materiales/MO por el client_key original
+    // deja de encontrar la card y esas líneas quedan sin id_ptm/id_ptmo en el DOM.
     const $materialesDom = $('#contenedorPresupuestoGenerado .precio-unitario');
     (mapeo.materiales || []).forEach((item, indice) => {
       const idAnterior = item && item.id_ptm_anterior ? String(item.id_ptm_anterior) : '';
@@ -2402,6 +2393,24 @@ $(document)
         $input.attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
         $input.closest('tr').attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
         $input.closest('tr').find('.btn-eliminar-mano-obra-presupuesto').attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
+      }
+    });
+
+    // El mapping de tareas se aplica al final: recién aquí se muta el client_key
+    // (tmp_* -> pt_<id>), una vez que materiales y mano de obra ya localizaron
+    // sus cards usando el client_key original.
+    (mapeo.tareas || []).forEach((item, indice) => {
+      const idNuevo = item && item.id_presu_tarea ? String(item.id_presu_tarea) : '';
+      if (!idNuevo) return;
+
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const $cards = $('#contenedorPresupuestoGenerado .tarea-card');
+      const $card = key
+        ? $cards.filter(function () { return String($(this).attr('data-presu-client-key') || '') === key; }).first()
+        : $cards.eq(indice);
+
+      if ($card.length) {
+        setIdentidadPresuTareaCard($card, idNuevo, 'pt_' + idNuevo);
       }
     });
   }
