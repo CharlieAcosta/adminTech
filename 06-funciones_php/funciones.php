@@ -984,24 +984,26 @@ function comparaFechaHora($stringFechaHora, $flag) {
     switch ($flag) {
         case 'fh':
             $fechaHoraObj = DateTime::createFromFormat('Y-m-d H:i:s', $stringFechaHora);
-            $interval = $fechaHoraActual->diff($fechaHoraObj);
             break;
         case 'f':
             $fechaHoraObj = DateTime::createFromFormat('Y-m-d', $stringFechaHora);
-            $interval = $fechaHoraActual->diff($fechaHoraObj);
             break;
         case 'h':
             $fechaHoraObj = DateTime::createFromFormat('H:i:s', $stringFechaHora);
-            $interval = $fechaHoraActual->diff($fechaHoraObj);
             break;
         default:
             return array('error' => 'Flag no válido. Los valores permitidos son "fh", "f" o "h".');
     }
 
-    // Compara la fecha y hora actuales con la proporcionada
+    // Validar el resultado del parseo ANTES de usarlo en diff(): createFromFormat()
+    // devuelve false ante un string vacío/incompleto/inválido, y DateTime::diff()
+    // exige un DateTimeInterface real (pasar false produce un Fatal Error).
     if ($fechaHoraObj === false) {
         return array('error' => 'El formato del string proporcionado no coincide con el flag especificado.');
     }
+
+    // Compara la fecha y hora actuales con la proporcionada
+    $interval = $fechaHoraActual->diff($fechaHoraObj);
 
     if ($fechaHoraObj > $fechaHoraActual) {
         $resultado = 'posterior';
