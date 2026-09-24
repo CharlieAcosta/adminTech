@@ -626,6 +626,51 @@
       .data('index', nro)
       .data('client-key', key);
     $card.find('.presu-preview-fotos').attr('id', 'presu_preview_' + nro);
+
+    // Reconciliación de IDs propios de la tarjeta (evita colisiones tras clonar en "Agregar tarea").
+    // Ubicados por clase estable donde existe; por prefijo de ID (no posicional) donde no hay clase única.
+    $card.find('.input-otros-materiales').attr('id', 'otros-mat-' + nro);
+    $card.find('.input-otros-mano').attr('id', 'otros-mo-' + nro);
+    $card.find('.subt-util-materiales').attr('id', 'subt-util-materiales-' + nro);
+    $card.find('.subt-util-manoobra').attr('id', 'subt-util-manoobra-' + nro);
+    $card.find('.subt-util-total').attr('id', 'subt-util-total-' + nro);
+    $card.find('.subt-util-final').attr('id', 'utilfinal-' + nro);
+    $card.find('.porcentajetarea').attr('id', 'porcentajetarea-' + nro);
+    $card.find('.fila-impuestos').attr('id', 'fila-impuestos-' + nro);
+    $card.find('[id^="iibb-"]').attr('id', 'iibb-' + nro);
+    $card.find('[id^="ganancias-"]').attr('id', 'ganancias-' + nro);
+    $card.find('[id^="cheque-"]').attr('id', 'cheque-' + nro);
+    $card.find('[id^="inversion-"]').attr('id', 'inversion-' + nro);
+    $card.find('[id^="retiva-"]').attr('id', 'retiva-' + nro);
+    $card.find('.btn-guardar-tarea').attr('id', 'btnGuardarTarea_' + nro);
+    $card.find('.btn-traer-tarea').attr('id', 'btnTraerTarea_' + nro);
+
+    // El botón de subtotal lleva el número de tarea también en su TEXTO visible
+    // ("Subtotal Tarea N: $importe"), no sólo en el id. Al renumerar (p.ej. tras
+    // eliminar otra tarea) hay que corregir la etiqueta sin tocar el importe ya calculado.
+    const $subtTarea = $card.find('[id^="subt-tarea-"]').attr('id', 'subt-tarea-' + nro);
+    if ($subtTarea.length) {
+      const $importe = $subtTarea.find('strong').first();
+      if ($importe.length) {
+        // El importe vive en un <strong> separado (formato normal tras un cálculo real):
+        // se preserva ese nodo intacto y sólo se reemplaza el texto previo a él.
+        const nodoTexto = $subtTarea.contents().filter(function () {
+          return this.nodeType === 3;
+        }).first();
+        if (nodoTexto.length) {
+          nodoTexto[0].nodeValue = 'Subtotal Tarea ' + nro + ': ';
+        } else {
+          $importe.before('Subtotal Tarea ' + nro + ': ');
+        }
+      } else {
+        // Sin <strong> (valor inicial renderizado por PHP, aún sin recalcular):
+        // se conserva el importe textual existente tal cual.
+        const textoActual = $subtTarea.text();
+        const m = textoActual.match(/:\s*(.*)$/);
+        const importeActual = m ? m[1] : textoActual;
+        $subtTarea.text('Subtotal Tarea ' + nro + ': ' + importeActual);
+      }
+    }
   }
 
   function renumerarTareasPresupuesto() {

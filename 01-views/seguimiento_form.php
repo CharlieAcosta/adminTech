@@ -965,7 +965,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <input type="number" class="form-control form-control-sm utilidad-global-materiales"
                                min="0" '. $roUtil .' value="'. $e($utilMatPct ?? '') .'" placeholder="%">
                       </td>
-                      <td class="text-right"><b>$0.00</b></td>
+                      <td class="text-right"><b class="subtotal-materiales-bloque">$0.00</b></td>
                       <td></td>
                     </tr>
                   </tbody>
@@ -1034,10 +1034,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <input type="number" class="form-control form-control-sm utilidad-global-mano-obra"
                               min="0" '. $roUtil .' value="'. $e($utilMoPct ?? '') .'" placeholder="%">
                       </td>
-                      <td class="text-right"><b>$0.00</b></td>
+                      <td class="text-right"><b class="subtotal-mano-obra-bloque">$0.00</b></td>
                       <td></td>
                       <td></td>
-                    </tr>                  
+                    </tr>
                     </tbody>
                   </table>
                 </div>

@@ -1550,7 +1550,7 @@ $(document).ready(function() {
       const subtotalMatMostrado = sumaMat + utilMatBase + otrosMat;
     
       // Pintar
-      $card.find('.tarea-materiales .fila-subtotal td:last-child b').text(formatMoney(subtotalMatMostrado));
+      $card.find('.tarea-materiales .subtotal-materiales-bloque').text(formatMoney(subtotalMatMostrado));
       $card.find('.subt-util-materiales').text('Subtotal Util. Mat.: ' + formatMoney(utilMatParaMostrar));
     
       // --- Mano de Obra ---
@@ -1574,7 +1574,7 @@ $(document).ready(function() {
       const utilMoParaMostrar = utilMoBase + otrosMo;      // (base × %) + otros
       const subtotalMoMostrado = sumaMan + utilMoBase + otrosMo;
     
-      $card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text(formatMoney(subtotalMoMostrado));
+      $card.find('.tarea-mano-obra .subtotal-mano-obra-bloque').text(formatMoney(subtotalMoMostrado));
       $card.find('.subt-util-manoobra').text('Subtotal Util. MO.: ' + formatMoney(utilMoParaMostrar));
     
       // 🔹 NUEVO: “Sub Util. Mat.+MO.” debe ser la suma visible (cada util + sus “otros”)
@@ -1976,9 +1976,9 @@ $(document).ready(function() {
                         min="0"
                         value="${tarea.utilidad_materiales ?? ''}"
                         placeholder="%"
-                        />                   
+                        />
                       </td>
-                      <td class="text-right"><b>$0.00</b></td>
+                      <td class="text-right"><b class="subtotal-materiales-bloque">$0.00</b></td>
                     </tr>
                   </tbody>
                 </table>
@@ -2030,8 +2030,8 @@ $(document).ready(function() {
                         placeholder="%"
                       />
                     </td>
-                    <td class="text-right"><b>$0.00</b></td>
-                  </tr>               
+                    <td class="text-right"><b class="subtotal-mano-obra-bloque">$0.00</b></td>
+                  </tr>
                   </tbody>
                 </table>
               </div>
@@ -4345,7 +4345,7 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
     });
 
   const otrosMat = ($card.find('.input-otros-materiales').val() ?? '').toString();
-  const subtotalMat = ($card.find('.tarea-materiales .fila-subtotal td:last-child b').text() || '').trim();
+  const subtotalMat = ($card.find('.tarea-materiales .subtotal-materiales-bloque').text() || '').trim();
 
   // Mano de obra
   let filasMO = '';
@@ -4373,7 +4373,7 @@ $('#contenedorPresupuestoGenerado .tarea-card').each(function (idx) {
         </tr>`;
     });
 
-  const subtotalMO = ($card.find('.tarea-mano-obra .fila-subtotal td:last-child b').text() || '').trim();
+  const subtotalMO = ($card.find('.tarea-mano-obra .subtotal-mano-obra-bloque').text() || '').trim();
   const subtTareaTxt = ($card.find(`[id^="subt-tarea-"]`).text() || '').trim() || 'FALTA COMPLETAR';
   const subtotalTareaValor = subtTareaTxt
     .replace(/^Subtotal\s+Tarea\s+\d+\s*:\s*/i, '')
