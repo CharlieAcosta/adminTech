@@ -55,7 +55,7 @@ $(document).ready(function() {
       $root.find('.material-select, .mano-obra-select').prop('disabled', true).trigger('change.select2');
       $root.find('.agregar-material, .agregar-mano-obra, #btn-agregar-tarea, .btn-guardar-visita, .btn-generar-presupuesto')
         .prop('disabled', true)
-        .addClass('disabled');
+        .addClass('disabled d-none');
       $root.find('.eliminar-tarea, .eliminar-material, .eliminar-mano-obra, .eliminar-imagen')
         .addClass('d-none')
         .css('pointer-events', 'none');
