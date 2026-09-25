@@ -743,7 +743,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </td>
               <td class="text-right subtotal-material">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
               <td class="text-center">
-                <button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-material-presupuesto"
+                <button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-material-presupuesto"
                         data-id-ptm="'. $e($idPtm) .'" '. $disabledAttr .'
                         title="Eliminar material" aria-label="Eliminar material">
                   <i class="fas fa-trash"></i>
@@ -848,7 +848,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </td>
 
               <td class="text-center">
-                <button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-mano-obra-presupuesto"
+                <button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-mano-obra-presupuesto"
                         data-id-ptmo="'. $e($idPtmo) .'" '. $disabledAttr .'
                         title="Eliminar mano de obra" aria-label="Eliminar mano de obra">
                   <i class="fas fa-trash"></i>
@@ -928,8 +928,9 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                            min="0.01" step="any" placeholder="Cantidad" '. $disabledAttr .'>
                   </div>
                   <div class="col-md-3 form-group mb-1">
-                    <button type="button" class="btn btn-outline-success btn-sm btn-block presu-agregar-material" '. $disabledAttr .'>
-                      <i class="fas fa-plus"></i> Agregar material
+                    <button type="button" class="btn btn-success btn-sm w-100 presu-agregar-material" '. $disabledAttr .'
+                            title="Agregar material" aria-label="Agregar material">
+                      <i class="fas fa-plus"></i>
                     </button>
                   </div>
                 </div>
@@ -993,8 +994,9 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                              min="0.01" step="any" placeholder="Dias" '. $disabledAttr .'>
                     </div>
                     <div class="col-md-3 form-group mb-1">
-                      <button type="button" class="btn btn-outline-success btn-sm btn-block presu-agregar-mano-obra" '. $disabledAttr .'>
-                        <i class="fas fa-plus"></i> Agregar mano de obra
+                      <button type="button" class="btn btn-success btn-sm w-100 presu-agregar-mano-obra" '. $disabledAttr .'
+                              title="Agregar mano de obra" aria-label="Agregar mano de obra">
+                        <i class="fas fa-plus"></i>
                       </button>
                     </div>
                   </div>
@@ -1116,7 +1118,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
-            <button id="btn-agregar-tarea-presupuesto" type="button" class="btn btn-outline-primary mr-2" '. $disabledAttr .'>
+            <button id="btn-agregar-tarea-presupuesto" type="button" class="btn btn-primary mr-2" '. $disabledAttr .'>
               <i class="fas fa-plus"></i> Agregar tarea
             </button>
 

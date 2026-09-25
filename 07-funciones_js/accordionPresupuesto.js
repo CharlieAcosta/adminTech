@@ -990,7 +990,7 @@
         '<td><input type="number" class="form-control form-control-sm precio-unitario ' + clasePrecio + '" min="0" step="any" readonly></td>' +
         '<td><input type="number" class="form-control form-control-sm porcentaje-extra" min="0" step="any"></td>' +
         '<td class="text-right subtotal-material"></td>' +
-        '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-material-presupuesto" title="Eliminar material"><i class="fas fa-trash"></i></button></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-material-presupuesto" title="Eliminar material" aria-label="Eliminar material"><i class="fas fa-trash"></i></button></td>' +
       '</tr>'
     );
 
@@ -1083,7 +1083,7 @@
         '<td><input type="number" class="form-control form-control-sm porcentaje-extra" min="0" step="any"></td>' +
         '<td class="text-right subtotal-mano"></td>' +
         '<td><input type="text" class="form-control form-control-sm observacion-mano-obra" maxlength="255"></td>' +
-        '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm btn-eliminar-mano-obra-presupuesto" title="Eliminar mano de obra"><i class="fas fa-trash"></i></button></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-mano-obra-presupuesto" title="Eliminar mano de obra" aria-label="Eliminar mano de obra"><i class="fas fa-trash"></i></button></td>' +
       '</tr>'
     );
 
