@@ -1939,6 +1939,7 @@ $(document).ready(function() {
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+                <div class="table-responsive">
                 <table class="tabla-presupuesto tabla-presupuesto-sm">
                   <thead>
                     <tr>
@@ -1982,11 +1983,13 @@ $(document).ready(function() {
                     </tr>
                   </tbody>
                 </table>
+                </div>
               </div>
 
               <!-- Mano de Obra -->
               <div class="tarea-mano-obra">
                 <div class="bloque-titulo mt-0">Mano de Obra</div>
+                <div class="table-responsive">
                 <table class="tabla-presupuesto tabla-presupuesto-sm">
                   <thead>
                     <tr>
@@ -2034,6 +2037,7 @@ $(document).ready(function() {
                   </tr>
                   </tbody>
                 </table>
+                </div>
               </div>
 
               <div class="tarea-total d-flex flex-column align-items-end px-3">

@@ -933,6 +933,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                     </button>
                   </div>
                 </div>
+                <div class="table-responsive">
                 <table class="tabla-presupuesto tabla-presupuesto-sm">
                   <thead>
                     <tr>
@@ -970,6 +971,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                     </tr>
                   </tbody>
                 </table>
+                </div>
               </div>
 
                 <!-- Mano de Obra -->
@@ -996,6 +998,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                       </button>
                     </div>
                   </div>
+                  <div class="table-responsive">
                   <table class="tabla-presupuesto tabla-presupuesto-sm">
                     <thead>
                       <tr>
@@ -1009,7 +1012,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <th>Observacion</th>
                         <th>Accion</th>
                       </tr>
-                    </thead>                
+                    </thead>
                     <tbody>'
                     . implode('', $rowsMo) .
                     '
@@ -1040,6 +1043,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                     </tr>
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 <div class="tarea-total d-flex flex-column align-items-end px-3">

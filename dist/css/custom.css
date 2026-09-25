@@ -1114,7 +1114,6 @@ textarea.is-invalid {
     border-collapse: collapse;
     font-size: 15px;
     margin-bottom: 7px;
-    table-layout: fixed;
   }
 
   .tabla-presupuesto thead th {
@@ -1124,6 +1123,7 @@ textarea.is-invalid {
     text-align: left;
     font-weight: bold;
     border: 1px solid #dae2e6;
+    white-space: nowrap; /* evita que "Acción", "Operarios", etc. se partan a mitad de palabra */
   }
 
   .tabla-presupuesto tbody tr:nth-child(even) { background: #f6fafd; }
@@ -1133,7 +1133,7 @@ textarea.is-invalid {
     padding: 6px 9px 5px 9px;
     text-align: left;
     vertical-align: middle;
-    word-break: break-word;
+    word-break: normal; /* como Visita: puede envolver entre palabras, nunca cortar una palabra */
   }
 
   .tabla-presupuesto .input-extra {
@@ -1306,9 +1306,10 @@ textarea.is-invalid {
 .btn-tarea i { margin-right: .35rem; }
 
 /* ===== Presupuesto: tablas Materiales / Mano de Obra ===== */
+/* Sin table-layout:fixed ni anchos de columna rígidos: se sigue el mismo
+   criterio que Visita (table-responsive + layout natural de la tabla). */
 .tabla-presupuesto {
   width: 100%;
-  table-layout: fixed; /* fija el layout por columnas */
 }
 
 /* Alineación general */
@@ -1317,60 +1318,71 @@ textarea.is-invalid {
   vertical-align: middle;
 }
 
-/* Solo la primera columna (Material/Tipo) hace ellipsis */
-.tabla-presupuesto td:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Inputs ocupan la celda sin desbordar */
 .tabla-presupuesto input.form-control {
   width: 100%;
   box-sizing: border-box;
 }
 
-/* -------- Materiales (5 columnas) --------
-  1 Material
-  2 Cantidad
-  3 Precio Unitario
-  4 % Extra
-  5 Subtotal
-*/
-.tarea-materiales .tabla-presupuesto th:nth-child(2),
-.tarea-materiales .tabla-presupuesto td:nth-child(2) { width: 110px; }
+/* Mínimos funcionales por tipo de dato (neutralizan el min-width:0 general de
+   .tabla-presupuesto .form-control / input[type="number"] sólo donde el campo
+   lo necesita para seguir siendo legible/usable). No es un ancho único para
+   todo: cada grupo refleja el tipo de contenido real que recibe. */
 
-.tarea-materiales .tabla-presupuesto th:nth-child(3),
-.tarea-materiales .tabla-presupuesto td:nth-child(3) { width: 170px; }
+/* Campos type="number": la neutralización general de arriba
+   (.tabla-presupuesto input[type="number"] { min-width:0 !important })
+   tiene especificidad 0,2,1. Un selector de sólo clases (0,2,0) nunca le
+   gana aunque esté declarado después. Por eso estas reglas agregan el
+   elemento "input" para igualar la especificidad (0,2,1) y, al quedar
+   declaradas después en la hoja, ganan por orden de cascade. */
+.tabla-presupuesto input.cantidad-material {
+  min-width: 70px !important;
+}
 
-.tarea-materiales .tabla-presupuesto th:nth-child(4),
-.tarea-materiales .tabla-presupuesto td:nth-child(4) { width: 170px; }
+.tabla-presupuesto input.cantidad-mano-obra,
+.tabla-presupuesto input.dias-mano-obra {
+  min-width: 60px !important;
+}
 
-.tarea-materiales .tabla-presupuesto th:nth-child(5),
-.tarea-materiales .tabla-presupuesto td:nth-child(5) { width: 140px; }
+.tabla-presupuesto input.porcentaje-extra,
+.tabla-presupuesto input.utilidad-global-materiales,
+.tabla-presupuesto input.utilidad-global-mano-obra {
+  min-width: 80px !important;
+}
 
-/* -------- Mano de Obra (6 columnas) --------
-  1 Tipo
-  2 Cantidad
-  3 Jornales
-  4 Valor Jornal
-  5 % Extra
-  6 Subtotal
-*/
-.tarea-mano-obra .tabla-presupuesto th:nth-child(2),
-.tarea-mano-obra .tabla-presupuesto td:nth-child(2) { width: 110px; }
+.tabla-presupuesto input.input-otros-materiales,
+.tabla-presupuesto input.input-otros-mano {
+  min-width: 100px !important;
+}
 
-.tarea-mano-obra .tabla-presupuesto th:nth-child(3),
-.tarea-mano-obra .tabla-presupuesto td:nth-child(3) { width: 130px; }
+/* Campos type="text": aquí sólo compiten con .tabla-presupuesto .form-control
+   (0,2,0 igual que estas reglas); al estar declaradas después ya ganaban
+   desde P39 y no se tocan. */
+.tabla-presupuesto .precio-unitario,
+.tabla-presupuesto .valor-jornal {
+  min-width: 100px !important;
+}
 
-.tarea-mano-obra .tabla-presupuesto th:nth-child(4),
-.tarea-mano-obra .tabla-presupuesto td:nth-child(4) { width: 170px; }
+/* Observación: debe conservar espacio suficiente para no reducirse a un
+   fragmento del texto ingresado */
+.tabla-presupuesto .observacion-mano-obra {
+  min-width: 160px !important;
+}
 
-.tarea-mano-obra .tabla-presupuesto th:nth-child(5),
-.tarea-mano-obra .tabla-presupuesto td:nth-child(5) { width: 170px; }
+/* Importes calculados (no editables): que el número nunca se parta en dos líneas */
+.tabla-presupuesto .subtotal-material,
+.tabla-presupuesto .subtotal-mano,
+.tabla-presupuesto .subtotal-materiales-bloque,
+.tabla-presupuesto .subtotal-mano-obra-bloque {
+  white-space: nowrap;
+}
 
-.tarea-mano-obra .tabla-presupuesto th:nth-child(6),
-.tarea-mano-obra .tabla-presupuesto td:nth-child(6) { width: 140px; }
+/* Primera columna (Material/Tipo): puede envolver entre palabras, pero
+   conserva un mínimo para seguir siendo identificable */
+.tarea-materiales .tabla-presupuesto td:first-child,
+.tarea-mano-obra .tabla-presupuesto td:first-child {
+  min-width: 160px;
+}
 
 /* Mano de Obra: input de jornales solo visual (parece texto) */
 .mano-obra-table .jornales-mano-obra,
