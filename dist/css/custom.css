@@ -235,6 +235,65 @@ th {
   min-width: 120px;
 }
 
+/* ============================================================
+   UX-P29-01 — Responsive de la barra de filtros de Seguimiento
+   Nivel A (ancho amplio, todo entra en una fila): sin cambios,
+   queda cubierto por las reglas base ya definidas arriba.
+   Nivel B: por debajo del ancho donde deja de entrar todo en una
+   sola fila (medido: overflow ya presente a 1534px, ausente a
+   1920px), los grupos completos envuelven en varias filas en vez
+   de generar scroll horizontal de todo el conjunto.
+   ============================================================ */
+@media (max-width: 1919.98px) {
+  .seguimiento-toolbar-filtros {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    white-space: normal;
+  }
+
+  /* Los separadores "|" sólo tienen sentido en una fila continua:
+     al envolver, uno puede quedar suelto al principio o al final
+     de una línea. Se ocultan únicamente los que son hijos DIRECTOS
+     del contenedor de grupos (los que están ENTRE grupos). El
+     separador interno del perfil administrativo OC (entre los
+     botones de Estado OC y Previsita) cuelga de
+     .seguimiento-filtro-linea, no de este contenedor, por lo que
+     no se ve afectado. */
+  .seguimiento-toolbar-filtros > .seguimiento-filtro-separador {
+    display: none;
+  }
+}
+
+/* Por debajo de este ancho (breakpoint lg de Bootstrap), "Agregar"
+   pasa a su propia fila para no competir por espacio con los
+   grupos de filtros, conservando su alineación a la derecha. */
+@media (max-width: 991.98px) {
+  .seguimiento-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .seguimiento-toolbar-accion {
+    margin-left: auto;
+  }
+}
+
+/* Pantallas muy angostas: un grupo individual (p. ej. "Filtros de
+   presupuesto", el más ancho, ~632px) puede seguir sin entrar por
+   sí solo aunque ya esté en su propia fila. En vez de volver a
+   esconder toda la barra en un scroll conjunto, se da scroll
+   horizontal únicamente al grupo que lo necesite. */
+@media (max-width: 699.98px) {
+  .seguimiento-filtro-columna {
+    max-width: 100%;
+  }
+
+  .seguimiento-filtro-linea {
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
 .seguimiento-ayuda-busqueda-global-wrap {
   display: flex;
   justify-content: center;
