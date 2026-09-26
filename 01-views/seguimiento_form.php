@@ -4162,6 +4162,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     margin-top: 0;
     padding: 0.55rem 0.9rem;
     font-size: 0.98rem;
+    cursor: default;
   }
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn {
@@ -4177,6 +4178,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     padding: 0.42rem 0.72rem;
     line-height: 1.5;
     box-sizing: border-box;
+    cursor: default;
   }
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
@@ -4214,6 +4216,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     line-height: 1.5;
     white-space: nowrap;
     box-sizing: border-box;
+    cursor: default;
   }
 
   @media (min-width: 768px) {
@@ -4282,6 +4285,33 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     }
   }
 
+  @media (min-width: 768px) and (max-width: 1199.98px) {
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior {
+      flex-wrap: wrap;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) {
+      max-width: 100%;
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
+      grid-template-columns: 1fr;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col {
+      width: 100%;
+      max-width: 100%;
+      justify-self: stretch;
+    }
+  }
+
   @media (max-width: 767.98px) {
     #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda {
       flex-wrap: wrap;
@@ -4310,6 +4340,12 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
       width: 100%;
       max-width: 100%;
       justify-self: stretch;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra .btn-total-tarea,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-total-tarea,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-porcentaje-tarea {
+      white-space: normal;
     }
   }
 
