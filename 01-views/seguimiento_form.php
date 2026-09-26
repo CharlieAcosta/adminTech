@@ -2767,9 +2767,15 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           <!-- Botones generales -->
           <div class="text-center">
             <button type="button" class="btn bg-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
-            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
+            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto"
+            aria-describedby="motivo-generar-presupuesto"
             <?php echo ($presupuestoGenerado || !empty($visitaCongeladaPorPresupuesto)) ? 'disabled' : ''; ?>> Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
+
+            <div id="motivo-generar-presupuesto"
+                 class="small text-muted mt-2 d-none"
+                 role="status"
+                 aria-live="polite"></div>
           </div>
 
         </div> <!-- end card-body visita -->

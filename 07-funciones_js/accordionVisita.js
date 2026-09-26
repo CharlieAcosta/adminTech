@@ -162,31 +162,68 @@ $(document).ready(function() {
         let tieneTareas = $('#accordionTareas > .card').length > 0;
         let todasTienenMaterial = true;
         let todasTienenManoObra = true;
-      
+
         // Chequea que cada tarea tenga al menos un material y una mano de obra
         $('#accordionTareas > .card').each(function () {
           const materiales = $(this).find('.materiales-table tbody tr').not('.fila-vacia-materiales').length;
           if (materiales === 0) todasTienenMaterial = false;
-      
+
           const manoObra = $(this).find('.mano-obra-table tbody tr').not('.fila-vacia-mano-obra').length;
           if (manoObra === 0) todasTienenManoObra = false;
         });
-      
-        // 💡 SOLO se habilita si:
-        // - Hay tareas
-        // - Todas tienen materiales y mano de obra
-        // - No hay cambios pendientes (hayCambios === false)
-        // - No estamos en modo visualización (modoVisualizacion === false)
-        // - **No existe presupuesto generado** (!presupuestoGenerado)
-      
-        const habilitado = tieneTareas && todasTienenMaterial && todasTienenManoObra && !hayCambios && !modoVisualizacion && !presupuestoGenerado && !visitaCongeladaActiva() && !generandoPresupuestoDesdeVisita && !edicionComercialBloqueada();
-      
+
+        const bloqueoNoRecuperable =
+          modoVisualizacion ||
+          presupuestoGenerado ||
+          visitaCongeladaActiva() ||
+          generandoPresupuestoDesdeVisita ||
+          edicionComercialBloqueada();
+
+        const habilitado =
+          tieneTareas &&
+          todasTienenMaterial &&
+          todasTienenManoObra &&
+          !hayCambios &&
+          !bloqueoNoRecuperable;
+
         const $btn = $('#btn-generar-presupuesto');
+        const $motivo = $('#motivo-generar-presupuesto');
+
         if ($btn.length) {
           if (habilitado) {
             $btn.prop('disabled', false).removeClass('btn-secondary').addClass('btn-info');
           } else {
             $btn.prop('disabled', true).removeClass('btn-info').addClass('btn-secondary');
+          }
+        }
+
+        if ($motivo.length) {
+          const motivos = [];
+
+          if (!habilitado && !bloqueoNoRecuperable) {
+            if (!tieneTareas) {
+              motivos.push('Agregá al menos una tarea.');
+            } else if (!todasTienenMaterial && !todasTienenManoObra) {
+              motivos.push('Cada tarea debe tener al menos un material y una mano de obra.');
+            } else if (!todasTienenMaterial) {
+              motivos.push('Cada tarea debe tener al menos un material.');
+            } else if (!todasTienenManoObra) {
+              motivos.push('Cada tarea debe tener al menos una mano de obra.');
+            }
+
+            if (hayCambios) {
+              motivos.push('Guardá la Visita para aplicar los cambios.');
+            }
+          }
+
+          if (motivos.length) {
+            $motivo
+              .text('Para generar el Presupuesto: ' + motivos.join(' '))
+              .removeClass('d-none');
+          } else {
+            $motivo
+              .text('')
+              .addClass('d-none');
           }
         }
     }
