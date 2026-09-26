@@ -2578,6 +2578,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
             ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>'
             : '';
           ?>
+          <?php if (!empty($visitaCongeladaPorPresupuesto)): ?>
+            <span class="badge badge-light border ml-2 visita-congelada-badge">
+              <i class="fa fa-lock mr-1" aria-hidden="true"></i>Histórica &middot; Solo lectura
+            </span>
+          <?php endif; ?>
         </button>
 
         <!-- Span con el popover -->
@@ -2601,7 +2606,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
         <div class="card-body">
           <?php if (!empty($visitaCongeladaPorPresupuesto)): ?>
             <div class="alert alert-info py-2 mb-3 visita-congelada-aviso" role="alert">
-              <i class="fa fa-lock mr-2"></i> Visita cerrada al generar el presupuesto.
+              <i class="fa fa-lock mr-2"></i> Esta Visita se cerró al generar el Presupuesto. Sus datos se conservan como registro histórico y no pueden modificarse.
             </div>
           <?php endif; ?>
 
