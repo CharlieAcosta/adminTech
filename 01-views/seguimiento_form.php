@@ -4155,6 +4155,17 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     outline-offset: 2px;
   }
 
+  /* P91: ningun elemento dentro de los modales (p.ej. #modalTraerTareaArchivada)
+     mostraba indicador de foco (verificado con Chrome real: outline 0px en
+     los 8 controles tabulados). Se extiende el mismo patron a los modales
+     Bootstrap de esta pagina, sin afectar el focus-trap ni el cierre
+     data-keyboard="false" ya existentes (solo agrega un estilo visual). */
+  .modal .btn:focus-visible,
+  .modal input:focus-visible {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+  }
+
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--tarea-totales-width);
