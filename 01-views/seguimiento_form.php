@@ -4123,6 +4123,13 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions {
     flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions > .btn {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
