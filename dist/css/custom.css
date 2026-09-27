@@ -359,6 +359,27 @@ th {
     line-height: 1.3;
   }
 
+  /* Pendiente 09: a 767.98px y menos, grid-template-columns: auto auto auto
+     (regla base, linea 4) fuerza el largo/botones/buscador en 3 columnas
+     de ancho intrinseco sin lugar para envolver, apretando el buscador
+     "Buscar" contra el resto. Se apilan en una sola columna. */
+  #current_table_wrapper .dt-top-container {
+    grid-template-columns: 1fr;
+    row-gap: .5rem;
+  }
+
+  #current_table_wrapper .dataTables_filter,
+  #current_table_wrapper .dataTables_length {
+    text-align: left;
+    width: 100%;
+  }
+
+  #current_table_wrapper .dataTables_filter input {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+  }
+
 }
 
 
@@ -1327,7 +1348,7 @@ textarea.is-invalid {
 /* === nuevo codigo 24: colores de utilidad con prioridad === */
 .util-inaceptable { background-color: #dc3545 !important; color: #fff !important; }  /* rojo */
 .util-aceptable   { background-color: #ffc107 !important; color: #212529 !important; }/* ámbar */
-.util-muy         { background-color: #28a745 !important; color: #fff !important; }  /* verde */
+.util-muy         { background-color: #28a745 !important; color: #212529 !important; }  /* verde: texto oscuro por contraste WCAG AA (3.13:1 con blanco vs 4.92:1 con #212529) */
 .util-margen      { background-color: #198754 !important; color: #fff !important; }  /* verde intenso */
 
 /* === inputs de utilidad solo lectura para usuarios SIN vistaDetallada === */

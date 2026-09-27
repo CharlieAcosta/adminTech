@@ -1189,7 +1189,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <!-- Custom -->
-  <link rel="stylesheet" href="../dist/css/custom.css">
+  <?php
+    $customCssRuta = __DIR__ . '/../dist/css/custom.css';
+    $customCssVersion = is_file($customCssRuta) ? filemtime($customCssRuta) : time();
+  ?>
+  <link rel="stylesheet" href="../dist/css/custom.css?v=<?php echo (int)$customCssVersion; ?>">
   <style>
     body.seguimiento-form-page > .wrapper > .content-wrapper {
       height: auto;
@@ -4137,6 +4141,18 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     outline-offset: 2px;
   }
 
+  /* Pendiente 13: mismo indicador de foco de P84, ampliado a los controles
+     operativos reales de Visita y Presupuesto fuera de .tarea-inline-actions
+     (Guardar Visita, Generar Presupuesto, Agregar/Eliminar material y mano
+     de obra, Agregar tarea, Guardar/Emitir Presupuesto, etc.). No alcanza a
+     los once indicadores financieros (son DIV desde P80, no .btn) ni a
+     controles deshabilitados (nunca reciben :focus-visible). */
+  #currentForm .btn:focus-visible,
+  #contenedorPresupuestoGenerado .btn:focus-visible {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+  }
+
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
     display: grid;
     grid-template-columns: minmax(0, 1fr) var(--tarea-totales-width);
@@ -4176,6 +4192,10 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     font-size: 0.98rem;
     text-align: center;
     cursor: default;
+    /* Pendiente 16: agrupa visualmente "Utilidades" sin ocupar espacio de
+       layout (box-shadow inset no altera dimensiones ni geometria ya
+       validada en P67-P86). */
+    box-shadow: inset 0 0 0 2px #90b4d8;
   }
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .bg-secondary {
@@ -4187,7 +4207,10 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     padding: 0.42rem 0.72rem;
     line-height: 1.5;
     box-sizing: border-box;
-    border: 1px solid transparent;
+    /* Pendiente 16: distingue "Impuestos y costos" de "Utilidades" (mismo
+       grosor de borde ya existente desde P80, solo cambia el color; sin
+       impacto de geometria). */
+    border: 1px solid #d8b98f;
     border-radius: 0.25rem;
     white-space: nowrap;
     cursor: default;
@@ -4425,6 +4448,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     .presupuesto-accordion-intervino {
       width: 100%;
       text-align: left !important;
+      white-space: normal;
     }
   }
 </style>
