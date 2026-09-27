@@ -20,6 +20,15 @@
 -- unidad_medida='', 15 con unidad_rendimiento=''): no hay evidencia
 -- suficiente para inferir con certeza cual era el valor pretendido de
 -- cada registro individual, y esa es una decision de negocio, no tecnica.
+--
+-- P90: se detecto que el ENUM ORIGINAL de materiales.unidad_venta ya
+-- contenia la etiqueta 'Metro' DOS VECES (posicion interna 10 y 13),
+-- antes de esta migracion. Se verifico (solo lectura): las 8 filas
+-- reales que hoy muestran 'Metro' usan unicamente el indice interno 10
+-- (SELECT unidad_venta+0 ... = 10); NINGUNA fila usa los indices 12, 13,
+-- 14 ni 15 (Dia / el 'Metro' duplicado / Metro² / Hora). Por lo tanto,
+-- quitar la entrada duplicada no reasigna ni pierde ningun dato de fila
+-- existente: se corrige aqui, dejando una unica etiqueta 'Metro'.
 
 ALTER TABLE usuarios
   MODIFY COLUMN perfil ENUM('Super Administrador','Administrador','Administrativo','Técnico','Operario','Tecnico Administrativo') DEFAULT NULL;
@@ -31,7 +40,7 @@ ALTER TABLE usuarios
   MODIFY COLUMN estado_civil ENUM('Casado','Soltero','Unión de hecho','Viudo') DEFAULT NULL;
 
 ALTER TABLE materiales
-  MODIFY COLUMN unidad_venta ENUM('Tubo','Chapa','Balde','Tira','Rollo','Bolsa','Pack','Unidad','Kilogramo','Metro','Caja','Día','Metro','Metro²','Hora') DEFAULT NULL;
+  MODIFY COLUMN unidad_venta ENUM('Tubo','Chapa','Balde','Tira','Rollo','Bolsa','Pack','Unidad','Kilogramo','Metro','Caja','Día','Metro²','Hora') DEFAULT NULL;
 
 ALTER TABLE materiales
   MODIFY COLUMN unidad_medida ENUM('Metros','Kilogramos','Unidades','Gramos','Unidad','Hora','Día') DEFAULT NULL;

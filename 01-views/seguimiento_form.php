@@ -1,5 +1,7 @@
-<?php  
+<?php
 session_start();
+include_once '../06-funciones_php/funciones.php'; //funciones últiles
+sesion(); // valida sesión activa y refresca ultima_actividad ANTES de leer variables de sesión
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../04-modelo/paisesModel.php'; //conecta a la tabla de paises
