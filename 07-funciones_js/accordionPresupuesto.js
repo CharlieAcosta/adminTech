@@ -2844,6 +2844,18 @@ $(document)
     $tbody.empty().append(
       `<tr><td colspan="4" class="text-muted">Cargando templados…</td></tr>`
     );
+
+    // El modal se abre programaticamente (no via data-toggle), por lo que
+    // Bootstrap 4 no captura un relatedTarget y no devuelve el foco al
+    // cerrarse. Se guarda el disparador y se restaura manualmente.
+    window.__disparadorModalTraerTarea = this;
+    $modal.off('hidden.bs.modal.presu-traer-tarea')
+      .on('hidden.bs.modal.presu-traer-tarea', function () {
+        if (window.__disparadorModalTraerTarea) {
+          $(window.__disparadorModalTraerTarea).trigger('focus');
+        }
+      });
+
     $modal.modal('show');
 
     // Disparo inicial sin filtro
