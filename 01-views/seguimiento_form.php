@@ -1050,19 +1050,19 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
                 <div class="tarea-total d-flex flex-column align-items-end px-3">
                   <div class="utilidades-extra w-100">
-                    <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
+                    <div class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</div>
                   </div>
                   <div class="utilidades-extra w-100">
-                    <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
+                    <div class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</div>
                   </div>
                   <div class="utilidades-extra w-100">
-                    <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
+                    <div class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</div>
                   </div>
                   <div class="d-flex justify-content-end w-100">
-                    <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
+                    <div class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</div>
                   </div>
                   <div class="d-flex justify-content-end w-100">
-                    <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+                    <div class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></div>
                   </div>
                 </div>
               </div>
@@ -1098,15 +1098,15 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
             <div class="fila-impuestos flex-grow-1" id="fila-impuestos-'. $e($nro) .'">
               <div class="tarea-impuestos-lista">
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></div></div>
               </div>
 
               <div class="tarea-subtotal-col">
-                <button type="button" class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
+                <div class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</div>
               </div>
             </div>
           </div>
@@ -4169,14 +4169,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     margin-top: 0;
     padding: 0.55rem 0.9rem;
     font-size: 0.98rem;
+    text-align: center;
     cursor: default;
   }
 
-  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn {
-    white-space: nowrap;
-  }
-
-  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn.bg-secondary {
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .bg-secondary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4185,6 +4182,9 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     padding: 0.42rem 0.72rem;
     line-height: 1.5;
     box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+    white-space: nowrap;
     cursor: default;
   }
 
