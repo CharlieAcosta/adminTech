@@ -24,6 +24,61 @@ function responderGuardarVisita(array $payload, int $httpStatus = 200): void {
     exit;
 }
 
+/**
+ * Validacion defensiva del payload de tareas ANTES de escribir en la base.
+ * H-P19-01: el guardado no debe iniciar ningun DELETE/INSERT si el payload
+ * trae una tarea, material o mano de obra malformados (indices ausentes,
+ * ids invalidos, tipos inesperados). Devuelve null si el payload es valido,
+ * o un mensaje descriptivo del primer problema encontrado.
+ */
+function validarPayloadTareasGuardarVisita($tareas): ?string {
+    if (!is_array($tareas)) {
+        return 'El listado de tareas es invalido.';
+    }
+
+    foreach ($tareas as $i => $tarea) {
+        if (!is_array($tarea)) {
+            return "La tarea en la posicion {$i} es invalida.";
+        }
+        if (!array_key_exists('descripcion', $tarea) || !is_string($tarea['descripcion'])) {
+            return "La tarea en la posicion {$i} no tiene una descripcion valida.";
+        }
+
+        if (isset($tarea['materiales'])) {
+            if (!is_array($tarea['materiales'])) {
+                return "Los materiales de la tarea en la posicion {$i} son invalidos.";
+            }
+            foreach ($tarea['materiales'] as $j => $mat) {
+                if (!is_array($mat) || !isset($mat['id']) || !is_numeric($mat['id']) || (int)$mat['id'] <= 0) {
+                    return "El material en la posicion {$j} de la tarea {$i} tiene un identificador invalido.";
+                }
+                if (!isset($mat['cantidad']) || !is_numeric($mat['cantidad']) || (float)$mat['cantidad'] < 0) {
+                    return "El material en la posicion {$j} de la tarea {$i} tiene una cantidad invalida.";
+                }
+            }
+        }
+
+        if (isset($tarea['mano_obra'])) {
+            if (!is_array($tarea['mano_obra'])) {
+                return "La mano de obra de la tarea en la posicion {$i} es invalida.";
+            }
+            foreach ($tarea['mano_obra'] as $j => $mo) {
+                if (!is_array($mo) || !isset($mo['id']) || !is_numeric($mo['id']) || (int)$mo['id'] <= 0) {
+                    return "La mano de obra en la posicion {$j} de la tarea {$i} tiene un identificador invalido.";
+                }
+                if (!isset($mo['cantidad']) || !is_numeric($mo['cantidad']) || (float)$mo['cantidad'] < 0) {
+                    return "La mano de obra en la posicion {$j} de la tarea {$i} tiene una cantidad invalida.";
+                }
+                if (isset($mo['dias']) && (!is_numeric($mo['dias']) || (float)$mo['dias'] < 0)) {
+                    return "La mano de obra en la posicion {$j} de la tarea {$i} tiene dias invalidos.";
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
 function registrarPayloadValidadoGuardarVisita(): void {
     file_put_contents('../log/log_fotos.txt', "--- NUEVO INGRESO VALIDADO ---\n", FILE_APPEND);
     file_put_contents('../log/log_fotos.txt', "POST:\n" . print_r($_POST, true), FILE_APPEND);
@@ -123,8 +178,15 @@ if (!empty($bloqueoEdicion['bloqueado'])) {
 
 registrarPayloadValidadoGuardarVisita();
 
+$tareasPost = $_POST['tareas'] ?? [];
+$errorPayload = validarPayloadTareasGuardarVisita($tareasPost);
+if ($errorPayload !== null) {
+    mysqli_close($db);
+    responderGuardarVisita(['status' => false, 'mensaje' => $errorPayload], 400);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $tareas = $_POST['tareas'] ?? [];
+    $tareas = $tareasPost;
     $tieneOrdenMaterialesVisita = columna_existe($db, 'visita_tarea_material', 'orden');
     $tieneOrdenManoObraVisita = columna_existe($db, 'visita_tarea_mano_obra', 'orden');
 
