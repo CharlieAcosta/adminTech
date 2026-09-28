@@ -62,7 +62,9 @@ $(document).ready(function() {
       $root.find('.custom-file').hide();
       $root.find('.material-select').closest('.form-row').hide();
       $root.find('.mano-obra-select').closest('.form-row').hide();
-      $root.find('.btn-cancelar-visita').prop('disabled', false).removeClass('disabled').show().text('Volver');
+      // P96 punto 4: en Visita congelada por Presupuesto, "Volver" deja de
+      // mostrarse (antes se forzaba visible con .show()).
+      $root.find('.btn-cancelar-visita').addClass('d-none').hide();
     }
 
     window.aplicarModoVisitaCongeladaPorPresupuesto = aplicarModoVisitaCongeladaPorPresupuesto;
