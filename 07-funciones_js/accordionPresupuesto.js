@@ -1193,6 +1193,21 @@
     .off('click.presu-agregar-mano-obra', '#contenedorPresupuestoGenerado .presu-agregar-mano-obra')
     .off('click.presu-eliminar-mano-obra', '#contenedorPresupuestoGenerado .btn-eliminar-mano-obra-presupuesto')
     .off('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto')
+    .off('click.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso')
+    .off('keydown.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso')
+    .on('click.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso', function (e) {
+      e.preventDefault();
+      const $toggle = $(this);
+      const $card = $toggle.closest('.tarea-card');
+      if (!$card.length) return;
+      const colapsada = $card.toggleClass('tarea-colapsada').hasClass('tarea-colapsada');
+      $toggle.attr('aria-expanded', colapsada ? 'false' : 'true');
+    })
+    .on('keydown.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      e.preventDefault();
+      $(this).trigger('click');
+    })
     .on('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1207,6 +1222,11 @@
       if (!$base.length) return;
 
       const $nueva = $base.clone(false, false);
+      // P99: una tarea nueva siempre arranca colapsada, independientemente
+      // del estado (colapsado o expandido) que tuviera la ultima tarjeta
+      // clonada.
+      $nueva.addClass('tarea-colapsada');
+      $nueva.find('.tarea-toggle-colapso').attr('aria-expanded', 'false');
       $nueva.find('.select2-container').remove();
       $nueva.find('.presu-material-select, .presu-mano-obra-select')
         .removeClass('select2-hidden-accessible')

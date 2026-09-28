@@ -864,9 +864,12 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
         $roUtil    = $mostrarVistaDetallada ? $readonlyUtilClass : 'readonly input-sololectura';
 
         $html[] = '
-        <div class="tarea-card" data-id-presu-tarea="'. $e($idPresuTarea) .'" data-presu-client-key="'. $e($clientKeyTarea) .'">
+        <div class="tarea-card tarea-colapsada" data-id-presu-tarea="'. $e($idPresuTarea) .'" data-presu-client-key="'. $e($clientKeyTarea) .'">
           <div class="tarea-encabezado">
-            <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b></span>
+            <span class="tarea-toggle-colapso" role="button" tabindex="0" aria-expanded="false">
+              <i class="fas fa-chevron-down tarea-colapso-icono" aria-hidden="true"></i>
+              <i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b>
+            </span>
             <label class="incluir-presupuesto-label">
               <input type="checkbox" class="incluir-en-total" '. $incluido .' '. $disabledAttr .'>
               <span>Incluído en el presupuesto</span>
@@ -4093,6 +4096,49 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     --tarea-editor-block-gap: 0.04rem;
   }
 
+  /* P100 correccion A: dentro de las filas de alta de Materiales/Mano de
+     Obra, .form-control hereda min-width:200px global (dist/css/custom.css),
+     lo que fuerza el desborde de las columnas Bootstrap (col-md-7/2/3 y
+     col-md-5/2/2/3) y es la causa real de que el boton "+" quedara pegado. */
+  #contenedorPresupuestoGenerado .tarea-card .presu-material-add-row .form-control,
+  #contenedorPresupuestoGenerado .tarea-card .presu-mano-obra-add-row .form-control {
+    min-width: 0;
+  }
+
+  /* P96 punto 1 (P100: acotado a >=768px, ver media query mas abajo): separa
+     el botón "+" de Agregar (Materiales/Mano de Obra) del input/select
+     anterior, sin tocar tamaño/color/logica del boton. En mobile (<768px)
+     las columnas se apilan al 100% y este padding no es necesario. */
+
+  /* P96 punto 2: encabezado de tarea como disparador de colapso/expansion. */
+  #contenedorPresupuestoGenerado .tarea-card .tarea-toggle-colapso {
+    cursor: pointer;
+    outline: none;
+  }
+
+  /* P100 correccion D: outline blanco (contraste ~4.19:1 sobre el fondo
+     #747d84 del encabezado; #2f6fad anterior daba ~1.25:1, casi invisible). */
+  #contenedorPresupuestoGenerado .tarea-card .tarea-toggle-colapso:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-colapso-icono {
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card.tarea-colapsada .tarea-colapso-icono {
+    transform: rotate(-90deg);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card.tarea-colapsada > .container-fluid,
+  #contenedorPresupuestoGenerado .tarea-card.tarea-colapsada > .tarea-barra-inferior {
+    display: none !important;
+  }
+
   #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor {
     line-height: var(--tarea-editor-line-height);
   }
@@ -4265,9 +4311,43 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     white-space: nowrap;
     box-sizing: border-box;
     cursor: default;
+    /* P96 punto 3: "Subtotal Tarea" en texto blanco (pedido explicito). */
+    color: #fff !important;
+  }
+
+  /* P96 punto 3: "% Utilidad" en texto blanco (pedido explicito); selector
+     exclusivo de este indicador, no comparte clase con el resto de
+     Subtotal Util. Mat./MO./Total ni con Util real final. */
+  #contenedorPresupuestoGenerado .tarea-card .porcentajetarea {
+    color: #fff !important;
+  }
+
+  /* P100 correccion C: con texto blanco fijo, los fondos originales de
+     util-muy (#28a745, ~3.13:1 con blanco) y util-aceptable (#ffc107,
+     ~1.6:1 con blanco) no alcanzan WCAG AA (4.5:1 texto normal). Se oscurece
+     el fondo SOLO para estos dos indicadores (no se toca .util-muy ni
+     .util-aceptable globales, que siguen usando texto oscuro en el resto
+     de indicadores). No se altera umbral ni semantica: mismo estado, mismo
+     color base, solo mas oscuro para mantener contraste con blanco. */
+  #contenedorPresupuestoGenerado .tarea-card .tarea-subtotal-col .btn-total-tarea.util-muy,
+  #contenedorPresupuestoGenerado .tarea-card .porcentajetarea.util-muy {
+    background-color: #1e7e34 !important; /* verde oscuro: ~5.14:1 con blanco */
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-subtotal-col .btn-total-tarea.util-aceptable,
+  #contenedorPresupuestoGenerado .tarea-card .porcentajetarea.util-aceptable {
+    background-color: #946200 !important; /* ambar oscuro: ~5.24:1 con blanco */
   }
 
   @media (min-width: 768px) {
+    /* P96 punto 1 / P100 correccion B: el padding extra del boton "+" de
+       Agregar solo se aplica desde 768px; en mobile las columnas se apilan
+       al 100% y no hace falta separacion adicional. */
+    #contenedorPresupuestoGenerado .tarea-card .presu-material-add-row > .col-md-3,
+    #contenedorPresupuestoGenerado .tarea-card .presu-mano-obra-add-row > .col-md-3 {
+      padding-left: 14px;
+    }
+
     #contenedorPresupuestoGenerado .tarea-card .tarea-card-cuerpo {
       align-items: stretch;
     }
