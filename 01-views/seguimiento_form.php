@@ -6626,6 +6626,19 @@ $(document).ready(function() {
       return isFinite(cantidad) ? cantidad : 0;
     }
 
+    // P112: a diferencia de parsearCantidadPedidoMaterial() (para texto
+    // formateado es-AR, con "." como separador de miles), esta funcion parsea
+    // un valor numerico "crudo" ya en formato JS (punto decimal, sin
+    // agrupacion) — el que efectivamente se guarda en data-material-
+    // autorizacion-adicional/-pedido-previo via String(numero). Usar
+    // parsearCantidadPedidoMaterial() ahi corrompe un valor decimal (ej.
+    // "1.5" -> 15) porque interpreta el punto como separador de miles.
+    function parsearValorCrudoPedidoMaterial(valor) {
+      var cantidad = parseFloat(String(valor === null || valor === undefined ? '0' : valor));
+
+      return isFinite(cantidad) ? cantidad : 0;
+    }
+
     function normalizarCantidadSnapshotPersistida(valor) {
       if (typeof valor === 'number') {
         return isFinite(valor) && valor > 0 ? valor : 0;
@@ -7097,8 +7110,15 @@ $(document).ready(function() {
     }
 
     function obtenerCantidadTotalPedidosIncluyendoPropuesta($fila, cantidadPedidoActivoPropuesta) {
+      // P112: cantidadPedidoActivoPropuesta llega como numero JS crudo (ej.
+      // 1.5, desde validarTextoCantidadPedidoMaterialesFrontend().valor), NO
+      // como texto formateado es-AR. Usar parsearCantidadPedidoMaterial() aqui
+      // corrompia cualquier propuesta decimal (1.5 -> "1.5" -> se interpreta
+      // el punto como separador de miles -> 15), haciendo que
+      // requiereAutorizacionPedidoMaterial() abriera el modal de excedente
+      // incluso para cantidades muy por debajo del limite presupuestado.
       return obtenerCantidadPedidosCongeladosMaterialEnFila($fila)
-        + Math.max(0, parsearCantidadPedidoMaterial(cantidadPedidoActivoPropuesta));
+        + Math.max(0, parsearValorCrudoPedidoMaterial(cantidadPedidoActivoPropuesta));
     }
 
     function requiereAutorizacionPedidoMaterial($fila, cantidadPedidoActivoPropuesta) {
@@ -7478,10 +7498,10 @@ $(document).ready(function() {
         pedidos: pedidos,
         estado_autorizacion: obtenerEstadoAutorizacionPedidoMaterialEnFila($fila),
         autorizacion_adicional: $fila.is('[data-material-autorizacion-adicional]')
-          ? parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-adicional'))
+          ? parsearValorCrudoPedidoMaterial($fila.attr('data-material-autorizacion-adicional'))
           : null,
         pedido_autorizacion_previo: $fila.is('[data-material-autorizacion-pedido-previo]')
-          ? parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'))
+          ? parsearValorCrudoPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'))
           : null,
         orden_visual: ordenVisual
       };
@@ -7986,7 +8006,7 @@ $(document).ready(function() {
 
     function marcarAutorizacionSolicitadaPedidoMaterialEnFila($fila, cantidadSolicitadaAutorizacion) {
       var pedidoActivoActual = obtenerCantidadPedidoActivoMaterialEnFila($fila);
-      var pedidoActivoPropuesto = pedidoActivoActual + parsearCantidadPedidoMaterial(cantidadSolicitadaAutorizacion);
+      var pedidoActivoPropuesto = pedidoActivoActual + parsearValorCrudoPedidoMaterial(cantidadSolicitadaAutorizacion);
 
       $fila.attr('data-material-autorizacion-adicional', String(cantidadSolicitadaAutorizacion));
       $fila.attr('data-material-autorizacion-pedido-previo', String(pedidoActivoActual));
@@ -8001,7 +8021,7 @@ $(document).ready(function() {
       limpiarTooltipsPedidoMaterialEnFila($fila);
 
       if (estado === 'rechazada') {
-        var pedidoPrevio = parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'));
+        var pedidoPrevio = parsearValorCrudoPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'));
         actualizarCantidadPedidoMaterialEnFila($fila, obtenerNumeroPedidoMaterialesActivo(), pedidoPrevio);
         $fila.removeAttr('data-material-autorizacion-adicional data-material-autorizacion-pedido-previo');
       } else if (estado === 'autorizada') {
@@ -8126,12 +8146,22 @@ $(document).ready(function() {
       procesarDecisionAutorizacionPedidoMateriales($(this), 'rechazada');
     });
 
-    function mostrarModalAutorizacionExcesoPedidoMaterial($fila, materialTexto, cantidadInicial, cantidadSolicitada, nuevaCantidadSolicitada, cantidadPropuestaInicial) {
+    function mostrarModalAutorizacionExcesoPedidoMaterial($fila, materialTexto, cantidadInicial, cantidadSolicitada, nuevaCantidadSolicitada, cantidadPropuestaInicial, admiteDecimales) {
       if (!window.Swal || typeof Swal.fire !== 'function') {
         return $.Deferred().resolve().promise();
       }
 
-      var valorInicialModal = Math.max(1, parseInt(String(cantidadPropuestaInicial || 1), 10) || 1);
+      // P112: el circuito del modal usaba step="1"/parseInt/regex de enteros
+      // sin importar la unidad del material, truncando cualquier excedente
+      // decimal. Reutiliza la MISMA clasificacion y validacion ya usadas para
+      // el input de cantidad normal (validarTextoCantidadPedidoMaterialesFrontend),
+      // sin reimplementar la regla.
+      var stepModal = admiteDecimales ? '0.01' : '1';
+      var minModal = admiteDecimales ? '0.01' : '1';
+      var valorInicialModal = formatearValorInputCantidadPedidoMaterial(
+        Math.max(admiteDecimales ? 0.01 : 1, parsearValorCrudoPedidoMaterial(cantidadPropuestaInicial) || 1),
+        admiteDecimales
+      );
       var materialVisual = String(materialTexto || 'Sin identificar').split('|')[0].trim() || 'Sin identificar';
       var detalleModal = ''
         + '<div class="text-center text-white">'
@@ -8139,7 +8169,7 @@ $(document).ready(function() {
         + '<p>Este material ya llegó al límite de la cantidad presupuestada. Para agregar más unidades se solicitará una autorización.</p>'
         + '<div class="form-group mt-3 mb-2 text-center">'
         + '<label for="pedidoMaterialCantidadAutorizacion" class="d-block font-weight-bold mb-1">Cantidad solicitada</label>'
-        + '<input type="number" id="pedidoMaterialCantidadAutorizacion" class="form-control text-center mx-auto" min="1" step="1" value="' + escapeHtmlOrdenCompra(valorInicialModal) + '" style="max-width: 210px; background-color: #ffffff; color: #333333;">'
+        + '<input type="number" id="pedidoMaterialCantidadAutorizacion" class="form-control text-center mx-auto" min="' + minModal + '" step="' + stepModal + '" inputmode="' + (admiteDecimales ? 'decimal' : 'numeric') + '" value="' + escapeHtmlOrdenCompra(valorInicialModal) + '" style="max-width: 210px; background-color: #ffffff; color: #333333;">'
         + '</div>'
         + '<p class="mb-0"><strong>¿Desea continuar con la solicitud de autorización?</strong></p>'
         + '</div>';
@@ -8161,15 +8191,17 @@ $(document).ready(function() {
         preConfirm: function() {
           var inputCantidad = document.getElementById('pedidoMaterialCantidadAutorizacion');
           var valorCantidad = inputCantidad ? String(inputCantidad.value || '').trim() : '';
-          var cantidadSolicitadaAutorizacion = Number(valorCantidad);
 
-          if (!/^\d+$/.test(valorCantidad) || !Number.isInteger(cantidadSolicitadaAutorizacion) || cantidadSolicitadaAutorizacion < 1) {
-            Swal.showValidationMessage('Ingrese una cantidad solicitada válida.');
+          // P112: NO se trunca ni redondea silenciosamente — misma validacion
+          // (sin truncar) que usa el input de cantidad del pedido activo.
+          var validacion = validarTextoCantidadPedidoMaterialesFrontend(valorCantidad, admiteDecimales);
+          if (!validacion.ok || validacion.valor <= 0) {
+            Swal.showValidationMessage(validacion.ok ? 'Ingrese una cantidad solicitada válida.' : validacion.error);
             return false;
           }
 
           return {
-            cantidadSolicitadaAutorizacion: cantidadSolicitadaAutorizacion
+            cantidadSolicitadaAutorizacion: validacion.valor
           };
         }
       }).then(function(result) {
@@ -8604,7 +8636,8 @@ $(document).ready(function() {
           cantidadInicial,
           cantidadSolicitada,
           nuevaCantidadSolicitada,
-          delta
+          delta,
+          admiteDecimales
         ).then(function() {
           sincronizarInputCantidadPedidoActivoEnFila($fila);
         });
