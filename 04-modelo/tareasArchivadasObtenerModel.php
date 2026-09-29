@@ -58,7 +58,8 @@ function obtenerTareaArchivada(int $idArchTarea): array
     // Mano de obra
     $manoObra = [];
     $sqlO = "SELECT id_atmo, id_jornal, nombre_jornal, cantidad, dias,
-                    valor_jornal_usado, porcentaje_extra, subtotal_fila
+                    valor_jornal_usado, porcentaje_extra, observacion,
+                    subtotal_fila, updated_at_origen
              FROM archivadas_tarea_mano_obra
              WHERE id_arch_tarea = ?
              ORDER BY id_atmo ASC";
@@ -72,8 +73,11 @@ function obtenerTareaArchivada(int $idArchTarea): array
             'jornal_id'           => $ro['id_jornal'] !== null ? (int)$ro['id_jornal'] : null,
             'nombre'              => (string)$ro['nombre_jornal'],
             'cantidad'            => (float)$ro['cantidad'],
+            'dias'                => (int)$ro['dias'],
             'jornal_valor'        => (float)$ro['valor_jornal_usado'],
             'porcentaje_extra'    => (float)$ro['porcentaje_extra'],
+            'observacion'         => (string)($ro['observacion'] ?? ''),
+            'updated_at_origen'   => $ro['updated_at_origen'] !== null ? (string)$ro['updated_at_origen'] : null,
         ];
     }
     $stmtO->close();

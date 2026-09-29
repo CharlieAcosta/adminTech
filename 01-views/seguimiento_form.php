@@ -1,5 +1,7 @@
-<?php  
+<?php
 session_start();
+include_once '../06-funciones_php/funciones.php'; //funciones últiles
+sesion(); // valida sesión activa y refresca ultima_actividad ANTES de leer variables de sesión
 define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/conectDB.php'; //conecta a la base de datos
 include_once '../04-modelo/paisesModel.php'; //conecta a la tabla de paises
@@ -11,10 +13,12 @@ include_once '../04-modelo/callesModel.php'; //conecta a la tabla de usuarios
 include_once '../04-modelo/clientesModel.php'; //conecta a la tabla de clientes
 include_once '../04-modelo/visitaModel.php';
 include_once '../04-modelo/presupuestoGeneradoModel.php';
+include_once '../04-modelo/visitaPresupuestoEventoModel.php';
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../04-modelo/pedidoMaterialesSnapshotModel.php';
+include_once '../04-modelo/pedidoMaterialesCantidadesModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
 include_once '../04-modelo/previsitaDocumentosModel.php';
 include_once '../06-funciones_php/ordenar_array.php'; //ordena array por el indice indicado
@@ -36,6 +40,32 @@ if (!function_exists('jsonParaJsSeguro')) {
     );
 
     return $json !== false ? $json : $fallback;
+  }
+}
+
+if (!function_exists('resolverUnidadVentaRenderPedidoMateriales')) {
+  // P111: el render inicial (antes de que el snapshot exista o antes de que
+  // el JS lo aplique) NO puede confiar en $materialSolicitado['unidad_venta']
+  // para materiales presupuestados — esa columna (presupuesto_tarea_material.
+  // unidad_venta) queda siempre NULL con el codigo actual (verificado en
+  // P110). Usa la MISMA funcion centralizada que valida el backend
+  // (con su fallback a la unidad vigente del catalogo), para no mostrar un
+  // material decimal como si exigiera enteros en la primera carga.
+  function resolverUnidadVentaRenderPedidoMateriales(int $idPrevisita, string $tipoFila, int $idMaterial, ?int $tareaNro): string
+  {
+    if ($idPrevisita <= 0 || $idMaterial <= 0) {
+      return '';
+    }
+
+    $db = conectDB();
+    if (!$db) {
+      return '';
+    }
+    mysqli_set_charset($db, 'utf8mb4');
+    $unidad = obtenerUnidadVentaMaterialPedidoEnConexion($db, $idPrevisita, $tipoFila, $idMaterial, $tareaNro);
+    mysqli_close($db);
+
+    return $unidad ?? '';
   }
 }
 
@@ -237,6 +267,11 @@ if(isset($_GET['id']) && isset($_GET['acci'])){
       $id_visita = $datos['id_previsita'];
 
         $tareas_visitadas = modGetTareasByVisitaId($id_visita, 'php');
+  }
+
+  $visitaCongeladaPorPresupuesto = false;
+  if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
+      $visitaCongeladaPorPresupuesto = visitaEstaCongeladaPorPresupuesto((int)$datos['id_previsita']);
   }
 
   
@@ -643,6 +678,8 @@ function renderizar_editor_detalle_tarea_presupuesto(string $descripcion, bool $
 
 function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarVistaDetallada = true, bool $soloLectura = false): string
 {
+    global $opcionesMateriales;
+
     $hoy = new DateTimeImmutable('now');
 
     $e = function ($v): string {
@@ -683,6 +720,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
 
     foreach ($tareas as $t) {
         $nro          = (int)($t['nro'] ?? 0);
+        $idPresuTarea = (int)($t['id_presu_tarea'] ?? 0);
+        $clientKeyTarea = $idPresuTarea > 0 ? 'pt_' . $idPresuTarea : 'tmp_' . $nro;
         $descripcion  = $t['descripcion'] ?? '';
         $descripcionHtml = function_exists('sanitizarHtmlDetalleTareaPresupuesto')
             ? sanitizarHtmlDetalleTareaPresupuesto((string)$descripcion)
@@ -711,8 +750,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             [$clase, $ro] = $vigencia($fechaRef);
 
             $rowsMat[] = '
-            <tr data-material-id="'. $e($idMat) .'" data-orden="'. $e($ordenMat) .'">
-              <td>'. $e($nombre) .'</td>
+            <tr data-material-id="'. $e($idMat) .'" data-orden="'. $e($ordenMat) .'" data-id-ptm="'. $e($idPtm) .'">
+              <td><span class="material-nombre-presupuesto">'. $e($nombre) .'</span></td>
               <td>
                 <input type="number" class="form-control form-control-sm cantidad-material"
                        value="'. $e($cant) .'" min="0" step="any" '. $disabledAttr .'>
@@ -732,6 +771,13 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                        value="'. $e($pctExtra) .'" min="0" step="any" '. $disabledAttr .'>
               </td>
               <td class="text-right subtotal-material">$'. $e(number_format((float)$subfila, 2, '.', '')) .'</td>
+              <td class="text-center">
+                <button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-material-presupuesto"
+                        data-id-ptm="'. $e($idPtm) .'" '. $disabledAttr .'
+                        title="Eliminar material" aria-label="Eliminar material">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
             </tr>';
 
         }
@@ -747,6 +793,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             $jId      = $mo['id_jornal'] ?? $mo['jornal_id'] ?? null;
             $idPtmo   = $mo['id_ptmo'] ?? null;
             $ordenMo  = $mo['orden'] ?? null;
+            $observacionMo = $mo['observacion'] ?? '';
 
             // vigencia: updated_at_origen preferente, si no updated_at
             $fechaRef = $mo['updated_at_origen'] ?? $mo['updated_at'] ?? null;
@@ -785,8 +832,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
             }
 
             $rowsMo[] = '
-            <tr data-jornal_id="'. $e($jId) .'" data-orden="'. $e($ordenMo) .'">
-              <td>'. $e($nombre) .'</td>
+            <tr data-jornal_id="'. $e($jId) .'" data-id-ptmo="'. $e($idPtmo) .'" data-orden="'. $e($ordenMo) .'">
+              <td><span class="mano-obra-nombre-presupuesto">'. $e($nombre) .'</span></td>
 
               <!-- Operarios -->
               <td>
@@ -823,6 +870,19 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               </td>
 
               <td class="text-right subtotal-mano">$'. $e(number_format((float)$subNum, 2, '.', '')) .'</td>
+
+              <td>
+                <input type="text" class="form-control form-control-sm observacion-mano-obra"
+                      value="'. $e($observacionMo) .'" maxlength="255" '. $disabledAttr .'>
+              </td>
+
+              <td class="text-center">
+                <button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-mano-obra-presupuesto"
+                        data-id-ptmo="'. $e($idPtmo) .'" '. $disabledAttr .'
+                        title="Eliminar mano de obra" aria-label="Eliminar mano de obra">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
             </tr>';
         }
 
@@ -831,9 +891,12 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
         $roUtil    = $mostrarVistaDetallada ? $readonlyUtilClass : 'readonly input-sololectura';
 
         $html[] = '
-        <div class="tarea-card">
+        <div class="tarea-card tarea-colapsada" data-id-presu-tarea="'. $e($idPresuTarea) .'" data-presu-client-key="'. $e($clientKeyTarea) .'">
           <div class="tarea-encabezado">
-            <span><i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b></span>
+            <span class="tarea-toggle-colapso" role="button" tabindex="0" aria-expanded="false">
+              <i class="fas fa-chevron-down tarea-colapso-icono" aria-hidden="true"></i>
+              <i class="fas fa-tasks"></i> <b>Tarea '. $e($nro) .': '. $e($tituloTarea) .'</b>
+            </span>
             <label class="incluir-presupuesto-label">
               <input type="checkbox" class="incluir-en-total" '. $incluido .' '. $disabledAttr .'>
               <span>Incluído en el presupuesto</span>
@@ -853,10 +916,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                   <label class="mb-0"><b>Imágenes</b></label>
 
                   <input type="file" class="presu-fotos d-none" id="presu_fotos_tarea_'. $e($nro) .'"
-                         multiple accept="image/*" data-index="'. $e($nro) .'" '. $disabledAttr .'/>
+                         multiple accept="image/*" data-index="'. $e($nro) .'" data-client-key="'. $e($clientKeyTarea) .'" '. $disabledAttr .'/>
 
                   <div class="presu-dropzone border rounded bg-light p-3 text-muted mb-2"
-                       data-index="'. $e($nro) .'" style="min-height:100px;">
+                       data-index="'. $e($nro) .'" data-client-key="'. $e($clientKeyTarea) .'" style="min-height:100px;">
                     <div class="w-100 d-flex align-items-center justify-content-center text-center">
                       <em>Arrastre aquí las imágenes o haga click.</em>
                     </div>
@@ -885,6 +948,25 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
               <!-- Materiales -->
               <div class="tarea-materiales mb-0 mt-0 pt-0">
                 <div class="bloque-titulo mt-0 pt-0 mb-0">Materiales</div>
+                <div class="form-row align-items-end mb-2 presu-material-add-row">
+                  <div class="col-md-7 form-group mb-1">
+                    <select class="form-control form-control-sm presu-material-select" '. $disabledAttr .'>
+                      <option value="">Material</option>
+                      '. ($opcionesMateriales ?? '') .'
+                    </select>
+                  </div>
+                  <div class="col-md-2 form-group mb-1">
+                    <input type="number" class="form-control form-control-sm presu-material-cantidad"
+                           min="0.01" step="any" placeholder="Cantidad" '. $disabledAttr .'>
+                  </div>
+                  <div class="col-md-3 form-group mb-1">
+                    <button type="button" class="btn btn-success btn-sm w-100 presu-agregar-material" '. $disabledAttr .'
+                            title="Agregar material" aria-label="Agregar material">
+                      <i class="fas fa-plus"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="table-responsive">
                 <table class="tabla-presupuesto tabla-presupuesto-sm">
                   <thead>
                     <tr>
@@ -893,6 +975,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                       <th>Precio Unitario</th>
                       <th>% Extra</th>
                       <th>Subtotal</th>
+                      <th>Accion</th>
                     </tr>
                   </thead>
                   <tbody>'
@@ -908,6 +991,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                                class="form-control form-control-sm input-otros-materiales"
                                id="otros-mat-'. $e($nro) .'" value="'. $e($otrosMat) .'" '. $disabledAttr .'>
                       </td>
+                      <td></td>
                     </tr>
                     <tr class="fila-subtotal">
                       <td colspan="3" class="text-right"><b>Subtotal Materiales</b></td>
@@ -915,15 +999,40 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <input type="number" class="form-control form-control-sm utilidad-global-materiales"
                                min="0" '. $roUtil .' value="'. $e($utilMatPct ?? '') .'" placeholder="%">
                       </td>
-                      <td class="text-right"><b>$0.00</b></td>
+                      <td class="text-right"><b class="subtotal-materiales-bloque">$0.00</b></td>
+                      <td></td>
                     </tr>
                   </tbody>
                 </table>
+                </div>
               </div>
 
                 <!-- Mano de Obra -->
                 <div class="tarea-mano-obra">
                   <div class="bloque-titulo mt-0">Mano de Obra</div>
+                  <div class="form-row align-items-end mb-2 presu-mano-obra-add-row">
+                    <div class="col-md-5 form-group mb-1">
+                      <select class="form-control form-control-sm presu-mano-obra-select" '. $disabledAttr .'>
+                        <option value="">Tipo de jornal</option>
+                        '. ($opcionesJornales ?? '') .'
+                      </select>
+                    </div>
+                    <div class="col-md-2 form-group mb-1">
+                      <input type="number" class="form-control form-control-sm presu-mano-obra-operarios"
+                             min="0.01" step="any" placeholder="Operarios" '. $disabledAttr .'>
+                    </div>
+                    <div class="col-md-2 form-group mb-1">
+                      <input type="number" class="form-control form-control-sm presu-mano-obra-dias"
+                             min="0.01" step="any" placeholder="Dias" '. $disabledAttr .'>
+                    </div>
+                    <div class="col-md-3 form-group mb-1">
+                      <button type="button" class="btn btn-success btn-sm w-100 presu-agregar-mano-obra" '. $disabledAttr .'
+                              title="Agregar mano de obra" aria-label="Agregar mano de obra">
+                        <i class="fas fa-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="table-responsive">
                   <table class="tabla-presupuesto tabla-presupuesto-sm">
                     <thead>
                       <tr>
@@ -934,8 +1043,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <th>Valor Jornal</th>
                         <th>% Extra</th>
                         <th>Subtotal</th>
+                        <th>Observacion</th>
+                        <th>Accion</th>
                       </tr>
-                    </thead>                
+                    </thead>
                     <tbody>'
                     . implode('', $rowsMo) .
                     '
@@ -951,6 +1062,8 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                               class="form-control form-control-sm input-otros-mano"
                               id="otros-mo-'. $e($nro) .'" value="'. $e($otrosMo) .'" '. $disabledAttr .'>
                       </td>
+                      <td></td>
+                      <td></td>
                     </tr>
                     <tr class="fila-subtotal">
                       <td colspan="5" class="text-right"><b>Subtotal Mano de Obra</b></td>
@@ -958,27 +1071,30 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                         <input type="number" class="form-control form-control-sm utilidad-global-mano-obra"
                               min="0" '. $roUtil .' value="'. $e($utilMoPct ?? '') .'" placeholder="%">
                       </td>
-                      <td class="text-right"><b>$0.00</b></td>
-                    </tr>                  
+                      <td class="text-right"><b class="subtotal-mano-obra-bloque">$0.00</b></td>
+                      <td></td>
+                      <td></td>
+                    </tr>
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 <div class="tarea-total d-flex flex-column align-items-end px-3">
                   <div class="utilidades-extra w-100">
-                    <button class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</button>
+                    <div class="col-2 btn-total-tarea subt-util-materiales w-100 '. $claseUtil .'" id="subt-util-materiales-'. $e($nro) .'">Subtotal Util. Mat.: $0,00</div>
                   </div>
                   <div class="utilidades-extra w-100">
-                    <button class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</button>
+                    <div class="col-2 btn-total-tarea subt-util-manoobra w-100 '. $claseUtil .'" id="subt-util-manoobra-'. $e($nro) .'">Subtotal Util. MO.: $0,00</div>
                   </div>
                   <div class="utilidades-extra w-100">
-                    <button class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</button>
+                    <div class="col-2 btn-total-tarea subt-util-total w-100 '. $claseUtil .'" id="subt-util-total-'. $e($nro) .'">Sub Util. Mat.+MO.: $0,00</div>
                   </div>
                   <div class="d-flex justify-content-end w-100">
-                    <button class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</button>
+                    <div class="col-2 btn-total-tarea w-100 subt-util-final '. $claseUtil .'" id="utilfinal-'. $e($nro) .'">Util real final: $0,00</div>
                   </div>
                   <div class="d-flex justify-content-end w-100">
-                    <button class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></button>
+                    <div class="col-2 btn-total-tarea porcentaje-tarea w-100 porcentajetarea '. $claseUtil .'" id="porcentajetarea-'. $e($nro) .'">% : <strong>$0,00</strong></div>
                   </div>
                 </div>
               </div>
@@ -992,7 +1108,7 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 id="btnGuardarTarea_'. $e($nro) .'"
                 class="btn btn-warning mr-2 btn-guardar-tarea btn-tarea"
                 data-nro="'. $e($nro) .'"
-                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                data-id-presu-tarea="'. $e($idPresuTarea) .'" '. $disabledAttr .'>
                 <i class="fas fa-save"></i> Guardar tarea
               </button>
               <button
@@ -1000,22 +1116,29 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
                 id="btnTraerTarea_'. $e($nro) .'"
                 class="btn btn-warning btn-traer-tarea btn-tarea"
                 data-nro="'. $e($nro) .'"
-                data-id-presu-tarea="'. (int)$t['id_presu_tarea'] .'" '. $disabledAttr .'>
+                data-id-presu-tarea="'. $e($idPresuTarea) .'" '. $disabledAttr .'>
                 <i class="fas fa-download"></i> Traer tarea
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-danger ml-2 btn-eliminar-tarea-presupuesto btn-tarea"
+                data-nro="'. $e($nro) .'"
+                data-id-presu-tarea="'. $e($idPresuTarea) .'" '. $disabledAttr .'>
+                <i class="fas fa-trash"></i> Eliminar tarea
               </button>
             </div>
 
             <div class="fila-impuestos flex-grow-1" id="fila-impuestos-'. $e($nro) .'">
               <div class="tarea-impuestos-lista">
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</button></div>
-                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><button type="button" class="btn bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></button></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="iibb-'. $e($nro) .'">IIBB: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="ganancias-'. $e($nro) .'">Ganancias 35%: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="cheque-'. $e($nro) .'">Imp. cheque: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="inversion-'. $e($nro) .'">Costo inv. 3%: $0,00</div></div>
+                <div class="col-auto pr-1 pl-0 '. $claseImp .'"><div class="bg-secondary w-100" id="retiva-'. $e($nro) .'">Ret. IVA mat: <strong>$0,00</strong></div></div>
               </div>
 
               <div class="tarea-subtotal-col">
-                <button type="button" class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</button>
+                <div class="btn-total-tarea w-100 util-muy mt-0" id="subt-tarea-'. $e($nro) .'">Subtotal Tarea '. $e($nro) .': $0,00</div>
               </div>
             </div>
           </div>
@@ -1027,6 +1150,10 @@ function renderizar_presupuesto_html(array $presupuesto_generado, bool $mostrarV
       <div class="presupuesto-total-card">
         <div class="presupuesto-total-row">
           <div class="presupuesto-total-actions">
+            <button id="btn-agregar-tarea-presupuesto" type="button" class="btn btn-primary mr-2" '. $disabledAttr .'>
+              <i class="fas fa-plus"></i> Agregar tarea
+            </button>
+
             <button id="btn-guardar-presupuesto" type="button" class="btn btn-success mr-2" '. $disabledAttr .'>
               <i class="fas fa-save"></i> Guardar
             </button>
@@ -1062,6 +1189,9 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 ?>
 <script>
   const presupuestoGenerado = <?php echo jsonParaJsSeguro((bool)($presupuestoGenerado ?? false), 'false'); ?>;
+  window.presupuestoGeneradoInicial = presupuestoGenerado;
+  window.presupuestoGenerado = presupuestoGenerado;
+  window.VISITA_CONGELADA_POR_PRESUPUESTO = <?php echo jsonParaJsSeguro((bool)($visitaCongeladaPorPresupuesto ?? false), 'false'); ?>;
 </script>
 
 <!DOCTYPE html>
@@ -1091,7 +1221,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <!-- Custom -->
-  <link rel="stylesheet" href="../dist/css/custom.css">
+  <?php
+    $customCssRuta = __DIR__ . '/../dist/css/custom.css';
+    $customCssVersion = is_file($customCssRuta) ? filemtime($customCssRuta) : time();
+  ?>
+  <link rel="stylesheet" href="../dist/css/custom.css?v=<?php echo (int)$customCssVersion; ?>">
   <style>
     body.seguimiento-form-page > .wrapper > .content-wrapper {
       height: auto;
@@ -1407,6 +1541,12 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
   window.PEDIDO_MATERIALES_TAREAS = <?php echo jsonParaJsSeguro($pedidoMaterialesTareasDisponibles, '[]'); ?>;
   window.PEDIDO_MATERIALES_SNAPSHOT = <?php echo jsonParaJsSeguro($pedidoMaterialesSnapshot, 'null'); ?>;
   window.PEDIDO_MATERIALES_ENDPOINT = '../03-controller/pedidoMaterialesController.php';
+  // P109: la lista de unidades que admiten decimales y la precision maxima
+  // provienen de la MISMA fuente que valida el backend
+  // (pedidoMaterialesCantidadesModel.php) — el frontend nunca mantiene una
+  // matriz propia, solo consulta esta lista embebida.
+  window.PEDIDO_MATERIALES_UNIDADES_DECIMALES = <?php echo jsonParaJsSeguro(unidadesVentaPedidoMaterialesQueAdmitenDecimales(), '[]'); ?>;
+  window.PEDIDO_MATERIALES_PRECISION_DECIMALES = <?php echo (int)precisionMaximaDecimalesPedidoMateriales(); ?>;
 </script>
 <div class="accordion <?php echo $pedidoMaterialesHabilitadoInicial ? '' : 'd-none'; ?>" id="accordionExample5" aria-hidden="<?php echo $pedidoMaterialesHabilitadoInicial ? 'false' : 'true'; ?>">
   <div class="card <?php echo $orden_compra_card; ?> accordion 5">
@@ -1460,13 +1600,27 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                       $saldoAgregadoMaterial = (float)($materialesAgregadosPorMaterialPedido[$idMaterialPedido] ?? 0);
                       $cantidadInicialMaterial = $cantidadBaseMaterial;
                       $cantidadAgregadaMaterial = max(0, $saldoAgregadoMaterial);
-                      $cantidadMaterial = number_format($cantidadInicialMaterial, 0, ',', '.');
-                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, 0, ',', '.');
+                      // P111: unidad congelada si existe, con fallback real a la
+                      // unidad vigente del catalogo (presupuesto_tarea_material.
+                      // unidad_venta queda siempre NULL con el codigo actual —
+                      // ver P110). Misma funcion centralizada que valida el
+                      // backend (pedidoMaterialesCantidadesModel.php).
+                      $unidadVentaMaterialPedido = resolverUnidadVentaRenderPedidoMateriales(
+                        (int)($datos['id_previsita'] ?? 0),
+                        'presupuestado',
+                        $idMaterialPedido,
+                        $tareaNroMaterial > 0 ? $tareaNroMaterial : null
+                      );
+                      $admiteDecimalesMaterialPedido = unidadVentaPedidoMaterialesAdmiteDecimales($unidadVentaMaterialPedido);
+                      $decimalesMaterialPedido = $admiteDecimalesMaterialPedido ? 2 : 0;
+                      $stepMaterialPedido = $admiteDecimalesMaterialPedido ? '0.01' : '1';
+                      $cantidadMaterial = number_format($cantidadInicialMaterial, $decimalesMaterialPedido, ',', '.');
+                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, $decimalesMaterialPedido, ',', '.');
                       $materialLabel = $productoMaterial !== ''
                         ? $productoMaterial
                         : 'Material #' . $idMaterialPedido;
                     ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="sin_solicitud" data-tarea-nro="<?php echo $tareaNroMaterial; ?>" data-tarea-titulo="<?php echo htmlspecialchars($tareaTituloMaterial, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>">
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="sin_solicitud" data-tarea-nro="<?php echo $tareaNroMaterial; ?>" data-tarea-titulo="<?php echo htmlspecialchars($tareaTituloMaterial, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-unidad-venta="<?php echo htmlspecialchars($unidadVentaMaterialPedido, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-admite-decimales="<?php echo $admiteDecimalesMaterialPedido ? '1' : '0'; ?>" data-tipo-fila="presupuestado" data-orden-visual="<?php echo (int)$idxMaterial + 1; ?>">
                       <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
                       <td class="align-middle">
                         <?php if ($tareaNroMaterial > 0): ?>
@@ -1506,12 +1660,16 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                           <input type="number"
                                  class="pedido-materiales-pedido-cantidad-input"
                                  min="0"
-                                 step="1"
-                                 inputmode="numeric"
-                                 value="<?php echo (int)$cantidadAgregadaMaterial; ?>"
+                                 step="<?php echo $stepMaterialPedido; ?>"
+                                 inputmode="<?php echo $admiteDecimalesMaterialPedido ? 'decimal' : 'numeric'; ?>"
+                                 value="<?php echo htmlspecialchars(number_format($cantidadAgregadaMaterial, $decimalesMaterialPedido, '.', ''), ENT_QUOTES, 'UTF-8'); ?>"
                                  data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
                                  data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
                                  data-pedido-numero="1"
+                                 data-tipo-fila="presupuestado"
+                                 data-orden-visual="<?php echo (int)$idxMaterial + 1; ?>"
+                                 data-unidad-venta="<?php echo htmlspecialchars($unidadVentaMaterialPedido, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                 data-admite-decimales="<?php echo $admiteDecimalesMaterialPedido ? '1' : '0'; ?>"
                                  aria-label="Cantidad Pedido #1">
                         </span>
                       </td>
@@ -1589,14 +1747,29 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                       $productoMaterial = trim((string)($materialSolicitado['nombre_material'] ?? $materialSolicitado['producto'] ?? ''));
                       $cantidadInicialAgregada = (float)($materialSolicitado['cantidad_inicial'] ?? $materialSolicitado['cantidad'] ?? $materialSolicitado['material_cantidad'] ?? 0);
                       $cantidadAgregadaMaterial = (float)($materialSolicitado['cantidad_agregada'] ?? 0);
-                      $cantidadMaterial = number_format($cantidadInicialAgregada, 0, ',', '.');
-                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, 0, ',', '.');
+                      // P111: para materiales agregados se usa la unidad VIGENTE
+                      // del catalogo (no hay presupuesto congelado que la fije).
+                      // Misma funcion centralizada (con su propia consulta real a
+                      // materiales) en vez de confiar en el JOIN ya resuelto por
+                      // obtenerMaterialesSolicitadosSeguimiento(), por si el
+                      // material fue dado de baja del catalogo entre medio.
+                      $unidadVentaMaterialPedido = resolverUnidadVentaRenderPedidoMateriales(
+                        (int)($datos['id_previsita'] ?? 0),
+                        'agregado',
+                        (int)($materialSolicitado['id_material'] ?? 0),
+                        null
+                      );
+                      $admiteDecimalesMaterialPedido = unidadVentaPedidoMaterialesAdmiteDecimales($unidadVentaMaterialPedido);
+                      $decimalesMaterialPedido = $admiteDecimalesMaterialPedido ? 2 : 0;
+                      $stepMaterialPedido = $admiteDecimalesMaterialPedido ? '0.01' : '1';
+                      $cantidadMaterial = number_format($cantidadInicialAgregada, $decimalesMaterialPedido, ',', '.');
+                      $cantidadAgregadaMaterialTexto = number_format($cantidadAgregadaMaterial, $decimalesMaterialPedido, ',', '.');
                       $idMaterialPedido = (int)($materialSolicitado['id_material'] ?? 0);
                       $materialLabel = $productoMaterial !== ''
                         ? $productoMaterial
                         : 'Material #' . $idMaterialPedido;
                     ?>
-                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="pendiente" data-tarea-nro="<?php echo (int)($materialSolicitado['tarea_nro'] ?? 0); ?>" data-tarea-titulo="<?php echo htmlspecialchars((string)($materialSolicitado['tarea_titulo'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>">
+                    <tr data-material-id="<?php echo $idMaterialPedido; ?>" data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-material-cantidad-inicial="<?php echo htmlspecialchars((string)$cantidadInicialAgregada, ENT_QUOTES, 'UTF-8'); ?>" data-material-agregado="<?php echo htmlspecialchars((string)$cantidadAgregadaMaterial, ENT_QUOTES, 'UTF-8'); ?>" data-material-autorizacion-estado="pendiente" data-tarea-nro="<?php echo (int)($materialSolicitado['tarea_nro'] ?? 0); ?>" data-tarea-titulo="<?php echo htmlspecialchars((string)($materialSolicitado['tarea_titulo'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-unidad-venta="<?php echo htmlspecialchars($unidadVentaMaterialPedido, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>" data-admite-decimales="<?php echo $admiteDecimalesMaterialPedido ? '1' : '0'; ?>" data-tipo-fila="agregado" data-orden-visual="<?php echo (int)$idxMaterial + 1; ?>">
                       <td class="text-center align-middle"><?php echo (int)$idxMaterial + 1; ?></td>
                       <td class="align-middle">
                         <strong>Adicional</strong>
@@ -1630,12 +1803,16 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                           <input type="number"
                                  class="pedido-materiales-pedido-cantidad-input"
                                  min="0"
-                                 step="1"
-                                 inputmode="numeric"
-                                 value="<?php echo (int)($cantidadInicialAgregada + $cantidadAgregadaMaterial); ?>"
+                                 step="<?php echo $stepMaterialPedido; ?>"
+                                 inputmode="<?php echo $admiteDecimalesMaterialPedido ? 'decimal' : 'numeric'; ?>"
+                                 value="<?php echo htmlspecialchars(number_format($cantidadInicialAgregada + $cantidadAgregadaMaterial, $decimalesMaterialPedido, '.', ''), ENT_QUOTES, 'UTF-8'); ?>"
                                  data-material-id="<?php echo (int)($materialSolicitado['id_material'] ?? 0); ?>"
                                  data-material-text="<?php echo htmlspecialchars($materialLabel, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
                                  data-pedido-numero="1"
+                                 data-tipo-fila="agregado"
+                                 data-orden-visual="<?php echo (int)$idxMaterial + 1; ?>"
+                                 data-unidad-venta="<?php echo htmlspecialchars($unidadVentaMaterialPedido, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>"
+                                 data-admite-decimales="<?php echo $admiteDecimalesMaterialPedido ? '1' : '0'; ?>"
                                  aria-label="Cantidad Pedido #1">
                         </span>
                       </td>
@@ -2441,7 +2618,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
 <?php if ($mostrarBloquesTecnicosSeguimiento && isset($datos['estado_visita']) && $datos['estado_visita'] === 'Ejecutada'): ?>
   <!-- start accordion visita -->
-  <div class="accordion" id="accordionVisita">
+  <div class="accordion" id="accordionVisita" data-visita-congelada-presupuesto="<?php echo !empty($visitaCongeladaPorPresupuesto) ? '1' : '0'; ?>">
     <div class="card <?php echo $visita_card; ?> accordion_2">
     <div class="card-header" id="headingVisita">
       <h2 class="mb-0 d-flex align-items-center">
@@ -2459,6 +2636,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
             ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>'
             : '';
           ?>
+          <?php if (!empty($visitaCongeladaPorPresupuesto)): ?>
+            <span class="badge badge-light border ml-2 visita-congelada-badge">
+              <i class="fa fa-lock mr-1" aria-hidden="true"></i>Histórica &middot; Solo lectura
+            </span>
+          <?php endif; ?>
         </button>
 
         <!-- Span con el popover -->
@@ -2480,6 +2662,11 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
     <div id="collapseVisita" class="collapse <?php echo $visita_show; ?>" aria-labelledby="headingVisita" data-parent="#accordionVisita">
         <div class="card-body">
+          <?php if (!empty($visitaCongeladaPorPresupuesto)): ?>
+            <div class="alert alert-info py-2 mb-3 visita-congelada-aviso" role="alert">
+              <i class="fa fa-lock mr-2"></i> Esta Visita se cerró al generar el Presupuesto. Sus datos se conservan como registro histórico y no pueden modificarse.
+            </div>
+          <?php endif; ?>
 
           <!-- start accordion tareas -->
           <div class="accordion" id="accordionTareas">
@@ -2643,9 +2830,15 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           <!-- Botones generales -->
           <div class="text-center">
             <button type="button" class="btn bg-success mr-2 btn-uniform btn-guardar-visita">Guardar Visita</button>
-            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto" 
-            <?php echo $presupuestoGenerado ? 'disabled' : ''; ?>> Generar Presupuesto</button>
+            <button type="button" class="btn btn-secondary mr-2 btn-uniform btn-generar-presupuesto" id="btn-generar-presupuesto"
+            aria-describedby="motivo-generar-presupuesto"
+            <?php echo ($presupuestoGenerado || !empty($visitaCongeladaPorPresupuesto)) ? 'disabled' : ''; ?>> Generar Presupuesto</button>
             <button type="button" class="btn btn-secondary btn-uniform btn-cancelar-visita">Volver</button>
+
+            <div id="motivo-generar-presupuesto"
+                 class="small text-muted mt-2 d-none"
+                 role="status"
+                 aria-live="polite"></div>
           </div>
 
         </div> <!-- end card-body visita -->
@@ -2683,7 +2876,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
           
           <!-- start card body accordion 1-->
           <div class="card-body">
-                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
+                <input type="hidden" class="v-id" id="id_previsita" name="id_previsita" data-visualiza="<?php echo $visualiza; ?>" data-bloqueo-comercial="<?php echo !empty($bloqueoEdicionComercial['bloqueado']) ? '1' : '0'; ?>" data-estado-bloqueo="<?php echo htmlspecialchars((string)($bloqueoEdicionComercial['estado_label'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" data-visita-congelada-presupuesto="<?php echo !empty($visitaCongeladaPorPresupuesto) ? '1' : '0'; ?>" value="<?php echo arrayPrintValue(null, $datos, 'id_previsita', null); ?>">
                 <!-- /.row start-->
                 <div class="row pb-1">
 
@@ -3987,6 +4180,49 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     --tarea-editor-block-gap: 0.04rem;
   }
 
+  /* P100 correccion A: dentro de las filas de alta de Materiales/Mano de
+     Obra, .form-control hereda min-width:200px global (dist/css/custom.css),
+     lo que fuerza el desborde de las columnas Bootstrap (col-md-7/2/3 y
+     col-md-5/2/2/3) y es la causa real de que el boton "+" quedara pegado. */
+  #contenedorPresupuestoGenerado .tarea-card .presu-material-add-row .form-control,
+  #contenedorPresupuestoGenerado .tarea-card .presu-mano-obra-add-row .form-control {
+    min-width: 0;
+  }
+
+  /* P96 punto 1 (P100: acotado a >=768px, ver media query mas abajo): separa
+     el botón "+" de Agregar (Materiales/Mano de Obra) del input/select
+     anterior, sin tocar tamaño/color/logica del boton. En mobile (<768px)
+     las columnas se apilan al 100% y este padding no es necesario. */
+
+  /* P96 punto 2: encabezado de tarea como disparador de colapso/expansion. */
+  #contenedorPresupuestoGenerado .tarea-card .tarea-toggle-colapso {
+    cursor: pointer;
+    outline: none;
+  }
+
+  /* P100 correccion D: outline blanco (contraste ~4.19:1 sobre el fondo
+     #747d84 del encabezado; #2f6fad anterior daba ~1.25:1, casi invisible). */
+  #contenedorPresupuestoGenerado .tarea-card .tarea-toggle-colapso:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-colapso-icono {
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card.tarea-colapsada .tarea-colapso-icono {
+    transform: rotate(-90deg);
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card.tarea-colapsada > .container-fluid,
+  #contenedorPresupuestoGenerado .tarea-card.tarea-colapsada > .tarea-barra-inferior {
+    display: none !important;
+  }
+
   #contenedorPresupuestoGenerado .tarea-card .tarea-descripcion-editor {
     line-height: var(--tarea-editor-line-height);
   }
@@ -4023,6 +4259,41 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions {
     flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions > .btn {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions > .btn:focus-visible {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+  }
+
+  /* Pendiente 13: mismo indicador de foco de P84, ampliado a los controles
+     operativos reales de Visita y Presupuesto fuera de .tarea-inline-actions
+     (Guardar Visita, Generar Presupuesto, Agregar/Eliminar material y mano
+     de obra, Agregar tarea, Guardar/Emitir Presupuesto, etc.). No alcanza a
+     los once indicadores financieros (son DIV desde P80, no .btn) ni a
+     controles deshabilitados (nunca reciben :focus-visible). */
+  #currentForm .btn:focus-visible,
+  #contenedorPresupuestoGenerado .btn:focus-visible {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+  }
+
+  /* P91: ningun elemento dentro de los modales (p.ej. #modalTraerTareaArchivada)
+     mostraba indicador de foco (verificado con Chrome real: outline 0px en
+     los 8 controles tabulados). Se extiende el mismo patron a los modales
+     Bootstrap de esta pagina, sin afectar el focus-trap ni el cierre
+     data-keyboard="false" ya existentes (solo agrega un estilo visual). */
+  .modal .btn:focus-visible,
+  .modal input:focus-visible {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
   }
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
@@ -4062,13 +4333,15 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     margin-top: 0;
     padding: 0.55rem 0.9rem;
     font-size: 0.98rem;
+    text-align: center;
+    cursor: default;
+    /* Pendiente 16: agrupa visualmente "Utilidades" sin ocupar espacio de
+       layout (box-shadow inset no altera dimensiones ni geometria ya
+       validada en P67-P86). */
+    box-shadow: inset 0 0 0 2px #90b4d8;
   }
 
-  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn {
-    white-space: nowrap;
-  }
-
-  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .btn.bg-secondary {
+  #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista .bg-secondary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4077,6 +4350,13 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     padding: 0.42rem 0.72rem;
     line-height: 1.5;
     box-sizing: border-box;
+    /* Pendiente 16: distingue "Impuestos y costos" de "Utilidades" (mismo
+       grosor de borde ya existente desde P80, solo cambia el color; sin
+       impacto de geometria). */
+    border: 1px solid #d8b98f;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    cursor: default;
   }
 
   #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
@@ -4114,9 +4394,44 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     line-height: 1.5;
     white-space: nowrap;
     box-sizing: border-box;
+    cursor: default;
+    /* P96 punto 3: "Subtotal Tarea" en texto blanco (pedido explicito). */
+    color: #fff !important;
+  }
+
+  /* P96 punto 3: "% Utilidad" en texto blanco (pedido explicito); selector
+     exclusivo de este indicador, no comparte clase con el resto de
+     Subtotal Util. Mat./MO./Total ni con Util real final. */
+  #contenedorPresupuestoGenerado .tarea-card .porcentajetarea {
+    color: #fff !important;
+  }
+
+  /* P100 correccion C: con texto blanco fijo, los fondos originales de
+     util-muy (#28a745, ~3.13:1 con blanco) y util-aceptable (#ffc107,
+     ~1.6:1 con blanco) no alcanzan WCAG AA (4.5:1 texto normal). Se oscurece
+     el fondo SOLO para estos dos indicadores (no se toca .util-muy ni
+     .util-aceptable globales, que siguen usando texto oscuro en el resto
+     de indicadores). No se altera umbral ni semantica: mismo estado, mismo
+     color base, solo mas oscuro para mantener contraste con blanco. */
+  #contenedorPresupuestoGenerado .tarea-card .tarea-subtotal-col .btn-total-tarea.util-muy,
+  #contenedorPresupuestoGenerado .tarea-card .porcentajetarea.util-muy {
+    background-color: #1e7e34 !important; /* verde oscuro: ~5.14:1 con blanco */
+  }
+
+  #contenedorPresupuestoGenerado .tarea-card .tarea-subtotal-col .btn-total-tarea.util-aceptable,
+  #contenedorPresupuestoGenerado .tarea-card .porcentajetarea.util-aceptable {
+    background-color: #946200 !important; /* ambar oscuro: ~5.24:1 con blanco */
   }
 
   @media (min-width: 768px) {
+    /* P96 punto 1 / P100 correccion B: el padding extra del boton "+" de
+       Agregar solo se aplica desde 768px; en mobile las columnas se apilan
+       al 100% y no hace falta separacion adicional. */
+    #contenedorPresupuestoGenerado .tarea-card .presu-material-add-row > .col-md-3,
+    #contenedorPresupuestoGenerado .tarea-card .presu-mano-obra-add-row > .col-md-3 {
+      padding-left: 14px;
+    }
+
     #contenedorPresupuestoGenerado .tarea-card .tarea-card-cuerpo {
       align-items: stretch;
     }
@@ -4182,6 +4497,33 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     }
   }
 
+  @media (min-width: 768px) and (max-width: 1199.98px) {
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior {
+      flex-wrap: wrap;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .tarea-inline-actions,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) {
+      max-width: 100%;
+      flex-basis: 100%;
+      width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos {
+      grid-template-columns: 1fr;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-impuestos-lista,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-barra-inferior .fila-impuestos .tarea-subtotal-col {
+      width: 100%;
+      max-width: 100%;
+      justify-self: stretch;
+    }
+  }
+
   @media (max-width: 767.98px) {
     #contenedorPresupuestoGenerado .tarea-card .tarea-acciones-izquierda {
       flex-wrap: wrap;
@@ -4210,6 +4552,12 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
       width: 100%;
       max-width: 100%;
       justify-self: stretch;
+    }
+
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total .utilidades-extra .btn-total-tarea,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-total-tarea,
+    #contenedorPresupuestoGenerado .tarea-card .tarea-total > .d-flex.justify-content-end.w-100:not(.fila-impuestos) .btn-porcentaje-tarea {
+      white-space: normal;
     }
   }
 
@@ -4277,6 +4625,7 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
     .presupuesto-accordion-intervino {
       width: 100%;
       text-align: left !important;
+      white-space: normal;
     }
   }
 </style>
@@ -4930,6 +5279,46 @@ $(document).ready(function() {
 
     var ordenCompraConfig = window.SEGUIMIENTO_ORDEN_COMPRA || null;
     var pedidoMaterialesConfig = window.SEGUIMIENTO_PEDIDO_MATERIALES || {};
+
+    // P109: unica funcion JS de clasificacion; consulta la lista embebida por
+    // PHP desde pedidoMaterialesCantidadesModel.php (no reimplementa la regla).
+    function unidadVentaPedidoMaterialesAdmiteDecimales(unidadVenta) {
+      var lista = window.PEDIDO_MATERIALES_UNIDADES_DECIMALES || [];
+      return lista.indexOf(String(unidadVenta || '')) !== -1;
+    }
+
+    function precisionMaximaDecimalesPedidoMateriales() {
+      return parseInt(String(window.PEDIDO_MATERIALES_PRECISION_DECIMALES || '0'), 10) || 0;
+    }
+
+    // P109: validacion de UX temprana (misma regla que el backend, sin
+    // redondear ni truncar) — el backend sigue siendo la autoridad final.
+    function validarTextoCantidadPedidoMaterialesFrontend(valorCrudo, admiteDecimales) {
+      var texto = String(valorCrudo || '').trim();
+      if (texto === '') {
+        return { ok: false, error: 'Ingresá una cantidad.' };
+      }
+      if (texto.indexOf(',') !== -1 && texto.indexOf('.') !== -1) {
+        return { ok: false, error: 'Usá un unico separador decimal.' };
+      }
+      var textoNormalizado = texto.replace(',', '.');
+      if (!/^-?\d+(\.\d+)?$/.test(textoNormalizado)) {
+        return { ok: false, error: 'La cantidad ingresada no es un numero valido.' };
+      }
+      var numero = parseFloat(textoNormalizado);
+      if (numero < 0) {
+        return { ok: false, error: 'La cantidad ingresada no puede ser negativa.' };
+      }
+      var partes = textoNormalizado.split('.');
+      var decimales = partes.length > 1 ? partes[1].length : 0;
+      if (!admiteDecimales && decimales > 0) {
+        return { ok: false, error: 'Esta unidad de venta exige cantidades enteras.' };
+      }
+      if (admiteDecimales && decimales > precisionMaximaDecimalesPedidoMateriales()) {
+        return { ok: false, error: 'La cantidad admite hasta ' + precisionMaximaDecimalesPedidoMateriales() + ' decimales.' };
+      }
+      return { ok: true, valor: numero };
+    }
     var ordenCompraCargaInicialRealizada = false;
     var ordenCompraIdActivo = 0;
     var ordenCompraEstadoActual = '';
@@ -6080,14 +6469,21 @@ $(document).ready(function() {
       }
     }
 
-    function formatearCantidadPedidoMaterial(cantidad) {
+    function formatearCantidadPedidoMaterial(cantidad, admiteDecimales) {
       var numero = parseFloat(String(cantidad || '0').replace(',', '.'));
       if (!isFinite(numero)) {
         numero = 0;
       }
 
+      // P109: la precision de presentacion depende de la unidad_venta real del
+      // material (clasificacion centralizada en el backend, ver
+      // pedidoMaterialesCantidadesModel.php). Por defecto (sin dato de unidad
+      // disponible) se preserva el comportamiento previo (entero).
+      var decimales = admiteDecimales ? 2 : 0;
+
       return numero.toLocaleString('es-AR', {
-        maximumFractionDigits: 0
+        minimumFractionDigits: decimales,
+        maximumFractionDigits: decimales
       });
     }
 
@@ -6226,6 +6622,19 @@ $(document).ready(function() {
 
     function parsearCantidadPedidoMaterial(valor) {
       var cantidad = parseFloat(String(valor || '0').replace(/\./g, '').replace(',', '.'));
+
+      return isFinite(cantidad) ? cantidad : 0;
+    }
+
+    // P112: a diferencia de parsearCantidadPedidoMaterial() (para texto
+    // formateado es-AR, con "." como separador de miles), esta funcion parsea
+    // un valor numerico "crudo" ya en formato JS (punto decimal, sin
+    // agrupacion) — el que efectivamente se guarda en data-material-
+    // autorizacion-adicional/-pedido-previo via String(numero). Usar
+    // parsearCantidadPedidoMaterial() ahi corrompe un valor decimal (ej.
+    // "1.5" -> 15) porque interpreta el punto como separador de miles.
+    function parsearValorCrudoPedidoMaterial(valor) {
+      var cantidad = parseFloat(String(valor === null || valor === undefined ? '0' : valor));
 
       return isFinite(cantidad) ? cantidad : 0;
     }
@@ -6701,8 +7110,15 @@ $(document).ready(function() {
     }
 
     function obtenerCantidadTotalPedidosIncluyendoPropuesta($fila, cantidadPedidoActivoPropuesta) {
+      // P112: cantidadPedidoActivoPropuesta llega como numero JS crudo (ej.
+      // 1.5, desde validarTextoCantidadPedidoMaterialesFrontend().valor), NO
+      // como texto formateado es-AR. Usar parsearCantidadPedidoMaterial() aqui
+      // corrompia cualquier propuesta decimal (1.5 -> "1.5" -> se interpreta
+      // el punto como separador de miles -> 15), haciendo que
+      // requiereAutorizacionPedidoMaterial() abriera el modal de excedente
+      // incluso para cantidades muy por debajo del limite presupuestado.
       return obtenerCantidadPedidosCongeladosMaterialEnFila($fila)
-        + Math.max(0, parsearCantidadPedidoMaterial(cantidadPedidoActivoPropuesta));
+        + Math.max(0, parsearValorCrudoPedidoMaterial(cantidadPedidoActivoPropuesta));
     }
 
     function requiereAutorizacionPedidoMaterial($fila, cantidadPedidoActivoPropuesta) {
@@ -6717,22 +7133,32 @@ $(document).ready(function() {
       return cantidadInicial > 0 && totalAcumuladoPropuesto > cantidadInicial;
     }
 
-    function formatearValorInputCantidadPedidoMaterial(cantidad) {
+    function formatearValorInputCantidadPedidoMaterial(cantidad, admiteDecimales) {
       var numero = parseFloat(String(cantidad || '0').replace(',', '.'));
       if (!isFinite(numero) || numero < 0) {
         numero = 0;
       }
 
+      // P109: preserva hasta 2 decimales cuando la unidad los admite; en vez de
+      // Math.round() (que truncaba SIEMPRE a entero) se usa toFixed(2) y se
+      // recorta el cero final innecesario solo si es un entero exacto, para no
+      // forzar "2.00" cuando el usuario no tecleo decimales.
+      if (admiteDecimales) {
+        return numero.toFixed(2);
+      }
+
       return String(Math.round(numero));
     }
 
-    function obtenerHtmlCeldaPedidoMaterial(numeroPedido, cantidad) {
+    function obtenerHtmlCeldaPedidoMaterial(numeroPedido, cantidad, admiteDecimales) {
+      var stepCelda = admiteDecimales ? '0.01' : '1';
+      var inputModeCelda = admiteDecimales ? 'decimal' : 'numeric';
       return ''
         + '<td class="text-center align-middle pedido-materiales-pedido-celda pedido-materiales-pedido-celda-' + escapeHtmlOrdenCompra(numeroPedido) + '" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '">'
         + '<span class="badge badge-secondary pedido-materiales-cantidad pedido-materiales-pedido pedido-materiales-pedido-' + escapeHtmlOrdenCompra(numeroPedido) + '" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '">'
         + '<small>Pedido #' + escapeHtmlOrdenCompra(numeroPedido) + '</small>'
-        + '<strong class="pedido-materiales-pedido-valor-texto">' + formatearCantidadPedidoMaterial(cantidad) + '</strong>'
-        + '<input type="number" class="pedido-materiales-pedido-cantidad-input" min="0" step="1" inputmode="numeric" value="' + formatearValorInputCantidadPedidoMaterial(cantidad) + '" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '" aria-label="Cantidad Pedido #' + escapeHtmlOrdenCompra(numeroPedido) + '">'
+        + '<strong class="pedido-materiales-pedido-valor-texto">' + formatearCantidadPedidoMaterial(cantidad, admiteDecimales) + '</strong>'
+        + '<input type="number" class="pedido-materiales-pedido-cantidad-input" min="0" step="' + stepCelda + '" inputmode="' + inputModeCelda + '" value="' + formatearValorInputCantidadPedidoMaterial(cantidad, admiteDecimales) + '" data-pedido-numero="' + escapeHtmlOrdenCompra(numeroPedido) + '" aria-label="Cantidad Pedido #' + escapeHtmlOrdenCompra(numeroPedido) + '">'
         + '</span>'
         + '</td>';
     }
@@ -6744,9 +7170,10 @@ $(document).ready(function() {
         return;
       }
 
+      var admiteDecimales = $fila.attr('data-admite-decimales') === '1';
       var cantidadNormalizada = isFinite(cantidad) ? Math.max(0, cantidad) : 0;
-      $badgePedido.find('.pedido-materiales-pedido-valor-texto').text(formatearCantidadPedidoMaterial(cantidadNormalizada));
-      $badgePedido.find('.pedido-materiales-pedido-cantidad-input').val(formatearValorInputCantidadPedidoMaterial(cantidadNormalizada));
+      $badgePedido.find('.pedido-materiales-pedido-valor-texto').text(formatearCantidadPedidoMaterial(cantidadNormalizada, admiteDecimales));
+      $badgePedido.find('.pedido-materiales-pedido-cantidad-input').val(formatearValorInputCantidadPedidoMaterial(cantidadNormalizada, admiteDecimales));
     }
 
     function existeColumnaPedidoMaterial(numeroPedido) {
@@ -6774,7 +7201,11 @@ $(document).ready(function() {
         return;
       }
 
-      $fila.children('td').last().before(obtenerHtmlCeldaPedidoMaterial(numeroPedido, cantidad));
+      // P111: se preserva la clasificacion entero/decimal de la fila (antes
+      // esta celda se creaba siempre como entera, sin importar la unidad real
+      // del material, cuando se agregaba una columna de ciclo historico).
+      var admiteDecimales = $fila.attr('data-admite-decimales') === '1';
+      $fila.children('td').last().before(obtenerHtmlCeldaPedidoMaterial(numeroPedido, cantidad, admiteDecimales));
       actualizarEstiloPedidoMaterialesActivo();
     }
 
@@ -7067,10 +7498,10 @@ $(document).ready(function() {
         pedidos: pedidos,
         estado_autorizacion: obtenerEstadoAutorizacionPedidoMaterialEnFila($fila),
         autorizacion_adicional: $fila.is('[data-material-autorizacion-adicional]')
-          ? parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-adicional'))
+          ? parsearValorCrudoPedidoMaterial($fila.attr('data-material-autorizacion-adicional'))
           : null,
         pedido_autorizacion_previo: $fila.is('[data-material-autorizacion-pedido-previo]')
-          ? parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'))
+          ? parsearValorCrudoPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'))
           : null,
         orden_visual: ordenVisual
       };
@@ -7575,7 +8006,7 @@ $(document).ready(function() {
 
     function marcarAutorizacionSolicitadaPedidoMaterialEnFila($fila, cantidadSolicitadaAutorizacion) {
       var pedidoActivoActual = obtenerCantidadPedidoActivoMaterialEnFila($fila);
-      var pedidoActivoPropuesto = pedidoActivoActual + parsearCantidadPedidoMaterial(cantidadSolicitadaAutorizacion);
+      var pedidoActivoPropuesto = pedidoActivoActual + parsearValorCrudoPedidoMaterial(cantidadSolicitadaAutorizacion);
 
       $fila.attr('data-material-autorizacion-adicional', String(cantidadSolicitadaAutorizacion));
       $fila.attr('data-material-autorizacion-pedido-previo', String(pedidoActivoActual));
@@ -7590,7 +8021,7 @@ $(document).ready(function() {
       limpiarTooltipsPedidoMaterialEnFila($fila);
 
       if (estado === 'rechazada') {
-        var pedidoPrevio = parsearCantidadPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'));
+        var pedidoPrevio = parsearValorCrudoPedidoMaterial($fila.attr('data-material-autorizacion-pedido-previo'));
         actualizarCantidadPedidoMaterialEnFila($fila, obtenerNumeroPedidoMaterialesActivo(), pedidoPrevio);
         $fila.removeAttr('data-material-autorizacion-adicional data-material-autorizacion-pedido-previo');
       } else if (estado === 'autorizada') {
@@ -7715,12 +8146,22 @@ $(document).ready(function() {
       procesarDecisionAutorizacionPedidoMateriales($(this), 'rechazada');
     });
 
-    function mostrarModalAutorizacionExcesoPedidoMaterial($fila, materialTexto, cantidadInicial, cantidadSolicitada, nuevaCantidadSolicitada, cantidadPropuestaInicial) {
+    function mostrarModalAutorizacionExcesoPedidoMaterial($fila, materialTexto, cantidadInicial, cantidadSolicitada, nuevaCantidadSolicitada, cantidadPropuestaInicial, admiteDecimales) {
       if (!window.Swal || typeof Swal.fire !== 'function') {
         return $.Deferred().resolve().promise();
       }
 
-      var valorInicialModal = Math.max(1, parseInt(String(cantidadPropuestaInicial || 1), 10) || 1);
+      // P112: el circuito del modal usaba step="1"/parseInt/regex de enteros
+      // sin importar la unidad del material, truncando cualquier excedente
+      // decimal. Reutiliza la MISMA clasificacion y validacion ya usadas para
+      // el input de cantidad normal (validarTextoCantidadPedidoMaterialesFrontend),
+      // sin reimplementar la regla.
+      var stepModal = admiteDecimales ? '0.01' : '1';
+      var minModal = admiteDecimales ? '0.01' : '1';
+      var valorInicialModal = formatearValorInputCantidadPedidoMaterial(
+        Math.max(admiteDecimales ? 0.01 : 1, parsearValorCrudoPedidoMaterial(cantidadPropuestaInicial) || 1),
+        admiteDecimales
+      );
       var materialVisual = String(materialTexto || 'Sin identificar').split('|')[0].trim() || 'Sin identificar';
       var detalleModal = ''
         + '<div class="text-center text-white">'
@@ -7728,7 +8169,7 @@ $(document).ready(function() {
         + '<p>Este material ya llegó al límite de la cantidad presupuestada. Para agregar más unidades se solicitará una autorización.</p>'
         + '<div class="form-group mt-3 mb-2 text-center">'
         + '<label for="pedidoMaterialCantidadAutorizacion" class="d-block font-weight-bold mb-1">Cantidad solicitada</label>'
-        + '<input type="number" id="pedidoMaterialCantidadAutorizacion" class="form-control text-center mx-auto" min="1" step="1" value="' + escapeHtmlOrdenCompra(valorInicialModal) + '" style="max-width: 210px; background-color: #ffffff; color: #333333;">'
+        + '<input type="number" id="pedidoMaterialCantidadAutorizacion" class="form-control text-center mx-auto" min="' + minModal + '" step="' + stepModal + '" inputmode="' + (admiteDecimales ? 'decimal' : 'numeric') + '" value="' + escapeHtmlOrdenCompra(valorInicialModal) + '" style="max-width: 210px; background-color: #ffffff; color: #333333;">'
         + '</div>'
         + '<p class="mb-0"><strong>¿Desea continuar con la solicitud de autorización?</strong></p>'
         + '</div>';
@@ -7750,15 +8191,17 @@ $(document).ready(function() {
         preConfirm: function() {
           var inputCantidad = document.getElementById('pedidoMaterialCantidadAutorizacion');
           var valorCantidad = inputCantidad ? String(inputCantidad.value || '').trim() : '';
-          var cantidadSolicitadaAutorizacion = Number(valorCantidad);
 
-          if (!/^\d+$/.test(valorCantidad) || !Number.isInteger(cantidadSolicitadaAutorizacion) || cantidadSolicitadaAutorizacion < 1) {
-            Swal.showValidationMessage('Ingrese una cantidad solicitada válida.');
+          // P112: NO se trunca ni redondea silenciosamente — misma validacion
+          // (sin truncar) que usa el input de cantidad del pedido activo.
+          var validacion = validarTextoCantidadPedidoMaterialesFrontend(valorCantidad, admiteDecimales);
+          if (!validacion.ok || validacion.valor <= 0) {
+            Swal.showValidationMessage(validacion.ok ? 'Ingrese una cantidad solicitada válida.' : validacion.error);
             return false;
           }
 
           return {
-            cantidadSolicitadaAutorizacion: cantidadSolicitadaAutorizacion
+            cantidadSolicitadaAutorizacion: validacion.valor
           };
         }
       }).then(function(result) {
@@ -7836,7 +8279,7 @@ $(document).ready(function() {
         }
       }).then(function(result) {
         if (result && result.isConfirmed) {
-          agregarFilaPedidoMaterial(datosMaterial.materialId, datosMaterial.materialTexto, datosMaterial.cantidad, result.value.tareaSeleccionada);
+          agregarFilaPedidoMaterial(datosMaterial.materialId, datosMaterial.materialTexto, datosMaterial.cantidad, result.value.tareaSeleccionada, datosMaterial.unidadVenta, datosMaterial.admiteDecimales);
           quitarMaterialPedidoDelSelect(datosMaterial.materialId);
           $('#pedido_material_cantidad').val('');
           marcarPedidoMaterialesConCambiosPendientes();
@@ -7863,22 +8306,6 @@ $(document).ready(function() {
       return cantidadNueva;
     }
 
-    function guardarMaterialPedidoAdicional(materialId, cantidad) {
-      var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10);
-
-      if (!idPrevisita) {
-        return Promise.reject();
-      }
-
-      return simpleInsertInDB_v2(
-        '../06-funciones_php/funciones.php',
-        'materiales_visita',
-        ['id_visita', 'id_material', 'material_cantidad'],
-        [idPrevisita, materialId, cantidad],
-        undefined
-      );
-    }
-
     function obtenerHtmlTareaPedidoMaterial(tareaSeleccionada) {
       var nroTarea = parseInt(String((tareaSeleccionada && tareaSeleccionada.nro) || '0'), 10);
       var tituloTarea = String((tareaSeleccionada && tareaSeleccionada.titulo) || '').trim();
@@ -7892,13 +8319,13 @@ $(document).ready(function() {
         + (tituloTarea ? '<span class="d-block text-muted small">' + escapeHtmlOrdenCompra(tituloTarea) + '</span>' : '');
     }
 
-    function agregarFilaPedidoMaterial(materialId, materialTexto, cantidad, tareaSeleccionada) {
+    function agregarFilaPedidoMaterial(materialId, materialTexto, cantidad, tareaSeleccionada, unidadVenta, admiteDecimales, ordenVisualForzado) {
       var $tbody = $('#pedidoMaterialesAgregadosTableBody');
       var $filaExistente = obtenerFilasPedidoMaterialPorId('#pedidoMaterialesAgregadosTableBody', materialId).first();
 
-      if ($filaExistente.length) {
+      if ($filaExistente.length && !ordenVisualForzado) {
         actualizarAgregadoPedidoMaterialEnFila($filaExistente, cantidad);
-        return;
+        return $filaExistente;
       }
 
       var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
@@ -7911,20 +8338,24 @@ $(document).ready(function() {
         }
         celdasPedidosHtml += obtenerHtmlCeldaPedidoMaterial(
           numeroPedido,
-          numeroPedido === numeroPedidoActivo ? cantidad : 0
+          numeroPedido === numeroPedidoActivo ? cantidad : 0,
+          admiteDecimales
         );
       }
 
-      var indice = $tbody.find('tr[data-material-id]').length + 1;
+      // P111: al restaurar un snapshot, la identidad de la fila (orden_visual)
+      // la define el propio detalle persistido, no la cantidad de filas ya
+      // presentes en el DOM (que ya no reflejan materiales_visita).
+      var indice = ordenVisualForzado || ($tbody.find('tr[data-material-id]').length + 1);
       var html = ''
-        + '<tr data-material-id="' + escapeHtmlOrdenCompra(materialId) + '" data-material-text="' + escapeHtmlOrdenCompra(materialTexto) + '" data-material-cantidad-inicial="' + escapeHtmlOrdenCompra(cantidad) + '" data-material-agregado="' + escapeHtmlOrdenCompra(cantidad) + '" data-material-autorizacion-estado="pendiente" data-tarea-nro="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.nro) || '') + '" data-tarea-titulo="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.titulo) || '') + '">'
+        + '<tr data-material-id="' + escapeHtmlOrdenCompra(materialId) + '" data-material-text="' + escapeHtmlOrdenCompra(materialTexto) + '" data-material-cantidad-inicial="' + escapeHtmlOrdenCompra(cantidad) + '" data-material-agregado="' + escapeHtmlOrdenCompra(cantidad) + '" data-material-autorizacion-estado="pendiente" data-tarea-nro="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.nro) || '') + '" data-tarea-titulo="' + escapeHtmlOrdenCompra((tareaSeleccionada && tareaSeleccionada.titulo) || '') + '" data-unidad-venta="' + escapeHtmlOrdenCompra(unidadVenta || '') + '" data-admite-decimales="' + (admiteDecimales ? '1' : '0') + '" data-tipo-fila="agregado" data-orden-visual="' + indice + '">'
         + '<td class="text-center align-middle">' + indice + '</td>'
         + '<td class="align-middle">' + obtenerHtmlTareaPedidoMaterial(tareaSeleccionada) + '</td>'
         + '<td class="align-middle"><strong>' + escapeHtmlOrdenCompra(materialTexto) + '</strong><span class="d-block text-muted small">ID ' + escapeHtmlOrdenCompra(materialId) + '</span></td>'
         + '<td class="text-center align-middle"><span class="badge badge-warning pedido-materiales-cantidad pedido-materiales-autorizacion pedido-materiales-autorizacion-solicitada"><strong>Solicitada</strong></span></td>'
         + '<td class="text-center align-middle"><div class="pedido-materiales-resumen-cantidades">'
-        + '<span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial"><small>Inicial</small><strong>' + formatearCantidadPedidoMaterial(cantidad) + '</strong></span>'
-        + '<span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada"><small>Solicitado</small><strong>' + formatearCantidadPedidoMaterial(cantidad) + '</strong></span>'
+        + '<span class="badge badge-info pedido-materiales-cantidad pedido-materiales-cantidad-inicial"><small>Inicial</small><strong>' + formatearCantidadPedidoMaterial(cantidad, admiteDecimales) + '</strong></span>'
+        + '<span class="badge badge-success pedido-materiales-cantidad pedido-materiales-cantidad-solicitada"><small>Solicitado</small><strong>' + formatearCantidadPedidoMaterial(cantidad, admiteDecimales) + '</strong></span>'
         + '</div></td>'
         + celdasPedidosHtml
         + '<td class="text-center align-middle">'
@@ -7949,6 +8380,8 @@ $(document).ready(function() {
       actualizarEstiloPedidoMaterialesActivo();
       inicializarTooltipsAccionesPedidoMateriales($filaNueva);
       marcarPedidoMaterialesConCambiosPendientes();
+
+      return $filaNueva;
     }
 
     function aplicarSnapshotDetallePedidoMaterialAFila($fila, detalleSnapshot, numeroMaximoVisible) {
@@ -7967,7 +8400,12 @@ $(document).ready(function() {
         'data-material-agregado': String(normalizarCantidadSnapshotPersistida(detalleSnapshot.cantidad_solicitada)),
         'data-material-autorizacion-estado': estadoAutorizacion,
         'data-tarea-nro': String(detalleSnapshot.tarea_nro || ''),
-        'data-tarea-titulo': String(detalleSnapshot.tarea_titulo || '')
+        'data-tarea-titulo': String(detalleSnapshot.tarea_titulo || ''),
+        // P111: la unidad/clasificacion vienen del snapshot (resuelta en
+        // servidor con la misma funcion que valida, ver
+        // pedidoMaterialesSnapshotModel.php) — nunca se reimplementa en JS.
+        'data-unidad-venta': String(detalleSnapshot.unidad_venta || ''),
+        'data-admite-decimales': detalleSnapshot.admite_decimales ? '1' : '0'
       });
 
       if (detalleSnapshot.autorizacion_adicional !== null && detalleSnapshot.autorizacion_adicional !== undefined) {
@@ -7999,11 +8437,63 @@ $(document).ready(function() {
       renderizarAccionesAutorizacionPedidoMaterial($fila, estadoAutorizacion);
     }
 
-    function restaurarSnapshotFilasPedidoMateriales(selector, detallesSnapshot, numeroMaximoVisible) {
-      var detalles = Array.isArray(detallesSnapshot) ? detallesSnapshot : [];
+    // P111: la restauracion matchea cada detalle del snapshot con su fila del
+    // DOM por IDENTIDAD REAL (tipo_fila + id_material + tarea_nro +
+    // orden_visual), nunca por posicion en el array. Antes se matcheaba por
+    // indice (detalles[indice]) asumiendo que el orden del snapshot y el del
+    // DOM server-renderizado coincidian siempre — con Materiales agregados ya
+    // NO respaldados por materiales_visita, un snapshot parcial (con menos o
+    // mas filas que las server-renderizadas) desalineaba esa lista y aplicaba
+    // datos de una fila a otra fila distinta. Para 'agregado', si el detalle
+    // no tiene fila correspondiente en el DOM (recarga limpia, sin materiales
+    // agregados legacy), se crea la fila desde el propio snapshot.
+    function obtenerClaveIdentidadFilaSnapshotPedidoMateriales(tipoFila, idMaterial, tareaNro, ordenVisual) {
+      return tipoFila + '|' + idMaterial + '|' + (tipoFila === 'agregado' ? '' : tareaNro) + '|' + ordenVisual;
+    }
 
-      $(selector).find('tr[data-material-id]').each(function(indice) {
-        aplicarSnapshotDetallePedidoMaterialAFila($(this), detalles[indice] || null, numeroMaximoVisible);
+    function crearFilaPedidoMaterialAgregadoDesdeSnapshot(detalle) {
+      return agregarFilaPedidoMaterial(
+        detalle.id_material,
+        detalle.material_texto || ('Material #' + detalle.id_material),
+        0,
+        null,
+        detalle.unidad_venta || '',
+        !!detalle.admite_decimales,
+        detalle.orden_visual
+      );
+    }
+
+    function restaurarSnapshotFilasPedidoMateriales(selector, detallesSnapshot, numeroMaximoVisible, tipoFila) {
+      var detalles = Array.isArray(detallesSnapshot) ? detallesSnapshot : [];
+      var filasPorClave = {};
+
+      $(selector).find('tr[data-material-id]').each(function() {
+        var $filaExistente = $(this);
+        var clave = obtenerClaveIdentidadFilaSnapshotPedidoMateriales(
+          tipoFila,
+          parseInt(String($filaExistente.attr('data-material-id') || '0'), 10) || 0,
+          parseInt(String($filaExistente.attr('data-tarea-nro') || '0'), 10) || 0,
+          parseInt(String($filaExistente.attr('data-orden-visual') || '0'), 10) || 0
+        );
+        filasPorClave[clave] = $filaExistente;
+      });
+
+      detalles.forEach(function(detalle) {
+        var clave = obtenerClaveIdentidadFilaSnapshotPedidoMateriales(
+          tipoFila,
+          parseInt(String(detalle.id_material || 0), 10) || 0,
+          parseInt(String(detalle.tarea_nro || 0), 10) || 0,
+          parseInt(String(detalle.orden_visual || 0), 10) || 0
+        );
+        var $fila = filasPorClave[clave];
+
+        if (!$fila && tipoFila === 'agregado') {
+          $fila = crearFilaPedidoMaterialAgregadoDesdeSnapshot(detalle);
+        }
+
+        if ($fila && $fila.length) {
+          aplicarSnapshotDetallePedidoMaterialAFila($fila, detalle, numeroMaximoVisible);
+        }
       });
     }
 
@@ -8030,12 +8520,14 @@ $(document).ready(function() {
         restaurarSnapshotFilasPedidoMateriales(
           '#pedidoMaterialesPresupuestadosTableBody',
           snapshotPedidoMateriales.materiales_presupuestados || [],
-          numeroMaximoVisible
+          numeroMaximoVisible,
+          'presupuestado'
         );
         restaurarSnapshotFilasPedidoMateriales(
           '#pedidoMaterialesAgregadosTableBody',
           snapshotPedidoMateriales.materiales_agregados || [],
-          numeroMaximoVisible
+          numeroMaximoVisible,
+          'agregado'
         );
 
         establecerNumeroPedidoMaterialesActivo(numeroPedidoActivo);
@@ -8068,98 +8560,24 @@ $(document).ready(function() {
       }
     }
 
-    $(document).on('click', '.pedido-material-agregar-unidades', function() {
-      var $boton = $(this);
-      $boton.tooltip('hide');
-      $boton.tooltip('dispose');
-
-      var $fila = $boton.closest('tr');
-      var materialId = String($boton.data('material-id') || $fila.data('material-id') || '');
-      var materialTexto = String($boton.data('material-text') || $fila.data('material-text') || '');
-      var cantidadInicial = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
-      var cantidadSolicitada = obtenerCantidadSolicitadaPedidoMaterialEnFila($fila);
-      var nuevaCantidadSolicitada = cantidadSolicitada + 1;
-      var nuevaCantidadPedidoActivo = obtenerCantidadPedidoActivoMaterialEnFila($fila) + 1;
-
-      if (debeOcultarAccionesCantidadPorEstadoAutorizacion($fila)) {
-        return;
-      }
-
-      if (!materialId) {
-        return;
-      }
-
-      if (requiereAutorizacionPedidoMaterial($fila, nuevaCantidadPedidoActivo)) {
-        mostrarModalAutorizacionExcesoPedidoMaterial(
-          $fila,
-          materialTexto,
-          cantidadInicial,
-          cantidadSolicitada,
-          nuevaCantidadSolicitada
-        );
-        return;
-      }
-
-      $boton.prop('disabled', true);
-
-      guardarMaterialPedidoAdicional(materialId, 1).then(function(resp) {
-        if (!resp || resp.success === false) {
-          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
-          return;
-        }
-
-        actualizarAgregadoPedidoMaterialEnFila($fila, 1);
-      }).catch(function() {
-        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
-      }).finally(function() {
-        $boton.prop('disabled', false);
-        actualizarBloqueoAccionesMaterialPresupuestadoPorAutorizacion($fila);
-        actualizarBloqueoAccionesMaterialAgregadoPorAutorizacion($fila);
-      });
-    });
-
-    $(document).on('click', '.pedido-material-quitar-unidad', function() {
-      var $boton = $(this);
-      $boton.tooltip('hide');
-      $boton.tooltip('dispose');
-
-      var $fila = $boton.closest('tr');
-      var materialId = String($boton.data('material-id') || $fila.data('material-id') || '');
-      var cantidadPedidoActivo = obtenerCantidadPedidoActivoMaterialEnFila($fila);
-
-      if (debeOcultarAccionesCantidadPorEstadoAutorizacion($fila)) {
-        return;
-      }
-
-      if (!materialId) {
-        return;
-      }
-
-      if (cantidadPedidoActivo <= 0) {
-        return;
-      }
-
-      $boton.prop('disabled', true);
-
-      guardarMaterialPedidoAdicional(materialId, -1).then(function(resp) {
-        if (!resp || resp.success === false) {
-          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
-          return;
-        }
-
-        actualizarAgregadoPedidoMaterialEnFila($fila, -1);
-      }).catch(function() {
-        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
-      }).finally(function() {
-        $boton.prop('disabled', false);
-        actualizarBloqueoAccionesMaterialPresupuestadoPorAutorizacion($fila);
-        actualizarBloqueoAccionesMaterialAgregadoPorAutorizacion($fila);
-      });
-    });
-
     function sincronizarInputCantidadPedidoActivoEnFila($fila) {
+      var admiteDecimales = $fila.attr('data-admite-decimales') === '1';
       var cantidadActual = obtenerCantidadPedidoActivoMaterialEnFila($fila);
-      obtenerInputCantidadPedidoActivoEnFila($fila).val(formatearValorInputCantidadPedidoMaterial(cantidadActual));
+      obtenerInputCantidadPedidoActivoEnFila($fila).val(formatearValorInputCantidadPedidoMaterial(cantidadActual, admiteDecimales));
+    }
+
+    // P109: reemplaza guardarMaterialPedidoAdicional()/simpleInsertInDB_v2()
+    // para el flujo de edicion de cantidad de Pedido. Llama a la ruta
+    // especifica del backend (pedidoMaterialesController.php), que valida
+    // unidad/precision/saldo/estado en servidor (D1/D2).
+    function registrarMovimientoCantidadPedidoActivo(datosMovimiento) {
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify($.extend({ accion: 'registrar_movimiento_cantidad_pedido_materiales' }, datosMovimiento))
+      });
     }
 
     function procesarCambioCantidadPedidoActivoInput($input) {
@@ -8167,6 +8585,11 @@ $(document).ready(function() {
       var $fila = $input.closest('tr');
       var materialId = String($fila.attr('data-material-id') || '');
       var materialTexto = String($fila.attr('data-material-text') || '');
+      var admiteDecimales = $fila.attr('data-admite-decimales') === '1';
+      var tipoFila = $fila.closest('#pedidoMaterialesAgregadosTableBody').length > 0 ? 'agregado' : 'presupuestado';
+      var tareaNro = parseInt(String($fila.attr('data-tarea-nro') || '0'), 10) || 0;
+      var ordenVisual = parseInt(String($fila.attr('data-orden-visual') || '0'), 10) || 0;
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
 
       if (!$celda.hasClass('pedido-materiales-columna-activa') || !materialId) {
         sincronizarInputCantidadPedidoActivoEnFila($fila);
@@ -8180,18 +8603,26 @@ $(document).ready(function() {
 
       var cantidadActual = obtenerCantidadPedidoActivoMaterialEnFila($fila);
       var valorTexto = String($input.val() || '').trim();
-      var valorIngresado = parseInt(valorTexto, 10);
 
-      if (valorTexto === '' || !isFinite(valorIngresado) || isNaN(valorIngresado) || valorIngresado < 0) {
-        valorIngresado = 0;
+      // P109: NO se trunca ni redondea silenciosamente. Si el texto no es un
+      // numero valido, o excede la precision permitida para la unidad, se
+      // rechaza mostrando el motivo y el input vuelve al valor confirmado.
+      var validacion = validarTextoCantidadPedidoMaterialesFrontend(valorTexto, admiteDecimales);
+      if (!validacion.ok) {
+        mostrarErrorPedidoMateriales(validacion.error);
+        sincronizarInputCantidadPedidoActivoEnFila($fila);
+        return;
       }
+      var valorIngresado = validacion.valor;
 
-      if (valorIngresado === cantidadActual) {
+      if (Math.abs(valorIngresado - cantidadActual) < 0.005) {
         sincronizarInputCantidadPedidoActivoEnFila($fila);
         return;
       }
 
-      var delta = valorIngresado - cantidadActual;
+      // Delta con precision controlada (evita errores de representacion de
+      // punto flotante en centesimas: se opera en centesimos como enteros).
+      var delta = (Math.round(valorIngresado * 100) - Math.round(cantidadActual * 100)) / 100;
 
       if (delta > 0 && requiereAutorizacionPedidoMaterial($fila, valorIngresado)) {
         var cantidadInicial = obtenerCantidadPedidoMaterialDesdeFila($fila, 'data-material-cantidad-inicial', '.pedido-materiales-cantidad-inicial strong');
@@ -8205,7 +8636,8 @@ $(document).ready(function() {
           cantidadInicial,
           cantidadSolicitada,
           nuevaCantidadSolicitada,
-          delta
+          delta,
+          admiteDecimales
         ).then(function() {
           sincronizarInputCantidadPedidoActivoEnFila($fila);
         });
@@ -8214,15 +8646,34 @@ $(document).ready(function() {
 
       $input.prop('disabled', true);
 
-      guardarMaterialPedidoAdicional(materialId, delta).then(function(resp) {
+      registrarMovimientoCantidadPedidoActivo({
+        id_previsita: parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10) || 0,
+        numero_pedido: numeroPedidoActivo,
+        tipo_fila: tipoFila,
+        id_material: parseInt(materialId, 10) || 0,
+        tarea_nro: tareaNro > 0 ? tareaNro : null,
+        orden_visual: ordenVisual,
+        cantidad: valorIngresado
+      }).then(function(resp) {
         if (!resp || resp.success === false) {
-          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
+          mostrarErrorPedidoMateriales((resp && resp.message) || 'No se pudo actualizar el pedido de materiales.');
           return;
         }
 
-        actualizarAgregadoPedidoMaterialEnFila($fila, delta);
-      }).catch(function() {
-        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
+        // P111: el input se sincroniza con la cantidad ABSOLUTA CONFIRMADA por
+        // el servidor (no con lo que el usuario tecleo, y no con un delta
+        // calculado en el navegador: el snapshot es la fuente de verdad).
+        var cantidadConfirmada = (resp.data && typeof resp.data.cantidad_confirmada !== 'undefined')
+          ? parseFloat(resp.data.cantidad_confirmada)
+          : cantidadActual;
+        actualizarCantidadPedidoMaterialEnFila($fila, numeroPedidoActivo, cantidadConfirmada);
+        $fila.attr('data-material-agregado', String(cantidadConfirmada));
+        actualizarResumenVisualPedidoMaterialEnFila($fila);
+        marcarPedidoMaterialesConCambiosPendientes();
+      }).catch(function(xhr) {
+        var mensaje = (xhr && xhr.responseJSON && xhr.responseJSON.message)
+          || 'No se pudo actualizar el pedido de materiales.';
+        mostrarErrorPedidoMateriales(mensaje);
       }).finally(function() {
         $input.prop('disabled', false);
         actualizarBloqueoAccionesMaterialPresupuestadoPorAutorizacion($fila);
@@ -8242,6 +8693,22 @@ $(document).ready(function() {
       }
     });
 
+    // P111 punto 6: reemplaza guardarMaterialPedidoAdicional()/
+    // simpleInsertInDB_v2() para "Quitar material" de Materiales agregados.
+    // Llama a la accion especifica del backend, que decide en servidor si
+    // corresponde borrado fisico o solo vaciar el ciclo activo (preserva
+    // cantidades de ciclos historicos ya congelados) y nunca toca
+    // pedido_materiales_autorizaciones.
+    function eliminarMaterialAgregadoPedidoActivo(datosEliminacion) {
+      return $.ajax({
+        type: 'POST',
+        url: obtenerEndpointPedidoMateriales(),
+        contentType: 'application/json; charset=utf-8',
+        dataType: 'json',
+        data: JSON.stringify($.extend({ accion: 'eliminar_material_agregado_pedido_materiales' }, datosEliminacion))
+      });
+    }
+
     $(document).on('click', '.pedido-material-eliminar-fila', function() {
       var $boton = $(this);
       $boton.tooltip('hide');
@@ -8250,38 +8717,40 @@ $(document).ready(function() {
       var $fila = $boton.closest('tr');
       var materialId = String($boton.data('material-id') || $fila.data('material-id') || '');
       var materialTexto = String($boton.data('material-text') || $fila.data('material-text') || '');
-      var cantidadTotal = obtenerCantidadSolicitadaPedidoMaterialEnFila($fila);
+      var ordenVisual = parseInt(String($fila.attr('data-orden-visual') || '0'), 10) || 0;
+      var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10) || 0;
+      var numeroPedidoActivo = obtenerNumeroPedidoMaterialesActivo();
 
-      if (!materialId) {
-        return;
-      }
-
-      if (cantidadTotal <= 0) {
-        $fila.remove();
-        actualizarNumeracionMaterialesAgregados();
-        agregarMaterialPedidoAlSelect(materialId, materialTexto);
-        actualizarVisibilidadTablaMaterialesAgregados();
-        actualizarEstadoBotonRealizarPedido();
-        marcarPedidoMaterialesConCambiosPendientes();
+      if (!materialId || !idPrevisita || !ordenVisual) {
         return;
       }
 
       $boton.prop('disabled', true);
 
-      guardarMaterialPedidoAdicional(materialId, -cantidadTotal).then(function(resp) {
+      eliminarMaterialAgregadoPedidoActivo({
+        id_previsita: idPrevisita,
+        numero_pedido: numeroPedidoActivo,
+        id_material: parseInt(materialId, 10) || 0,
+        orden_visual: ordenVisual
+      }).then(function(resp) {
         if (!resp || resp.success === false) {
-          mostrarErrorPedidoMateriales((resp && resp.error) || 'No se pudo actualizar el pedido de materiales.');
+          mostrarErrorPedidoMateriales((resp && resp.message) || 'No se pudo actualizar el pedido de materiales.');
           return;
         }
 
+        // P111: el frontend solo confirma la baja visual cuando el servidor
+        // confirmo la operacion (eliminacion fisica o vaciado del ciclo
+        // activo); nunca se muestra exito si el servidor la rechazo.
         $fila.remove();
         actualizarNumeracionMaterialesAgregados();
         agregarMaterialPedidoAlSelect(materialId, materialTexto);
         actualizarVisibilidadTablaMaterialesAgregados();
         actualizarEstadoBotonRealizarPedido();
         marcarPedidoMaterialesConCambiosPendientes();
-      }).catch(function() {
-        mostrarErrorPedidoMateriales('No se pudo actualizar el pedido de materiales.');
+      }).catch(function(xhr) {
+        var mensaje = (xhr && xhr.responseJSON && xhr.responseJSON.message)
+          || 'No se pudo actualizar el pedido de materiales.';
+        mostrarErrorPedidoMateriales(mensaje);
       }).finally(function() {
         $boton.prop('disabled', false);
       });
@@ -8294,11 +8763,25 @@ $(document).ready(function() {
 
       var materialId = $('#pedido_material_select').val();
       var materialTexto = $('#pedido_material_select option:selected').text();
+      var unidadVentaSeleccionada = String($('#pedido_material_select option:selected').data('unidad_venta') || '');
+      var admiteDecimalesSeleccionado = unidadVentaPedidoMaterialesAdmiteDecimales(unidadVentaSeleccionada);
       var cantidad = $('#pedido_material_cantidad').val();
-      var cantidadNumero = parseFloat(String(cantidad || '').replace(',', '.'));
       var idPrevisita = parseInt(String(pedidoMaterialesConfig.id_previsita || '0'), 10);
 
-      if (!materialId || materialId === 'Seleccione un material' || !isFinite(cantidadNumero) || cantidadNumero <= 0) {
+      if (!materialId || materialId === 'Seleccione un material') {
+        mostrarError('Seleccioná un material e indicá una cantidad válida.');
+        return;
+      }
+
+      // P109: mismas reglas de validacion (sin redondear ni truncar) que la
+      // edicion de cantidad; el backend vuelve a validar de todas formas.
+      var validacionCantidadAlta = validarTextoCantidadPedidoMaterialesFrontend(cantidad, admiteDecimalesSeleccionado);
+      if (!validacionCantidadAlta.ok) {
+        mostrarError(validacionCantidadAlta.error);
+        return;
+      }
+      var cantidadNumero = validacionCantidadAlta.valor;
+      if (cantidadNumero <= 0) {
         mostrarError('Seleccioná un material e indicá una cantidad válida.');
         return;
       }
@@ -8311,7 +8794,9 @@ $(document).ready(function() {
       mostrarModalAutorizacionMaterialNoPresupuestado({
         materialId: materialId,
         materialTexto: materialTexto,
-        cantidad: cantidadNumero
+        cantidad: cantidadNumero,
+        unidadVenta: unidadVentaSeleccionada,
+        admiteDecimales: admiteDecimalesSeleccionado
       });
     });
 
@@ -8371,21 +8856,44 @@ $(document).ready(function() {
 
   });    
 
-  $(document).on('click',".v-icon-delete-item",function(){  
+  $(document).on('click',".v-icon-delete-item",function(){
     var itemTableId = $(this).data("item_id");
+    var $fila = $('#'+itemTableId);
+    var idMaterialesVisita = $fila.data("id_mate_visi");
+    var idPrevisitaVisita = parseInt(String('<?php echo arrayPrintValue('', $datos, 'id_previsita', ''); ?>' || '0'), 10) || 0;
 
-    simpleUpdateInDB(
-      '../06-funciones_php/funciones.php',
-      'materiales_visita',
-      {estado: 'eliminado'},
-      {columna: 'id_materiales_visita', condicion: '=', valorCompara: $('#'+itemTableId).data("id_mate_visi")},
-      undefined
-    )
+    // P111 punto 7: reemplaza simpleUpdateInDB()/funciones.php por la accion
+    // especifica y autenticada de visitaMaterialesController.php. Una fila
+    // agregada en esta misma carga y todavia no guardada (id_mate_visi="add")
+    // no tiene nada que borrar en servidor.
+    if (idMaterialesVisita === 'add' || !idMaterialesVisita) {
+      $fila.remove();
+      if($("#items_table tbody tr").length == 0){$('#items_table, #visita_buttons').fadeOut(300);}
+      return;
+    }
 
-    $('#'+itemTableId).remove();
+    $.ajax({
+      type: 'POST',
+      url: '../03-controller/visitaMaterialesController.php',
+      contentType: 'application/json; charset=utf-8',
+      dataType: 'json',
+      data: JSON.stringify({
+        accion: 'eliminar_material_visita',
+        id_visita: idPrevisitaVisita,
+        id_materiales_visita: idMaterialesVisita
+      })
+    }).then(function(resp) {
+      if (!resp || resp.success === false) {
+        sAlertConfirm('error', 'No se pudo eliminar el material', (resp && resp.message) || 'Intente nuevamente.', 'OK', '#dc3545');
+        return;
+      }
 
-    if($("#items_table tbody tr").length == 0){$('#items_table, #visita_buttons').fadeOut(300);}
-
+      $fila.remove();
+      if($("#items_table tbody tr").length == 0){$('#items_table, #visita_buttons').fadeOut(300);}
+    }).catch(function(xhr) {
+      var mensaje = (xhr && xhr.responseJSON && xhr.responseJSON.message) || 'No se pudo eliminar el material.';
+      sAlertConfirm('error', 'No se pudo eliminar el material', mensaje, 'OK', '#dc3545');
+    });
   });
 
 
@@ -8833,17 +9341,26 @@ $("#v-visita-guardar").click(function(){
       if($('#note_visita').val() !== ''){
 
             $('.v-materiales-visita').each(function(index, elemento) {
-                  // Haz algo con cada elemento
-
+                  // P111 punto 7: reemplaza simpleInsertInDB()/funciones.php
+                  // por la accion especifica y autenticada de
+                  // visitaMaterialesController.php.
                   if($(elemento).data('id_mate_visi') == 'add'){
 
-                      simpleInsertInDB(
-                        '../06-funciones_php/funciones.php',
-                        'materiales_visita',
-                         ['id_visita', 'id_material', 'material_cantidad'],
-                         ['<?php echo arrayPrintValue('', $datos, 'id_previsita', ''); ?>', $(elemento).data('material_id'), $(elemento).data('material_cantidad')],
-                         undefined
-                      )
+                      $.ajax({
+                        type: 'POST',
+                        url: '../03-controller/visitaMaterialesController.php',
+                        contentType: 'application/json; charset=utf-8',
+                        dataType: 'json',
+                        data: JSON.stringify({
+                          accion: 'agregar_material_visita',
+                          id_visita: '<?php echo arrayPrintValue('', $datos, 'id_previsita', ''); ?>',
+                          id_material: $(elemento).data('material_id'),
+                          material_cantidad: $(elemento).data('material_cantidad')
+                        })
+                      }).catch(function(xhr) {
+                        var mensaje = (xhr && xhr.responseJSON && xhr.responseJSON.message) || 'No se pudo registrar el material.';
+                        sAlertConfirm('error', 'No se pudo registrar el material', mensaje, 'OK', '#dc3545');
+                      });
 
                   }
 

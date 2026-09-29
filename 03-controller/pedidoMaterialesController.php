@@ -14,6 +14,7 @@ require_once __DIR__ . '/../04-modelo/pedidoMaterialesAutorizacionesModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPedidosModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPdfModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesEnviosModel.php';
+require_once __DIR__ . '/../04-modelo/pedidoMaterialesCantidadesModel.php';
 
 if (!function_exists('leerEntradaPedidoMaterialesController')) {
     function leerEntradaPedidoMaterialesController(): array
@@ -462,6 +463,137 @@ try {
             [],
             200,
             $dataAutorizacion
+        );
+    }
+
+    if ($accion === 'registrar_movimiento_cantidad_pedido_materiales') {
+        // P109/P111: reemplaza, para el flujo de Pedido de materiales, la
+        // escritura directa via simpleInsertInDB_v2()/funciones.php (D1/D2).
+        // No acepta nombre de tabla ni columnas del cliente: son fijos en el
+        // modelo. P111: persiste cantidad ABSOLUTA en el snapshot (fuente de
+        // verdad), no un delta en materiales_visita.
+        $idPrevisita = filter_var(
+            $input['id_previsita'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $numeroPedido = filter_var(
+            $input['numero_pedido'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 5]]
+        );
+        $idMaterial = filter_var(
+            $input['id_material'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $ordenVisual = filter_var(
+            $input['orden_visual'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $tipoFila = trim((string)($input['tipo_fila'] ?? ''));
+        $tareaNroEntrada = $input['tarea_nro'] ?? null;
+        $tareaNro = null;
+        if ($tareaNroEntrada !== null && $tareaNroEntrada !== '') {
+            $tareaNroValidada = filter_var($tareaNroEntrada, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($tareaNroValidada === false) {
+                responderPedidoMaterialesJson(false, 'La tarea informada no es valida.', [], [], 422);
+            }
+            $tareaNro = (int)$tareaNroValidada;
+        }
+        $cantidadCruda = $input['cantidad'] ?? null;
+
+        if (
+            $idPrevisita === false
+            || $numeroPedido === false
+            || $idMaterial === false
+            || $ordenVisual === false
+            || !in_array($tipoFila, ['presupuestado', 'agregado'], true)
+            || $cantidadCruda === null
+            || trim((string)$cantidadCruda) === ''
+        ) {
+            responderPedidoMaterialesJson(false, 'Los datos del movimiento no son validos.', [], [], 422);
+        }
+
+        validarPrevisitaPedidoMaterialesController($db, (int)$idPrevisita);
+
+        try {
+            $resultadoMovimiento = registrarMovimientoCantidadPedidoMaterialesEnConexion(
+                $db,
+                (int)$idPrevisita,
+                $tipoFila,
+                (int)$idMaterial,
+                $tareaNro,
+                (int)$ordenVisual,
+                (int)$numeroPedido,
+                $cantidadCruda,
+                (int)$usuario['id_usuario']
+            );
+        } catch (RuntimeException $e) {
+            responderPedidoMaterialesJson(false, $e->getMessage(), [], [], $e->getCode() ?: 422);
+        }
+
+        responderPedidoMaterialesJson(
+            true,
+            !empty($resultadoMovimiento['sin_cambios']) ? 'Sin cambios respecto del valor actual.' : 'Movimiento registrado correctamente.',
+            $resultadoMovimiento,
+            [],
+            200,
+            $resultadoMovimiento
+        );
+    }
+
+    if ($accion === 'eliminar_material_agregado_pedido_materiales') {
+        // P111 punto 6: reemplaza guardarMaterialPedidoAdicional()/
+        // simpleInsertInDB_v2() para "Quitar material" en Materiales agregados.
+        $idPrevisita = filter_var(
+            $input['id_previsita'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $numeroPedido = filter_var(
+            $input['numero_pedido'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 5]]
+        );
+        $idMaterial = filter_var(
+            $input['id_material'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        $ordenVisual = filter_var(
+            $input['orden_visual'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+
+        if ($idPrevisita === false || $numeroPedido === false || $idMaterial === false || $ordenVisual === false) {
+            responderPedidoMaterialesJson(false, 'Los datos de la eliminacion no son validos.', [], [], 422);
+        }
+
+        validarPrevisitaPedidoMaterialesController($db, (int)$idPrevisita);
+
+        try {
+            $resultadoEliminacion = eliminarMaterialAgregadoPedidoMaterialesEnConexion(
+                $db,
+                (int)$idPrevisita,
+                (int)$idMaterial,
+                (int)$ordenVisual,
+                (int)$numeroPedido,
+                (int)$usuario['id_usuario']
+            );
+        } catch (RuntimeException $e) {
+            responderPedidoMaterialesJson(false, $e->getMessage(), [], [], $e->getCode() ?: 422);
+        }
+
+        responderPedidoMaterialesJson(
+            true,
+            !empty($resultadoEliminacion['ya_eliminado']) ? 'El material ya habia sido eliminado.' : 'Material agregado eliminado correctamente.',
+            $resultadoEliminacion,
+            [],
+            200,
+            $resultadoEliminacion
         );
     }
 

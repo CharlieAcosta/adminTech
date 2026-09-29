@@ -5,6 +5,8 @@ require_once __DIR__ . '/conectDB.php';
 require_once __DIR__ . '/schemaIntrospectionModel.php';
 require_once __DIR__ . '/presupuestoComercialLockModel.php';
 require_once __DIR__ . '/previsitaWorkflowModel.php';
+require_once __DIR__ . '/visitaPresupuestoEventoModel.php';
+require_once __DIR__ . '/visitaModel.php';
 
 if (!function_exists('repararTextoMojibakePresupuesto')) {
     function repararTextoMojibakePresupuesto(?string $texto): string
@@ -1313,6 +1315,7 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
                 throw new RuntimeException('La estructura de una tarea del presupuesto es invalida.', 400);
             }
 
+            $materialesVistosTarea = [];
             foreach (($t['materiales'] ?? []) as $indiceMaterial => $m) {
                 if (!is_array($m)) {
                     throw new RuntimeException('La estructura de un material del presupuesto es invalida.', 400);
@@ -1329,6 +1332,11 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
                 if ($idMaterial === false) {
                     throw new RuntimeException('El identificador de un material es invalido.', 400);
                 }
+
+                if (isset($materialesVistosTarea[$idMaterial])) {
+                    throw new RuntimeException('No se puede repetir el mismo material dentro de una tarea del presupuesto.', 422);
+                }
+                $materialesVistosTarea[$idMaterial] = true;
 
                 $precioPayload = $m['precio_unitario'] ?? null;
                 $idPtmRaw = $m['id_ptm'] ?? null;
@@ -1421,6 +1429,7 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
                 ];
             }
 
+            $jornalesVistosTarea = [];
             foreach (($t['mano_obra'] ?? []) as $indiceManoObra => $mo) {
                 if (!is_array($mo)) {
                     throw new RuntimeException('La estructura de un jornal del presupuesto es invalida.', 400);
@@ -1437,6 +1446,11 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
                 if ($idJornal === false) {
                     throw new RuntimeException('El identificador de un jornal es invalido.', 400);
                 }
+
+                if (isset($jornalesVistosTarea[$idJornal])) {
+                    throw new RuntimeException('No se puede repetir el mismo jornal dentro de una tarea del presupuesto.', 422);
+                }
+                $jornalesVistosTarea[$idJornal] = true;
 
                 $precioPayload = $mo['jornal_valor'] ?? null;
                 $idPtmoRaw = $mo['id_ptmo'] ?? null;
@@ -1479,14 +1493,16 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
 
                     if (
                         decimalComparableGuardarPresupuesto($precioPayload)
-                        === decimalComparableGuardarPresupuesto((string)$lineaHistorica['valor_jornal_usado'])
+                        !== decimalComparableGuardarPresupuesto((string)$lineaHistorica['valor_jornal_usado'])
                     ) {
-                        $validados['mano_obra'][$indiceTarea][$indiceManoObra] = [
-                            'jornal_valor' => (string)$lineaHistorica['valor_jornal_usado'],
-                            'updated_at_origen' => $lineaHistorica['updated_at_origen'],
-                        ];
-                        continue;
+                        throw new RuntimeException($mensajeCambioPrecio, 409);
                     }
+
+                    $validados['mano_obra'][$indiceTarea][$indiceManoObra] = [
+                        'jornal_valor' => (string)$lineaHistorica['valor_jornal_usado'],
+                        'updated_at_origen' => $lineaHistorica['updated_at_origen'],
+                    ];
+                    continue;
                 }
 
                 $stmt = mysqli_prepare(
@@ -1533,14 +1549,11 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
     }
 }
 
-function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
+function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
 {
     // Config de uploads (ajustá si querés)
     $ALLOWED_EXT = ['jpg','jpeg','png','webp','gif'];
     $MAX_SIZE    = 15 * 1024 * 1024; // 15 MB por archivo
-
-    $db = conectDB();
-    mysqli_begin_transaction($db);
 
     try {
         $id_previsita   = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : null;
@@ -1560,14 +1573,29 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             throw new RuntimeException('id_previsita es requerido');
         }
 
-        $bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId($id_previsita);
+        $estadoWorkflowPrevisita = obtenerEstadoWorkflowPrevisitaPorIdEnConexion($db, $id_previsita);
+        $bloqueoWorkflowPrevisita = snapshotWorkflowPrevisitaEstado($estadoWorkflowPrevisita);
         if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
             throw new RuntimeException(
                 $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? '')
             );
         }
 
-        $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita($id_previsita, $id_presupuesto);
+        $bloqueoEdicion = [
+            'bloqueado' => false,
+            'estado' => '',
+            'mensaje' => '',
+        ];
+        $modoCircuito = obtenerModoActivoCircuitoComercialPresupuestosLock($db);
+        $presupuestoBloqueo = obtenerPresupuestoActualEdicionComercialPresupuestoEnConexion($db, $id_previsita, $id_presupuesto);
+        if ($presupuestoBloqueo) {
+            $estadoBloqueo = resolverEstadoBloqueoEdicionComercialPresupuestoEnConexion($db, $presupuestoBloqueo, $modoCircuito);
+            $bloqueoEdicion['estado'] = $estadoBloqueo;
+            $bloqueoEdicion['bloqueado'] = estadoBloqueaEdicionComercialPresupuesto($estadoBloqueo);
+            $bloqueoEdicion['mensaje'] = $bloqueoEdicion['bloqueado']
+                ? mensajeBloqueoEdicionComercialPresupuesto($estadoBloqueo)
+                : '';
+        }
         if (!empty($bloqueoEdicion['bloqueado'])) {
             throw new RuntimeException(
                 $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? '')
@@ -1657,7 +1685,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 }
                 mysqli_stmt_close($stmt);
             }
-          
+
         // === Insertar tareas e hijos desde payload ===
         $total_mostrado_cab = 0.0;
         $total_base_cab     = 0.0;
@@ -1665,12 +1693,41 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         $util_real_total    = 0.0;
         $porc_util_total    = null;
         $lineasInsertadas = [
+            'tareas' => [],
             'materiales' => [],
             'mano_obra' => [],
         ];
+        $rutasFisicasPostCommit = [];
+
+        $idsTareasExistentes = obtenerIdsTareasPresupuestoEnConexion($db, $id_presupuesto);
+        $idsTareasRecibidas = [];
+        foreach ($tareasPayload as $tareaValidar) {
+            $idTareaPayload = !empty($tareaValidar['id_presu_tarea']) ? (int)$tareaValidar['id_presu_tarea'] : null;
+            if ($idTareaPayload === null) {
+                continue;
+            }
+            if (!in_array($idTareaPayload, $idsTareasExistentes, true)) {
+                throw new RuntimeException('La tarea informada no pertenece al Presupuesto actual.', 409);
+            }
+            $idsTareasRecibidas[] = $idTareaPayload;
+        }
+        $idsTareasRecibidas = array_values(array_unique($idsTareasRecibidas));
+        $idsTareasOmitidas = array_values(array_diff($idsTareasExistentes, $idsTareasRecibidas));
+        if ($idsTareasOmitidas) {
+            $rutasFisicasPostCommit = array_merge(
+                $rutasFisicasPostCommit,
+                recolectarRutasFotosTareasPresupuestoEnConexion($db, $idsTareasOmitidas)
+            );
+            eliminarTareasPresupuestoPorIdsEnConexion($db, $id_presupuesto, $idsTareasOmitidas);
+        }
 
         foreach ($tareasPayload as $indiceTarea => $t) {
             $nro                = isset($t['nro']) ? (int)$t['nro'] : 0;
+            $idTareaPayload     = !empty($t['id_presu_tarea']) ? (int)$t['id_presu_tarea'] : null;
+            $clientKeyTarea     = trim((string)($t['client_key'] ?? ''));
+            if ($clientKeyTarea === '') {
+                $clientKeyTarea = $idTareaPayload ? 'pt_' . $idTareaPayload : 'nro_' . $nro;
+            }
             $descripcion        = sanitizarHtmlDetalleTareaPresupuesto((string)($t['descripcion'] ?? ''));
             $incluir_en_total   = !empty($t['incluir_en_total']) ? 1 : 0;
             $util_mat_pct       = isset($t['utilidad_materiales']) ? (float)$t['utilidad_materiales'] : null;
@@ -1679,14 +1736,14 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             $otros_mano_obra    = isset($t['otros_mano_obra']) ? (float)$t['otros_mano_obra'] : 0.0;
 
 
-        // Tarea (UPSERT por nro para mantener id_presu_tarea estable y preservar fotos)
-        $id_presu_tarea = obtenerIdPresuTareaPorNro($db, $id_presupuesto, $nro);
+        // Tarea: id_presu_tarea es identidad persistente; nro solo orden visual.
+        $id_presu_tarea = $idTareaPayload;
 
         if ($id_presu_tarea) {
-            // Update tarea existente
             $stmt = mysqli_prepare($db, "
                 UPDATE presupuesto_tareas
-                SET descripcion = ?,
+                SET nro = ?,
+                    descripcion = ?,
                     incluir_en_total = ?,
                     utilidad_materiales_pct = ?,
                     utilidad_mano_obra_pct = ?,
@@ -1694,28 +1751,27 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                     otros_mano_obra_monto = ?,
                     updated_at = NOW()
                 WHERE id_presu_tarea = ?
+                  AND id_presupuesto = ?
             ");
             mysqli_stmt_bind_param(
                 $stmt,
-                "siddddi",
+                "isiddddii",
+                $nro,
                 $descripcion,
                 $incluir_en_total,
                 $util_mat_pct,
                 $util_mo_pct,
                 $otros_materiales,
                 $otros_mano_obra,
-                $id_presu_tarea
+                $id_presu_tarea,
+                $id_presupuesto
             );
             if (!mysqli_stmt_execute($stmt)) {
                 throw new RuntimeException('Error al actualizar tarea: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
             }
             mysqli_stmt_close($stmt);
 
-            // Borramos SOLO detalle recalculable (materiales/MO). Fotos NO.
-            borrarDetalleRecalculableDeTarea($db, $id_presu_tarea);
-
         } else {
-            // Insert tarea nueva
             $stmt = mysqli_prepare($db, "
                 INSERT INTO presupuesto_tareas
                 (id_presupuesto, nro, descripcion, incluir_en_total,
@@ -1736,13 +1792,58 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             $id_presu_tarea = mysqli_insert_id($db);
             mysqli_stmt_close($stmt);
         }
-        
+
+        $lineasInsertadas['tareas'][] = [
+            'client_key' => $clientKeyTarea,
+            'nro' => $nro,
+            'id_presu_tarea' => $id_presu_tarea,
+            'id_presu_tarea_anterior' => $idTareaPayload,
+        ];
 
             // === Materiales
             $suma_mat_filas = 0.0;
             $materiales = $t['materiales'] ?? [];
+
+            $idsPtmExistentesTarea = [];
+            if ($idTareaPayload) {
+                $stmtExistentesMaterial = mysqli_prepare($db, "
+                    SELECT id_ptm
+                    FROM presupuesto_tarea_material
+                    WHERE id_presu_tarea = ?
+                    ORDER BY orden ASC, id_ptm ASC
+                ");
+                if (!$stmtExistentesMaterial) {
+                    throw new RuntimeException('Error al preparar lectura de materiales existentes: ' . mysqli_error($db));
+                }
+                mysqli_stmt_bind_param($stmtExistentesMaterial, "i", $id_presu_tarea);
+                if (!mysqli_stmt_execute($stmtExistentesMaterial)) {
+                    throw new RuntimeException('Error al leer materiales existentes: ' . (mysqli_stmt_error($stmtExistentesMaterial) ?: mysqli_error($db)));
+                }
+                $resExistentesMaterial = mysqli_stmt_get_result($stmtExistentesMaterial);
+                while ($rowMaterialExistente = $resExistentesMaterial ? mysqli_fetch_assoc($resExistentesMaterial) : null) {
+                    $idsPtmExistentesTarea[] = (int)$rowMaterialExistente['id_ptm'];
+                }
+                mysqli_stmt_close($stmtExistentesMaterial);
+            }
+
+            $idsPtmRecibidosTarea = [];
+            foreach ($materiales as $mRecibido) {
+                if (!empty($mRecibido['id_ptm'])) {
+                    $idsPtmRecibidosTarea[] = (int)$mRecibido['id_ptm'];
+                }
+            }
+            $idsPtmRecibidosTarea = array_values(array_unique(array_filter($idsPtmRecibidosTarea)));
+            $idsPtmOmitidosTarea = array_values(array_diff($idsPtmExistentesTarea, $idsPtmRecibidosTarea));
+            if ($idsPtmOmitidosTarea) {
+                $inPtmOmitidos = implode(',', array_map('intval', $idsPtmOmitidosTarea));
+                if (!mysqli_query($db, "DELETE FROM presupuesto_tarea_material WHERE id_presu_tarea = " . (int)$id_presu_tarea . " AND id_ptm IN ($inPtmOmitidos)")) {
+                    throw new RuntimeException('Error al eliminar materiales omitidos: ' . mysqli_error($db));
+                }
+            }
+
             foreach ($materiales as $indiceMaterial => $m) {
                 $id_material       = !empty($m['id_material']) ? (int)$m['id_material'] : null;
+                $idPtmAnterior     = !empty($m['id_ptm']) ? (int)$m['id_ptm'] : null;
                 $nombre_material   = trim((string)($m['nombre'] ?? ''));
                 $cantidad          = isset($m['cantidad']) ? (float)$m['cantidad'] : 0.0;
                 $catalogoMaterialValidado = $catalogosValidados['materiales'][$indiceTarea][$indiceMaterial] ?? null;
@@ -1763,57 +1864,158 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 }
                 $suma_mat_filas += $subtotal_fila;
 
-                if ($tieneOrdenMaterialesPresupuesto) {
-                    $stmt = mysqli_prepare($db, "
-                        INSERT INTO presupuesto_tarea_material
-                        (id_presu_tarea, id_material, orden, nombre_material, unidad_venta, unidad_medida,
-                         cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
-                         created_at, updated_at)
-                        VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iiisddddss",
-                        $id_presu_tarea, $id_material, $orden, $nombre_material,
-                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
-                        $log_alta_material, $log_edicion_material
-                    );
+                if ($idPtmAnterior) {
+                    if ($tieneOrdenMaterialesPresupuesto) {
+                        $stmt = mysqli_prepare($db, "
+                            UPDATE presupuesto_tarea_material
+                            SET orden = ?,
+                                nombre_material = ?,
+                                cantidad = ?,
+                                precio_unitario_usado = ?,
+                                porcentaje_extra = ?,
+                                subtotal_fila = ?,
+                                log_alta = ?,
+                                log_edicion = ?,
+                                updated_at = NOW()
+                            WHERE id_ptm = ?
+                              AND id_presu_tarea = ?
+                              AND id_material = ?
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "isddddssiii",
+                            $orden, $nombre_material, $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material, $idPtmAnterior, $id_presu_tarea, $id_material
+                        );
+                    } else {
+                        $stmt = mysqli_prepare($db, "
+                            UPDATE presupuesto_tarea_material
+                            SET nombre_material = ?,
+                                cantidad = ?,
+                                precio_unitario_usado = ?,
+                                porcentaje_extra = ?,
+                                subtotal_fila = ?,
+                                log_alta = ?,
+                                log_edicion = ?,
+                                updated_at = NOW()
+                            WHERE id_ptm = ?
+                              AND id_presu_tarea = ?
+                              AND id_material = ?
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "sddddssiii",
+                            $nombre_material, $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material, $idPtmAnterior, $id_presu_tarea, $id_material
+                        );
+                    }
+                    if (!$stmt) {
+                        throw new RuntimeException('Error al preparar actualizacion de material: ' . mysqli_error($db));
+                    }
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('Error al actualizar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                    }
+                    if (mysqli_stmt_affected_rows($stmt) < 0) {
+                        throw new RuntimeException('No se pudo actualizar el material del Presupuesto.');
+                    }
+                    mysqli_stmt_close($stmt);
+                    $idPtmPersistido = $idPtmAnterior;
                 } else {
-                    $stmt = mysqli_prepare($db, "
-                        INSERT INTO presupuesto_tarea_material
-                        (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
-                         cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
-                         created_at, updated_at)
-                        VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iisddddss",
-                        $id_presu_tarea, $id_material, $nombre_material,
-                        $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
-                        $log_alta_material, $log_edicion_material
-                    );
+                    if ($tieneOrdenMaterialesPresupuesto) {
+                        $stmt = mysqli_prepare($db, "
+                            INSERT INTO presupuesto_tarea_material
+                            (id_presu_tarea, id_material, orden, nombre_material, unidad_venta, unidad_medida,
+                             cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
+                             created_at, updated_at)
+                            VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "iiisddddss",
+                            $id_presu_tarea, $id_material, $orden, $nombre_material,
+                            $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material
+                        );
+                    } else {
+                        $stmt = mysqli_prepare($db, "
+                            INSERT INTO presupuesto_tarea_material
+                            (id_presu_tarea, id_material, nombre_material, unidad_venta, unidad_medida,
+                             cantidad, precio_unitario_usado, porcentaje_extra, subtotal_fila, log_alta, log_edicion,
+                             created_at, updated_at)
+                            VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ");
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "iisddddss",
+                            $id_presu_tarea, $id_material, $nombre_material,
+                            $cantidad, $precio_unitario, $porcentaje_extra, $subtotal_fila,
+                            $log_alta_material, $log_edicion_material
+                        );
+                    }
+                    if (!$stmt) {
+                        throw new RuntimeException('Error al preparar insercion de material: ' . mysqli_error($db));
+                    }
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('Error al insertar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                    }
+                    $idPtmPersistido = mysqli_insert_id($db);
+                    mysqli_stmt_close($stmt);
                 }
-                if (!mysqli_stmt_execute($stmt)) {
-                    throw new RuntimeException('Error al insertar material: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
-                }
-                $idPtmNuevo = mysqli_insert_id($db);
-                $idPtmAnterior = !empty($m['id_ptm']) ? (int)$m['id_ptm'] : null;
-                if ($idPtmNuevo > 0) {
-                    $lineasInsertadas['materiales'][] = [
-                        'id_ptm_anterior' => $idPtmAnterior,
-                        'id_ptm' => $idPtmNuevo,
-                        'id_material' => $id_material,
-                    ];
-                }
-                mysqli_stmt_close($stmt);
+
+                $lineasInsertadas['materiales'][] = [
+                    'client_key' => $clientKeyTarea,
+                    'nro' => $nro,
+                    'indice' => $indiceMaterial,
+                    'id_ptm_anterior' => $idPtmAnterior,
+                    'id_ptm' => $idPtmPersistido,
+                    'id_material' => $id_material,
+                ];
             }
 
             // === Mano de Obra
             $suma_mo_filas = 0.0;
             $mano_obra = $t['mano_obra'] ?? [];
+
+            $idsPtmoExistentesTarea = [];
+            if ($idTareaPayload) {
+                $stmtExistentesManoObra = mysqli_prepare($db, "
+                    SELECT id_ptmo
+                    FROM presupuesto_tarea_mano_obra
+                    WHERE id_presu_tarea = ?
+                    ORDER BY orden ASC, id_ptmo ASC
+                ");
+                if (!$stmtExistentesManoObra) {
+                    throw new RuntimeException('Error al preparar lectura de mano de obra existente: ' . mysqli_error($db));
+                }
+                mysqli_stmt_bind_param($stmtExistentesManoObra, "i", $id_presu_tarea);
+                if (!mysqli_stmt_execute($stmtExistentesManoObra)) {
+                    throw new RuntimeException('Error al leer mano de obra existente: ' . (mysqli_stmt_error($stmtExistentesManoObra) ?: mysqli_error($db)));
+                }
+                $resExistentesManoObra = mysqli_stmt_get_result($stmtExistentesManoObra);
+                while ($rowManoObraExistente = $resExistentesManoObra ? mysqli_fetch_assoc($resExistentesManoObra) : null) {
+                    $idsPtmoExistentesTarea[] = (int)$rowManoObraExistente['id_ptmo'];
+                }
+                mysqli_stmt_close($stmtExistentesManoObra);
+            }
+
+            $idsPtmoRecibidosTarea = [];
+            foreach ($mano_obra as $moRecibida) {
+                if (!empty($moRecibida['id_ptmo'])) {
+                    $idsPtmoRecibidosTarea[] = (int)$moRecibida['id_ptmo'];
+                }
+            }
+            $idsPtmoRecibidosTarea = array_values(array_unique(array_filter($idsPtmoRecibidosTarea)));
+            $idsPtmoOmitidosTarea = array_values(array_diff($idsPtmoExistentesTarea, $idsPtmoRecibidosTarea));
+            if ($idsPtmoOmitidosTarea) {
+                $inPtmoOmitidos = implode(',', array_map('intval', $idsPtmoOmitidosTarea));
+                if (!mysqli_query($db, "DELETE FROM presupuesto_tarea_mano_obra WHERE id_presu_tarea = " . (int)$id_presu_tarea . " AND id_ptmo IN ($inPtmoOmitidos)")) {
+                    throw new RuntimeException('Error al eliminar mano de obra omitida: ' . mysqli_error($db));
+                }
+            }
+
             foreach ($mano_obra as $indiceManoObra => $mo) {
                 $jornal_id         = !empty($mo['jornal_id']) ? (int)$mo['jornal_id'] : null;
+                $idPtmoAnterior   = !empty($mo['id_ptmo']) ? (int)$mo['id_ptmo'] : null;
                 $nombre_jornal     = trim((string)($mo['nombre'] ?? ''));
                 $cantidad          = isset($mo['cantidad']) ? (float)$mo['cantidad'] : 0.0;
                 $catalogoJornalValidado = $catalogosValidados['mano_obra'][$indiceTarea][$indiceManoObra] ?? null;
@@ -1828,10 +2030,10 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 if ($dias <= 0) {
                     $dias = 1;
                 }
-                $jornales          = isset($mo['jornales']) ? (float)$mo['jornales'] : ($cantidad * $dias);
-                if ($jornales < 0) {
-                    $jornales = 0;
+                if ($cantidad < 0) {
+                    $cantidad = 0;
                 }
+                $jornales = $cantidad * $dias;
                 if ($orden <= 0) {
                     $orden = $indiceManoObra + 1;
                 }
@@ -1842,50 +2044,122 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                 }
                 $suma_mo_filas += $subtotal_fila;
 
-                if ($tieneOrdenManoObraPresupuesto) {
-                    $stmt = mysqli_prepare($db, "
-                        INSERT INTO presupuesto_tarea_mano_obra
-                        (id_presu_tarea, id_jornal, orden, nombre_jornal,
-                         cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
-                         updated_at_origen, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iiisdiddsds",
-                        $id_presu_tarea, $jornal_id, $orden, $nombre_jornal,
-                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila,
-                        $updated_at_origen_jornal
-                    );
+                if ($idPtmoAnterior) {
+                    if ($tieneOrdenManoObraPresupuesto) {
+                        $stmt = mysqli_prepare($db, "
+                            UPDATE presupuesto_tarea_mano_obra
+                            SET orden = ?,
+                                nombre_jornal = ?,
+                                cantidad = ?,
+                                dias = ?,
+                                valor_jornal_usado = ?,
+                                porcentaje_extra = ?,
+                                observacion = ?,
+                                subtotal_fila = ?,
+                                updated_at_origen = ?,
+                                updated_at = NOW()
+                            WHERE id_ptmo = ?
+                              AND id_presu_tarea = ?
+                              AND id_jornal = ?
+                        ");
+                        if (!$stmt) {
+                            throw new RuntimeException('Error al preparar actualizacion de mano de obra: ' . mysqli_error($db));
+                        }
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "isdiddsdsiii",
+                            $orden, $nombre_jornal, $cantidad, $dias, $valor_jornal, $porcentaje_extra,
+                            $observacion, $subtotal_fila, $updated_at_origen_jornal,
+                            $idPtmoAnterior, $id_presu_tarea, $jornal_id
+                        );
+                    } else {
+                        $stmt = mysqli_prepare($db, "
+                            UPDATE presupuesto_tarea_mano_obra
+                            SET nombre_jornal = ?,
+                                cantidad = ?,
+                                dias = ?,
+                                valor_jornal_usado = ?,
+                                porcentaje_extra = ?,
+                                observacion = ?,
+                                subtotal_fila = ?,
+                                updated_at_origen = ?,
+                                updated_at = NOW()
+                            WHERE id_ptmo = ?
+                              AND id_presu_tarea = ?
+                              AND id_jornal = ?
+                        ");
+                        if (!$stmt) {
+                            throw new RuntimeException('Error al preparar actualizacion de mano de obra: ' . mysqli_error($db));
+                        }
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "sdiddsdsiii",
+                            $nombre_jornal, $cantidad, $dias, $valor_jornal, $porcentaje_extra,
+                            $observacion, $subtotal_fila, $updated_at_origen_jornal,
+                            $idPtmoAnterior, $id_presu_tarea, $jornal_id
+                        );
+                    }
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('Error al actualizar mano de obra: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                    }
+                    if (mysqli_stmt_affected_rows($stmt) < 0) {
+                        throw new RuntimeException('No se pudo actualizar la mano de obra del Presupuesto.');
+                    }
+                    mysqli_stmt_close($stmt);
+                    $idPtmoPersistido = $idPtmoAnterior;
                 } else {
-                    $stmt = mysqli_prepare($db, "
-                        INSERT INTO presupuesto_tarea_mano_obra
-                        (id_presu_tarea, id_jornal, nombre_jornal,
-                         cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
-                         updated_at_origen, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-                    ");
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "iisdiddsds",
-                        $id_presu_tarea, $jornal_id, $nombre_jornal,
-                        $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila,
-                        $updated_at_origen_jornal
-                    );
+                    if ($tieneOrdenManoObraPresupuesto) {
+                        $stmt = mysqli_prepare($db, "
+                            INSERT INTO presupuesto_tarea_mano_obra
+                            (id_presu_tarea, id_jornal, orden, nombre_jornal,
+                             cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
+                             updated_at_origen, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ");
+                        if (!$stmt) {
+                            throw new RuntimeException('Error al preparar insercion de mano de obra: ' . mysqli_error($db));
+                        }
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "iiisdiddsds",
+                            $id_presu_tarea, $jornal_id, $orden, $nombre_jornal,
+                            $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila,
+                            $updated_at_origen_jornal
+                        );
+                    } else {
+                        $stmt = mysqli_prepare($db, "
+                            INSERT INTO presupuesto_tarea_mano_obra
+                            (id_presu_tarea, id_jornal, nombre_jornal,
+                             cantidad, dias, valor_jornal_usado, porcentaje_extra, observacion, subtotal_fila,
+                             updated_at_origen, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                        ");
+                        if (!$stmt) {
+                            throw new RuntimeException('Error al preparar insercion de mano de obra: ' . mysqli_error($db));
+                        }
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "iisdiddsds",
+                            $id_presu_tarea, $jornal_id, $nombre_jornal,
+                            $cantidad, $dias, $valor_jornal, $porcentaje_extra, $observacion, $subtotal_fila,
+                            $updated_at_origen_jornal
+                        );
+                    }
+                    if (!mysqli_stmt_execute($stmt)) {
+                        throw new RuntimeException('Error al insertar mano de obra: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+                    }
+                    $idPtmoPersistido = mysqli_insert_id($db);
+                    mysqli_stmt_close($stmt);
                 }
-                if (!mysqli_stmt_execute($stmt)) {
-                    throw new RuntimeException('Error al insertar mano de obra: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
-                }
-                $idPtmoNuevo = mysqli_insert_id($db);
-                $idPtmoAnterior = !empty($mo['id_ptmo']) ? (int)$mo['id_ptmo'] : null;
-                if ($idPtmoNuevo > 0) {
-                    $lineasInsertadas['mano_obra'][] = [
-                        'id_ptmo_anterior' => $idPtmoAnterior,
-                        'id_ptmo' => $idPtmoNuevo,
-                        'id_jornal' => $jornal_id,
-                    ];
-                }
-                mysqli_stmt_close($stmt);
+
+                $lineasInsertadas['mano_obra'][] = [
+                    'client_key' => $clientKeyTarea,
+                    'nro' => $nro,
+                    'indice' => $indiceManoObra,
+                    'id_ptmo_anterior' => $idPtmoAnterior,
+                    'id_ptmo' => $idPtmoPersistido,
+                    'id_jornal' => $jornal_id,
+                ];
             }
 
             // === Totales contables por tarea
@@ -1922,7 +2196,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             // =======================
 
             // 1) Eliminar fotos marcadas (si las hay)
-            $nombresAEliminar = $eliminadasPorTarea[$nro] ?? [];
+            $nombresAEliminar = $eliminadasPorTarea[$clientKeyTarea] ?? ($eliminadasPorTarea[$nro] ?? []);
             if ($nombresAEliminar) {
                 foreach ($nombresAEliminar as $nombre) {
                     $nombre = (string)$nombre;
@@ -1951,14 +2225,14 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
                     mysqli_stmt_close($del);
 
                     // Intentar borrar físico
-                    if ($ruta && is_file(normalizarRutaServidor($ruta))) {
-                        @unlink(normalizarRutaServidor($ruta));
+                    if ($ruta) {
+                        $rutasFisicasPostCommit[] = normalizarRutaServidor($ruta);
                     }
                 }
             }
 
             // 2) Guardar nuevas subidas reales
-            $bagArchivos = $archivosPorTarea[$nro] ?? [];
+            $bagArchivos = $archivosPorTarea[$clientKeyTarea] ?? ($archivosPorTarea[$nro] ?? []);
             if ($bagArchivos) {
                 $dirBase  = rutaBaseFotosPresupuesto($id_presupuesto);
                 $dirTarea = $dirBase . "t{$nro}/";
@@ -2082,20 +2356,41 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
         }
         mysqli_stmt_close($stmt);
 
-        mysqli_commit($db);
-
         return [
             'ok'             => true,
             'id_presupuesto' => $id_presupuesto,
             'version'        => $version,
             'estado'         => $estado,
-            'lineas'         => $lineasInsertadas
+            'lineas'         => $lineasInsertadas,
+            '_post_commit_unlink' => array_values(array_unique(array_filter($rutasFisicasPostCommit))),
         ];
+    } catch (Throwable $e) {
+        throw $e;
+    }
+}
+
+function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
+{
+    $db = conectDB();
+    mysqli_begin_transaction($db);
+
+    try {
+        $resultado = guardarPresupuestoEnConexion($db, $payload, $archivosPorTarea, $eliminadasPorTarea);
+        mysqli_commit($db);
+
+        foreach (($resultado['_post_commit_unlink'] ?? []) as $rutaFisica) {
+            if (is_string($rutaFisica) && $rutaFisica !== '' && is_file($rutaFisica)) {
+                @unlink($rutaFisica);
+            }
+        }
+        unset($resultado['_post_commit_unlink']);
+
+        return $resultado;
     } catch (Throwable $e) {
         mysqli_rollback($db);
         $codigo = (int)$e->getCode();
         $respuesta = ['ok' => false, 'msg' => $e->getMessage()];
-        if (in_array($codigo, [400, 404, 409], true)) {
+        if (in_array($codigo, [400, 401, 403, 404, 409, 422], true)) {
             $respuesta['http_status'] = $codigo;
         }
         return $respuesta;
@@ -2104,6 +2399,243 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
     }
 }
 
+if (!function_exists('nombreLockGenerarPresupuestoDesdeVisita')) {
+    function nombreLockGenerarPresupuestoDesdeVisita(int $idPrevisita): string
+    {
+        return 'admintech:generar-presupuesto:' . $idPrevisita;
+    }
+}
+
+if (!function_exists('adquirirLockGenerarPresupuestoDesdeVisita')) {
+    function adquirirLockGenerarPresupuestoDesdeVisita(mysqli $db, int $idPrevisita, int $timeoutSegundos = 10): string
+    {
+        $nombreLock = nombreLockGenerarPresupuestoDesdeVisita($idPrevisita);
+        $stmt = mysqli_prepare($db, 'SELECT GET_LOCK(?, ?) AS lock_obtenido');
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar el lock de generacion de Presupuesto.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'si', $nombreLock, $timeoutSegundos);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo obtener el lock de generacion de Presupuesto: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        if ((int)($row['lock_obtenido'] ?? 0) !== 1) {
+            throw new RuntimeException('La pre-visita esta siendo procesada por otra generacion de Presupuesto.', 409);
+        }
+
+        return $nombreLock;
+    }
+}
+
+if (!function_exists('liberarLockGenerarPresupuestoDesdeVisita')) {
+    function liberarLockGenerarPresupuestoDesdeVisita(mysqli $db, ?string $nombreLock): void
+    {
+        if (!$nombreLock) {
+            return;
+        }
+
+        $stmt = mysqli_prepare($db, 'SELECT RELEASE_LOCK(?)');
+        if (!$stmt) {
+            return;
+        }
+
+        mysqli_stmt_bind_param($stmt, 's', $nombreLock);
+        @mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
+}
+
+if (!function_exists('obtenerPrevisitaGenerarPresupuestoEnConexion')) {
+    function obtenerPrevisitaGenerarPresupuestoEnConexion(mysqli $db, int $idPrevisita): ?array
+    {
+        $stmt = mysqli_prepare($db, 'SELECT id_previsita, estado_visita FROM previsitas WHERE id_previsita = ? LIMIT 1');
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar la validacion de Pre-visita.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPrevisita);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar la Pre-visita: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('obtenerPresupuestoVigentePorPrevisitaEnConexion')) {
+    function obtenerPresupuestoVigentePorPrevisitaEnConexion(mysqli $db, int $idPrevisita): ?array
+    {
+        $stmt = mysqli_prepare($db, "
+            SELECT id_presupuesto, id_previsita, id_visita, estado, version, created_at, updated_at
+            FROM presupuestos
+            WHERE id_previsita = ?
+            ORDER BY version DESC, created_at DESC, id_presupuesto DESC
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar la consulta de Presupuesto vigente.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPrevisita);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar el Presupuesto vigente: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('obtenerPresupuestoBasicoPorIdEnConexion')) {
+    function obtenerPresupuestoBasicoPorIdEnConexion(mysqli $db, int $idPresupuesto): ?array
+    {
+        $stmt = mysqli_prepare($db, "
+            SELECT id_presupuesto, id_previsita, id_visita, estado, version, created_at, updated_at
+            FROM presupuestos
+            WHERE id_presupuesto = ?
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            throw new RuntimeException('No se pudo preparar la consulta de Presupuesto.');
+        }
+
+        mysqli_stmt_bind_param($stmt, 'i', $idPresupuesto);
+        if (!mysqli_stmt_execute($stmt)) {
+            $mensaje = mysqli_stmt_error($stmt) ?: mysqli_error($db);
+            mysqli_stmt_close($stmt);
+            throw new RuntimeException('No se pudo consultar el Presupuesto: ' . $mensaje);
+        }
+
+        $res = mysqli_stmt_get_result($stmt);
+        $row = $res ? mysqli_fetch_assoc($res) : null;
+        mysqli_stmt_close($stmt);
+
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('respuestaGeneracionPresupuestoDesdeEvento')) {
+    function respuestaGeneracionPresupuestoDesdeEvento(array $evento, array $presupuesto, bool $idempotente): array
+    {
+        return [
+            'ok' => true,
+            'status' => true,
+            'idempotente' => $idempotente,
+            'id_previsita' => (int)$evento['id_previsita'],
+            'id_presupuesto' => (int)$evento['id_presupuesto'],
+            'estado' => strtoupper((string)($presupuesto['estado'] ?? '')),
+            'version' => isset($presupuesto['version']) ? (int)$presupuesto['version'] : null,
+            'evento' => [
+                'id_evento' => (int)$evento['id_evento'],
+                'tipo_evento' => (string)$evento['tipo_evento'],
+                'origen' => (string)$evento['origen'],
+                'created_at' => (string)$evento['created_at'],
+            ],
+        ];
+    }
+}
+
+if (!function_exists('generarPresupuestoDesdeVisita')) {
+    function generarPresupuestoDesdeVisita(int $idPrevisita, int $idUsuario): array
+    {
+        if ($idPrevisita <= 0) {
+            throw new RuntimeException('La pre-visita es obligatoria.', 400);
+        }
+        if ($idUsuario <= 0) {
+            throw new RuntimeException('No hay sesion de usuario activa.', 401);
+        }
+
+        $db = conectDB();
+        mysqli_set_charset($db, 'utf8mb4');
+        $nombreLock = null;
+
+        try {
+            $nombreLock = adquirirLockGenerarPresupuestoDesdeVisita($db, $idPrevisita, 10);
+            mysqli_begin_transaction($db);
+
+            $eventoExistente = obtenerEventoCongelamientoVisitaPorPrevisitaEnConexion($db, $idPrevisita);
+            if ($eventoExistente) {
+                $presupuestoEvento = obtenerPresupuestoBasicoPorIdEnConexion($db, (int)$eventoExistente['id_presupuesto']);
+                if (!$presupuestoEvento) {
+                    throw new RuntimeException('Existe evento de congelamiento sin Presupuesto asociado.', 409);
+                }
+
+                mysqli_commit($db);
+                return respuestaGeneracionPresupuestoDesdeEvento($eventoExistente, $presupuestoEvento, true);
+            }
+
+            $presupuestoExistente = obtenerPresupuestoVigentePorPrevisitaEnConexion($db, $idPrevisita);
+            if ($presupuestoExistente) {
+                throw new RuntimeException('Existe Presupuesto para la Pre-visita sin evento de congelamiento asociado.', 409);
+            }
+
+            $previsita = obtenerPrevisitaGenerarPresupuestoEnConexion($db, $idPrevisita);
+            if (!$previsita) {
+                throw new RuntimeException('No se encontro la Pre-visita informada.', 404);
+            }
+
+            $estadoPrevisita = (string)($previsita['estado_visita'] ?? '');
+            if (!estadoHabilitaVisitaWorkflowPrevisita($estadoPrevisita)) {
+                throw new RuntimeException('La Pre-visita debe estar Ejecutada para generar Presupuesto.', 409);
+            }
+
+            $payload = obtenerPayloadPresupuestoDesdeVisitaPersistidaEnConexion($db, $idPrevisita);
+            $resultadoPresupuesto = guardarPresupuestoEnConexion($db, $payload, [], []);
+            $idPresupuesto = (int)($resultadoPresupuesto['id_presupuesto'] ?? 0);
+            if ($idPresupuesto <= 0) {
+                throw new RuntimeException('No se pudo crear el Presupuesto BORRADOR.');
+            }
+
+            $evento = registrarEventoCongelamientoVisitaPresupuestoEnConexion(
+                $db,
+                $idPrevisita,
+                $idPresupuesto,
+                $idUsuario,
+                'GENERACION'
+            );
+
+            if (function_exists('insertarAccionIntervencionPresupuestoEnConexion')) {
+                insertarAccionIntervencionPresupuestoEnConexion($db, $idPresupuesto, $idPrevisita, $idUsuario, 'guardar');
+            }
+
+            $presupuestoCreado = obtenerPresupuestoBasicoPorIdEnConexion($db, $idPresupuesto);
+            if (!$presupuestoCreado) {
+                throw new RuntimeException('No se pudo recuperar el Presupuesto BORRADOR creado.');
+            }
+
+            mysqli_commit($db);
+            return respuestaGeneracionPresupuestoDesdeEvento($evento, $presupuestoCreado, false);
+        } catch (Throwable $e) {
+            if ($db instanceof mysqli) {
+                @mysqli_rollback($db);
+            }
+            throw $e;
+        } finally {
+            if ($db instanceof mysqli) {
+                liberarLockGenerarPresupuestoDesdeVisita($db, $nombreLock);
+                mysqli_close($db);
+            }
+        }
+    }
+}
 // === Helper: preparar statement o lanzar con el detalle real de MySQL ===
 if (!function_exists('stmt_or_throw')) {
     function stmt_or_throw(mysqli $db, string $sql): mysqli_stmt {
@@ -2338,8 +2870,8 @@ function _obtenerTareasConDetalle(mysqli $db, int $id_presupuesto): array
     $fotosPorTarea = [];
     // Si tu tabla se llama EXACTAMENTE 'presupuesto_tarea_foto', esto va a funcionar.
     // Si usás otro nombre, cambialo aquí.
-    $sqlF = "SELECT * 
-             FROM `presupuesto_tarea_foto` 
+    $sqlF = "SELECT *
+             FROM `presupuesto_tarea_foto`
              WHERE `id_presu_tarea` IN ($placeholders)
              ORDER BY `id_presu_tarea` ASC";
     $stmtF = stmt_or_throw($db, $sqlF);
@@ -2412,6 +2944,78 @@ function borrarHijosPresupuesto(mysqli $db, int $id_presupuesto): void
     mysqli_query($db, "DELETE FROM presupuesto_tarea_mano_obra WHERE id_presu_tarea IN ($in)");
     mysqli_query($db, "DELETE FROM presupuesto_tarea_material  WHERE id_presu_tarea IN ($in)");
     mysqli_query($db, "DELETE FROM presupuesto_tareas          WHERE id_presupuesto = " . (int)$id_presupuesto);
+}
+
+function obtenerIdsTareasPresupuestoEnConexion(mysqli $db, int $id_presupuesto): array
+{
+    $ids = [];
+    $stmt = mysqli_prepare($db, "
+        SELECT id_presu_tarea
+        FROM presupuesto_tareas
+        WHERE id_presupuesto = ?
+        ORDER BY nro ASC, id_presu_tarea ASC
+    ");
+    if (!$stmt) {
+        throw new RuntimeException('Error prepare obtenerIdsTareasPresupuestoEnConexion: ' . mysqli_error($db));
+    }
+    mysqli_stmt_bind_param($stmt, "i", $id_presupuesto);
+    if (!mysqli_stmt_execute($stmt)) {
+        throw new RuntimeException('Error al obtener tareas del Presupuesto: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+    }
+    $res = mysqli_stmt_get_result($stmt);
+    while ($res && ($row = mysqli_fetch_assoc($res))) {
+        $ids[] = (int)$row['id_presu_tarea'];
+    }
+    mysqli_stmt_close($stmt);
+    return $ids;
+}
+
+function recolectarRutasFotosTareasPresupuestoEnConexion(mysqli $db, array $idsPresuTarea): array
+{
+    $idsPresuTarea = array_values(array_unique(array_filter(array_map('intval', $idsPresuTarea))));
+    if (!$idsPresuTarea) {
+        return [];
+    }
+    $in = implode(',', $idsPresuTarea);
+    $rutas = [];
+    $rs = mysqli_query($db, "SELECT ruta_archivo FROM presupuesto_tarea_foto WHERE id_presu_tarea IN ($in)");
+    if ($rs) {
+        while ($row = mysqli_fetch_assoc($rs)) {
+            $ruta = trim((string)($row['ruta_archivo'] ?? ''));
+            if ($ruta !== '') {
+                $rutas[] = normalizarRutaServidor($ruta);
+            }
+        }
+        mysqli_free_result($rs);
+    }
+    return $rutas;
+}
+
+function eliminarTareasPresupuestoPorIdsEnConexion(mysqli $db, int $id_presupuesto, array $idsPresuTarea): void
+{
+    $idsPresuTarea = array_values(array_unique(array_filter(array_map('intval', $idsPresuTarea))));
+    if (!$idsPresuTarea) {
+        return;
+    }
+    $in = implode(',', $idsPresuTarea);
+
+    mysqli_query($db, "DELETE FROM presupuesto_tarea_foto WHERE id_presu_tarea IN ($in)");
+    mysqli_query($db, "DELETE FROM presupuesto_tarea_mano_obra WHERE id_presu_tarea IN ($in)");
+    mysqli_query($db, "DELETE FROM presupuesto_tarea_material WHERE id_presu_tarea IN ($in)");
+
+    $stmt = mysqli_prepare($db, "
+        DELETE FROM presupuesto_tareas
+        WHERE id_presupuesto = ?
+          AND id_presu_tarea IN ($in)
+    ");
+    if (!$stmt) {
+        throw new RuntimeException('Error prepare eliminarTareasPresupuestoPorIdsEnConexion: ' . mysqli_error($db));
+    }
+    mysqli_stmt_bind_param($stmt, "i", $id_presupuesto);
+    if (!mysqli_stmt_execute($stmt)) {
+        throw new RuntimeException('Error al eliminar tareas omitidas: ' . (mysqli_stmt_error($stmt) ?: mysqli_error($db)));
+    }
+    mysqli_stmt_close($stmt);
 }
 
 /**

@@ -393,20 +393,28 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
    $filas = "";
     		foreach ($all_registros as $key_all_registros => $value_all_registros) {
 
-   		$stringFechaHora = $value_all_registros['fecha_visita']." ".$value_all_registros['hora_visita'];
-   		$resultadoFechaHora = comparaFechaHora($stringFechaHora, 'fh');
+			// El vencimiento automático sólo aplica a Programada/Reprogramada: para el resto
+			// de los estados el resultado de comparaFechaHora() no se usa, así que se evita
+			// calcularlo (y se evita depender de una fecha/hora que puede faltar o ser inválida
+			// en registros que ya no están programados).
+			if ($value_all_registros['estado_visita'] == 'Programada' || $value_all_registros['estado_visita'] == 'Reprogramada') {
+				$stringFechaHora = $value_all_registros['fecha_visita']." ".$value_all_registros['hora_visita'];
+				$resultadoFechaHora = comparaFechaHora($stringFechaHora, 'fh');
 
-   		if($resultadoFechaHora['statusFechaHora'] == 'anterior' && ($value_all_registros['estado_visita'] == 'Programada' || $value_all_registros['estado_visita'] == 'Reprogramada')){  			
-				$tabla = 'previsitas'; 
-				$arraySet = ['estado_visita' => 'Vencida']; 
-				$arrayWhere = [
-					['columna' => 'id_previsita', 'condicion' => '=', 'valorCompara' => $value_all_registros['id_previsita']]
-				];
-				$callType = false;
-				$valueStatus = false;
-   			$resultadoUpdate = simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatus);
-   			if($resultadoUpdate == true){$value_all_registros['estado_visita'] = 'Vencida';}
-   		}
+				// Una fecha/hora faltante o inválida no alcanza para determinar vencimiento:
+				// se conserva el estado actual en lugar de forzar una transición automática.
+				if (isset($resultadoFechaHora['statusFechaHora']) && $resultadoFechaHora['statusFechaHora'] == 'anterior') {
+					$tabla = 'previsitas';
+					$arraySet = ['estado_visita' => 'Vencida'];
+					$arrayWhere = [
+						['columna' => 'id_previsita', 'condicion' => '=', 'valorCompara' => $value_all_registros['id_previsita']]
+					];
+					$callType = false;
+					$valueStatus = false;
+					$resultadoUpdate = simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatus);
+					if($resultadoUpdate == true){$value_all_registros['estado_visita'] = 'Vencida';}
+				}
+			}
 
 		  $estadoVisitaVisual = resolverBadgeEstadoVisitaSeguimientoListado($value_all_registros['estado_visita'] ?? '');
           $esPrevisitaAdministrativa = esEstadoPrevisitaAdministrativaSeguimientoListado($estadoVisitaVisual['normalizado'] ?? '');
