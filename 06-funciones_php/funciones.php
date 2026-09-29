@@ -687,10 +687,43 @@ function existInDB($tabla, $columnaDB, $valueSearch, $callType, $valueStatus) {
 
 //simpleInsertInDB($tabla, $arrayColumnas, $arrayValues, $callType, $valueStatus = 'Activo'){
 
+// P111 punto 7: materiales_visita tiene consumidores legitimos validados y
+// especificos (visitaMaterialesController.php para Visita;
+// pedidoMaterialesController.php/pedidoMaterialesCantidadesModel.php para
+// Pedido, que ya no la escribe en absoluto desde P111). La ruta generica
+// (funcionCall) no valida sesion, unidad, precision, saldo ni estado — quedo
+// comprobado empiricamente en P109 que permite eludir esas reglas. Esta
+// funcion bloquea el DESTINO REAL (nombre de tabla ya resuelto en servidor),
+// nunca una columna o parametro que el cliente pueda declarar/falsificar.
+// No es un endurecimiento general del despachador (eso sigue pendiente,
+// documentado por separado): protege especificamente esta tabla.
+//
+// IMPORTANTE: se declara SIN el wrapper if(!function_exists()) que usa el
+// resto de este archivo para funciones reutilizables. El despachador
+// (funcionCall -> call_user_func_array) esta al PRINCIPIO del archivo, antes
+// de todas las funciones; una declaracion condicional (dentro de un if) NO se
+// registra en el "hoisting" de compilacion de PHP, solo cuando el interprete
+// EJECUTA esa linea — y el dispatcher se ejecuta antes de llegar a ella. Una
+// funcion plana (como esta) si se registra en el hoisting, igual que
+// simpleInsertInDB/simpleUpdateInDB/deleteInDB ya lo hacen, y por eso el
+// dispatcher puede invocarlas aunque esten definidas mas abajo en el archivo.
+function tablaEscrituraGenericaBloqueadaFuncionesPhp($tabla): bool
+{
+    $tablaNormalizada = strtolower(trim((string)$tabla));
+    return in_array($tablaNormalizada, ['materiales_visita'], true);
+}
 
 function simpleInsertInDB($tabla, $arrayColumnas, $arrayValues, $callType, $valueStatus = 'Activo'){
 
-    $db = conectaDB(); 
+    if (tablaEscrituraGenericaBloqueadaFuncionesPhp($tabla)) {
+        if ($callType !== 'ajax') {
+            return false;
+        }
+        echo json_encode(['success' => false, 'error' => 'Operacion no permitida sobre esta tabla mediante la ruta generica.'], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    $db = conectaDB();
 
     if (!is_array($arrayColumnas)){$arrayColumnas = json_decode($arrayColumnas, true);}
     //var_dump($arrayColumnas); //[DEBUG PERMANENTE]
@@ -738,7 +771,15 @@ function simpleInsertInDB($tabla, $arrayColumnas, $arrayValues, $callType, $valu
 
 
 function simpleInsertInDB_v2($tabla, $arrayColumnas, $arrayValues, $callType, $valueStatus = 'Activo') {
-    $db = conectaDB(); 
+    if (tablaEscrituraGenericaBloqueadaFuncionesPhp($tabla)) {
+        if ($callType !== 'ajax') {
+            return false;
+        }
+        echo json_encode(['success' => false, 'error' => 'Operacion no permitida sobre esta tabla mediante la ruta generica.'], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    $db = conectaDB();
 
     // Convertir JSON a array si es necesario
     if (!is_array($arrayColumnas)) {
@@ -796,7 +837,15 @@ function simpleInsertInDB_v2($tabla, $arrayColumnas, $arrayValues, $callType, $v
 
 
 function simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatus = 'Activo') {
-    //dump($tabla); dump($arraySet); dump($arrayWhere); dump($callType); dd($valueStatus); 
+    //dump($tabla); dump($arraySet); dump($arrayWhere); dump($callType); dd($valueStatus);
+
+    if (tablaEscrituraGenericaBloqueadaFuncionesPhp($tabla)) {
+        if ($callType !== 'ajax') {
+            return false;
+        }
+        echo json_encode(['success' => false, 'error' => 'Operacion no permitida sobre esta tabla mediante la ruta generica.'], JSON_UNESCAPED_UNICODE);
+        return;
+    }
 
     $db = conectaDB();
 
@@ -904,7 +953,15 @@ function simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatu
 function deleteInDB($tabla, $camposCondicionesValores, $callType = 'ajax'){
 //var_dump($tabla, $camposCondicionesValores, $callType); die(); //[DEBUG PERMANENTE]
 
-    $db = conectaDB(); 
+    if (tablaEscrituraGenericaBloqueadaFuncionesPhp($tabla)) {
+        if ($callType !== 'ajax') {
+            return false;
+        }
+        echo json_encode(['success' => false, 'error' => 'Operacion no permitida sobre esta tabla mediante la ruta generica.'], JSON_UNESCAPED_UNICODE);
+        return;
+    }
+
+    $db = conectaDB();
 
     if (!is_array($camposCondicionesValores)){$camposCondicionesValores = json_decode($camposCondicionesValores, true);}
     //var_dump($camposCondicionesValores); die(); //[DEBUG PERMANENTE]
