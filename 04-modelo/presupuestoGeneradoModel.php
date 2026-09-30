@@ -1549,7 +1549,7 @@ if (!function_exists('validarCatalogosPayloadGuardarPresupuesto')) {
     }
 }
 
-function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
+function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = [], ?int $idUsuario = null): array
 {
     // Config de uploads (ajustá si querés)
     $ALLOWED_EXT = ['jpg','jpeg','png','webp','gif'];
@@ -1685,6 +1685,14 @@ function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivo
                 }
                 mysqli_stmt_close($stmt);
             }
+
+        $eventoCongelamiento = registrarEventoCongelamientoVisitaPresupuestoEnConexion(
+            $db,
+            $id_previsita,
+            $id_presupuesto,
+            ($idUsuario !== null && $idUsuario > 0) ? $idUsuario : null,
+            'GENERACION'
+        );
 
         // === Insertar tareas e hijos desde payload ===
         $total_mostrado_cab = 0.0;
@@ -2362,6 +2370,7 @@ function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivo
             'version'        => $version,
             'estado'         => $estado,
             'lineas'         => $lineasInsertadas,
+            '_evento_congelamiento' => $eventoCongelamiento,
             '_post_commit_unlink' => array_values(array_unique(array_filter($rutasFisicasPostCommit))),
         ];
     } catch (Throwable $e) {
@@ -2369,13 +2378,13 @@ function guardarPresupuestoEnConexion(mysqli $db, array $payload, array $archivo
     }
 }
 
-function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = []): array
+function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array $eliminadasPorTarea = [], ?int $idUsuario = null): array
 {
     $db = conectDB();
     mysqli_begin_transaction($db);
 
     try {
-        $resultado = guardarPresupuestoEnConexion($db, $payload, $archivosPorTarea, $eliminadasPorTarea);
+        $resultado = guardarPresupuestoEnConexion($db, $payload, $archivosPorTarea, $eliminadasPorTarea, $idUsuario);
         mysqli_commit($db);
 
         foreach (($resultado['_post_commit_unlink'] ?? []) as $rutaFisica) {
@@ -2384,6 +2393,7 @@ function guardarPresupuesto(array $payload, array $archivosPorTarea = [], array 
             }
         }
         unset($resultado['_post_commit_unlink']);
+        unset($resultado['_evento_congelamiento']);
 
         return $resultado;
     } catch (Throwable $e) {
@@ -2598,19 +2608,16 @@ if (!function_exists('generarPresupuestoDesdeVisita')) {
             }
 
             $payload = obtenerPayloadPresupuestoDesdeVisitaPersistidaEnConexion($db, $idPrevisita);
-            $resultadoPresupuesto = guardarPresupuestoEnConexion($db, $payload, [], []);
+            $resultadoPresupuesto = guardarPresupuestoEnConexion($db, $payload, [], [], $idUsuario);
             $idPresupuesto = (int)($resultadoPresupuesto['id_presupuesto'] ?? 0);
             if ($idPresupuesto <= 0) {
                 throw new RuntimeException('No se pudo crear el Presupuesto BORRADOR.');
             }
 
-            $evento = registrarEventoCongelamientoVisitaPresupuestoEnConexion(
-                $db,
-                $idPrevisita,
-                $idPresupuesto,
-                $idUsuario,
-                'GENERACION'
-            );
+            $evento = $resultadoPresupuesto['_evento_congelamiento'] ?? null;
+            if (!is_array($evento) || empty($evento['id_evento'])) {
+                throw new RuntimeException('No se pudo registrar el cierre de la Visita.');
+            }
 
             if (function_exists('insertarAccionIntervencionPresupuestoEnConexion')) {
                 insertarAccionIntervencionPresupuestoEnConexion($db, $idPresupuesto, $idPrevisita, $idUsuario, 'guardar');

@@ -863,7 +863,8 @@ foreach ($_POST as $key => $val) {
 }
 
 // 3) Llamada al modelo
-$resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea);
+$idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
+$resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea, $idUsuario > 0 ? $idUsuario : null);
 
     if (empty($resultado['ok']) && isset($resultado['http_status'])) {
         $httpStatusGuardar = (int)$resultado['http_status'];
@@ -876,8 +877,6 @@ $resultado = guardarPresupuesto($payload, $archivosPorTarea, $eliminadasPorTarea
     if (!empty($resultado['ok'])) {
         $idPresupuestoGuardado = isset($resultado['id_presupuesto']) ? (int)$resultado['id_presupuesto'] : 0;
         $idPrevisitaGuardada = isset($payload['id_previsita']) ? (int)$payload['id_previsita'] : 0;
-        $idUsuario = obtenerIdUsuarioSolicitudPresupuesto();
-
         if ($idPresupuestoGuardado > 0 && $idPrevisitaGuardada > 0 && $idUsuario > 0) {
             $registroIntervencion = registrarIntervencionPresupuesto(
                 $idPresupuestoGuardado,
