@@ -1,10 +1,13 @@
 <?php  
 session_start();
-define('BASE_URL', $_SESSION["base_url"]);
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../04-modelo/vigenciaCatalogosModel.php';
+include_once '../04-modelo/pedidoMaterialesAutorizacionesModel.php';
 include_once '../06-funciones_php/funciones.php'; //funciones últiles
-sesion(); //Verifica si hay usuario sesionado
+sesion(); //Verifica si hay usuario sesionado (redirige al login o restaura la sesion remember-me)
+// base_url se define al iniciar sesion/restaurarla: leerla antes de sesion() emite un warning
+// que impide la redireccion al login (headers already sent).
+define('BASE_URL', $_SESSION["base_url"] ?? '');
 
 
 include_once '../06-funciones_php/auditoria.php';
@@ -33,6 +36,10 @@ $feriados = array('Super Administrador','Administrador','Administrativo');
 $totalesVigenciaJornales = in_array($perfil, $tipoJornales, true) ? modGetTotalesVigenciaJornales() : null;
 $totalesVigenciaMateriales = in_array($perfil, $materiales, true) ? modGetTotalesVigenciaMateriales() : null;
 $ocPendientesSeguimiento = in_array($perfil, $presupuestos, true) ? contarOrdenesCompraPendientes() : 0;
+// Seguimientos distintos con autorizacion de Pedido de materiales pendiente (solo consulta).
+$autorizacionesPendientesSeguimiento = (!$esPanelOrdenCompraAdministrativa && puedeVerAutorizacionesPendientesPedidoMateriales($perfil))
+  ? count(obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendiente())
+  : 0;
 $ocHabilitadasBandejaAdministrativa = $esPanelOrdenCompraAdministrativa
   ? contarOrdenesCompraHabilitadasBandejaAdministrativa()
   : 0;
@@ -275,6 +282,15 @@ $mostrarModuloSeguimiento = in_array($perfil, $presupuestos, true)
 
                         <?php if ($ocPendientesSeguimiento > 0){ ?>
                         <small><span class="right badge badge-warning ml-2 mt-2"><?php echo $ocPendientesSeguimiento.'<small><small><br> OC Pend. </small></small>'; ?></span></small>
+                        <?php } ?>
+
+                        <?php if ($autorizacionesPendientesSeguimiento > 0){ ?>
+                        <small><span class="badge badge-warning ml-2 modulo-vigencia-indicador"
+                          data-vigencia-href="../01-views/seguimiento_de_obra_listado.php?aut_pend=1"
+                          tabindex="0" role="button"
+                          title="Pedidos de materiales pendientes de autorización"
+                          aria-label="Mostrar <?php echo $autorizacionesPendientesSeguimiento; ?> seguimiento<?php echo $autorizacionesPendientesSeguimiento !== 1 ? 's' : ''; ?> con pedidos de materiales pendientes de autorización"
+                        ><i class="fas fa-clipboard-check"></i> <?php echo $autorizacionesPendientesSeguimiento; ?><small><small><br> Aut. pend. </small></small></span></small>
                         <?php } ?>
                       <?php } ?>
                     </div>

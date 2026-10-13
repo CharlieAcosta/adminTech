@@ -1,7 +1,13 @@
 <?php  
 session_start();
-define('BASE_URL', $_SESSION["base_url"]);
 include_once '../06-funciones_php/funciones.php';
+sesion(); //Verifica si hay usuario sesionado
+define('BASE_URL', $_SESSION["base_url"] ?? ''); // despues de sesion(): puede restaurarse via remember-me
+// Control de acceso al modulo: mismos perfiles que la tarjeta Obras del panel ($obras).
+if (!in_array($_SESSION['usuario']['perfil'] ?? '', array('Super Administrador','Administrador','Administrativo'), true)) {
+    header('Location: panel.php');
+    exit;
+}
 include_once '../03-controller/obrasController.php'; //conecta a la base de datos
 
 include_once '../06-funciones_php/auditoria.php';

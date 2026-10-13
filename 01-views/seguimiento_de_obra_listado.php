@@ -2,9 +2,15 @@
 // segumiento_de_obra_listado.php
 
 session_start();
-define('BASE_URL', $_SESSION["base_url"]);  
 include_once '../06-funciones_php/funciones.php';
 sesion(); //Verifica si hay usuario sesionado
+define('BASE_URL', $_SESSION["base_url"] ?? ''); // despues de sesion(): puede restaurarse via remember-me
+// Control de acceso al modulo (mismo criterio que la tarjeta del panel y que presupuestosController).
+include_once '../04-modelo/ordenCompraWorkflowModel.php';
+if (!perfilPuedeConsultarListadoSeguimiento($_SESSION['usuario']['perfil'] ?? null)) {
+    header('Location: panel.php');
+    exit;
+}
 include_once '../06-funciones_php/auditoria.php';
 registrarNavegacion('SEGUIMIENTO DE OBRA | Listado');
 
@@ -13,9 +19,13 @@ $deleteIcon = array('Super Administrador','Administrador');
 
 include_once '../03-controller/presupuestosController.php'; //conecta a la base de datos
 $esBandejaOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
-$rangoInicialSeguimiento = $esBandejaOrdenCompraAdministrativa
-    ? '30_dias'
-    : '30_dias';
+// Filtro "Aut. pend." (llega desde la alerta del panel): permiso de consulta, no de autorizacion.
+$puedeFiltrarAutorizacionesPendientes = !$esBandejaOrdenCompraAdministrativa
+    && puedeVerAutorizacionesPendientesPedidoMateriales($perfil);
+$autorizacionesPendientesInicial = $puedeFiltrarAutorizacionesPendientes
+    && (($_GET['aut_pend'] ?? '') === '1');
+// Con el filtro activo se consulta sin limite de tiempo para que coincida con el contador del panel.
+$rangoInicialSeguimiento = $autorizacionesPendientesInicial ? '' : '30_dias';
 $estadoOrdenCompraInicialSeguimiento = $esBandejaOrdenCompraAdministrativa ? 'pendientes_previsita' : '';
 $rangoInicialJsSeguimiento = strtoupper($rangoInicialSeguimiento);
 $tituloListadoSeguimiento = $esBandejaOrdenCompraAdministrativa
@@ -33,7 +43,8 @@ $filas = poblarDatableAll(
     '',
     '',
     '',
-    $estadoOrdenCompraInicialSeguimiento
+    $estadoOrdenCompraInicialSeguimiento,
+    $autorizacionesPendientesInicial
 );
 
 $estadosVisitaRapidos = array(
@@ -214,6 +225,26 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
                         <?php endif; ?>
                       </div>
                     </div>
+
+                    <?php if ($puedeFiltrarAutorizacionesPendientes): ?>
+                    <span class="seguimiento-filtro-separador">|</span>
+
+                    <div class="seguimiento-filtro-columna">
+                      <div class="seguimiento-filtro-label">Materiales</div>
+                      <div class="seguimiento-filtro-linea">
+                        <button
+                          type="button"
+                          id="btnFiltroAutorizacionesPendientes"
+                          class="btn btn-sm btn-outline-warning seguimiento-filtro-btn btn-filtro-rapido<?php echo $autorizacionesPendientesInicial ? ' is-active' : ''; ?>"
+                          data-aut-pend-filter="1"
+                          data-variant="warning"
+                          title="Pedidos de materiales pendientes de autorización"
+                          aria-pressed="<?php echo $autorizacionesPendientesInicial ? 'true' : 'false'; ?>">
+                          <i class="fas fa-clipboard-check mr-1"></i> Aut. pend.
+                        </button>
+                      </div>
+                    </div>
+                    <?php endif; ?>
 
                     <span class="seguimiento-filtro-separador">|</span>
 
@@ -409,6 +440,9 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
   const filtroOrdenCompraSeguimiento = {
     value: <?php echo json_encode(strtoupper($estadoOrdenCompraInicialSeguimiento)); ?>
   };
+  const filtroAutorizacionesPendientesSeguimiento = {
+    value: <?php echo $autorizacionesPendientesInicial ? 'true' : 'false'; ?>
+  };
   const esBandejaOrdenCompraAdministrativa = <?php echo $esBandejaOrdenCompraAdministrativa ? 'true' : 'false'; ?>;
 
   const MINIMO_BUSQUEDA_GLOBAL_TODOS = 3;
@@ -426,6 +460,26 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
       </div>
     </div>
   `;
+
+  // Refleja el estado del filtro "Aut. pend." en la URL (sin recargar ni agregar historial),
+  // para que F5 conserve el estado actual en lugar de reaplicar el ?aut_pend=1 de entrada.
+  function sincronizarUrlFiltroAutorizacionesPendientes() {
+    if (!window.history || typeof window.history.replaceState !== 'function') {
+      return;
+    }
+
+    try {
+      const url = new URL(window.location.href);
+      if (filtroAutorizacionesPendientesSeguimiento.value === true) {
+        url.searchParams.set('aut_pend', '1');
+      } else {
+        url.searchParams.delete('aut_pend');
+      }
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch (e) {
+      // Sin soporte de URL/replaceState: el filtro sigue funcionando, solo no se refleja en la URL.
+    }
+  }
 
   function normalizarEstadoFiltroSeguimiento(estado) {
     return String(estado || '').trim().toUpperCase();
@@ -504,6 +558,10 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
       }
       aplicarEstadoVisualBotonFiltro($boton, activo);
     });
+
+    $('.seguimiento-filtro-btn[data-aut-pend-filter]').each(function () {
+      aplicarEstadoVisualBotonFiltro($(this), filtroAutorizacionesPendientesSeguimiento.value === true);
+    });
   }
 
   function aplicarFiltrosRapidosSeguimiento(tabla) {
@@ -518,7 +576,8 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
   function hayFiltrosRapidosActivosSeguimiento() {
     return filtroRapidoSeguimiento.visita !== ''
       || filtroRapidoSeguimiento.presupuesto !== ''
-      || hayFiltroOrdenCompraActivoSeguimiento();
+      || hayFiltroOrdenCompraActivoSeguimiento()
+      || filtroAutorizacionesPendientesSeguimiento.value === true;
   }
 
   function todosUsaBusquedaGlobalSeguimiento() {
@@ -863,7 +922,8 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
         busqueda: usarBusquedaCliente ? '' : busquedaActual,
         estado_visita: estadoVisitaFiltro,
         estado_presupuesto: estadoPresupuestoFiltro,
-        estado_oc: obtenerEstadoOrdenCompraAjaxSeguimiento()
+        estado_oc: obtenerEstadoOrdenCompraAjaxSeguimiento(),
+        aut_pend: filtroAutorizacionesPendientesSeguimiento.value === true ? '1' : ''
       },
       success: function (filasHtml) {
         if (secuenciaSolicitud !== secuenciaRecargaSeguimiento) {
@@ -1063,6 +1123,24 @@ if ($estadoOrdenCompraInicialSeguimiento === 'pendientes_previsita') {
       mostrarErrorCargaSeguimiento(false);
       mostrarAyudaBusquedaGlobalSeguimiento(false);
       actualizarBotonesFiltrosRapidosSeguimiento();
+      recargarTablaSeguimientoPorTiempo();
+    });
+
+    $(document).on('click', '.seguimiento-filtro-btn[data-aut-pend-filter]', function () {
+      const estabaTodosActivo = todosActivoSeguimiento();
+
+      filtroAutorizacionesPendientesSeguimiento.value = !filtroAutorizacionesPendientesSeguimiento.value;
+      sincronizarUrlFiltroAutorizacionesPendientes();
+      mostrarErrorCargaSeguimiento(false);
+      mostrarAyudaBusquedaGlobalSeguimiento(false);
+      actualizarBotonesFiltrosRapidosSeguimiento();
+
+      if (estabaTodosActivo) {
+        resetTodosSeguimientoActivo = true;
+        sincronizarModoTodosSeguimiento();
+        return;
+      }
+
       recargarTablaSeguimientoPorTiempo();
     });
 
