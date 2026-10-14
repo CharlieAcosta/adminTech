@@ -1,8 +1,14 @@
 <?php  
 session_start();
-define('BASE_URL', $_SESSION["base_url"]);
 header('Content-Type: text/html; charset=utf-8');
 include_once '../06-funciones_php/funciones.php';
+sesion(); //Verifica si hay usuario sesionado
+define('BASE_URL', $_SESSION["base_url"] ?? ''); // despues de sesion(): puede restaurarse via remember-me
+// Control de acceso al modulo: mismos perfiles que la tarjeta Materiales del panel ($materiales).
+if (!in_array($_SESSION['usuario']['perfil'] ?? '', array('Super Administrador','Administrador','Técnico','Tecnico Administrativo'), true)) {
+    header('Location: panel.php');
+    exit;
+}
 include_once '../03-controller/materialesController.php'; //conecta a la base de datos
 
 // poblarDatableAll(columnas de la tablas, php o ajax, filtro); [reference] 

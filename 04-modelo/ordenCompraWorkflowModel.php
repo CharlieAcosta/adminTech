@@ -46,6 +46,31 @@ if (!function_exists('perfilPuedeVerSeguimientoCompletoOrdenCompra')) {
     }
 }
 
+if (!function_exists('perfilPuedeConsultarListadoSeguimiento')) {
+    /**
+     * Perfiles que acceden al listado de Seguimiento de obra (mismo conjunto que habilita
+     * la tarjeta del panel): seguimiento completo + bandeja administrativa de Orden de compra.
+     * Cada perfil conserva luego sus restricciones propias dentro de poblarDatableAll().
+     */
+    function perfilPuedeConsultarListadoSeguimiento(?string $perfil): bool
+    {
+        return perfilPuedeVerSeguimientoCompletoOrdenCompra($perfil)
+            || perfilPuedeAccederSoloOrdenCompra($perfil);
+    }
+}
+
+if (!function_exists('puedeVerAutorizacionesPendientesPedidoMateriales')) {
+    /**
+     * Permiso de SOLO CONSULTA: alerta "Aut. pend." del panel y filtro del listado.
+     * Es independiente de puedeAutorizarPedidoMateriales(), que gobierna la resolucion
+     * (autorizar/rechazar). Coincide con los perfiles que ya gestionan Pedido de materiales.
+     */
+    function puedeVerAutorizacionesPendientesPedidoMateriales(?string $perfil): bool
+    {
+        return perfilPuedeVerSeguimientoCompletoOrdenCompra($perfil);
+    }
+}
+
 if (!function_exists('puedeAutorizarPedidoMateriales')) {
     function puedeAutorizarPedidoMateriales(?string $perfil): bool
     {
