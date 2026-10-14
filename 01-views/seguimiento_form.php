@@ -18,6 +18,7 @@ include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
 include_once '../04-modelo/pedidoMaterialesSnapshotModel.php';
+include_once '../04-modelo/pedidoMaterialesIntervencionesModel.php';
 include_once '../04-modelo/pedidoMaterialesCantidadesModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
 include_once '../04-modelo/previsitaDocumentosModel.php';
@@ -237,6 +238,7 @@ $ultimoIntervinoPresupuesto = $presupuestoIntervinoResumen['ultimo_texto'] ?? 'S
 $popoverIntervinientesPresupuesto = $presupuestoIntervinoResumen['popover_html'] ?? '';
 $materialesSolicitadosSeguimiento = [];
 $pedidoMaterialesSnapshot = null;
+$pedidoMaterialesIntervinoResumen = construirResumenIntervencionesPresupuesto([]);
 
 if(isset($_GET['id']) && isset($_GET['acci'])){
   $id = $_GET['id'];
@@ -570,6 +572,10 @@ if (isset($datos['id_previsita']) && (int)$datos['id_previsita'] > 0) {
         (int)$datos['id_previsita']
       );
     }
+    $pedidoMaterialesIntervinoResumen = obtenerResumenIntervencionesPedidoMaterialesEnConexion(
+      $dbPedidoMaterialesSnapshot,
+      (int)$datos['id_previsita']
+    );
     mysqli_close($dbPedidoMaterialesSnapshot);
   }
 }
@@ -1551,8 +1557,8 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 <div class="accordion <?php echo $pedidoMaterialesHabilitadoInicial ? '' : 'd-none'; ?>" id="accordionExample5" aria-hidden="<?php echo $pedidoMaterialesHabilitadoInicial ? 'false' : 'true'; ?>">
   <div class="card <?php echo $orden_compra_card; ?> accordion 5">
     <div class="card-header" id="heading5">
-      <h2 class="mb-0">
-        <button class="btn btn-link btn-block text-left text-white p-0 card-title<?php echo $pedido_materiales_show === 'show' ? '' : ' collapsed'; ?>"
+      <h2 class="mb-0 d-flex align-items-center presupuesto-accordion-header">
+        <button class="btn btn-link text-left text-white p-0 card-title presupuesto-accordion-toggle<?php echo $pedido_materiales_show === 'show' ? '' : ' collapsed'; ?>"
                 type="button" 
                 data-toggle="collapse" 
                 data-target="#collapse5_PM" 
@@ -1560,6 +1566,17 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
                 aria-controls="collapse5_PM">
           Pedido de materiales<?php echo isset($datos['0']['id_previsita']) ? ' N°:<strong class="text-lg"> ' . $datos['0']['id_previsita'].'</strong>' : ''; ?>
         </button>
+        <span class="card-title text-right presupuesto-accordion-intervino">
+          <strong>Intervino: </strong>
+          <span
+            class="intervino-pm-ultimo"
+            tabindex="0"
+            role="button"
+            data-toggle="popover"
+            data-html="true"
+            data-placement="bottom"
+          ><?php echo htmlspecialchars($pedidoMaterialesIntervinoResumen['ultimo_texto'] ?? 'Sin intervenciones', ENT_QUOTES); ?></span>
+        </span>
       </h2>
     </div>
 
@@ -3323,6 +3340,10 @@ if ($numeroPrevisitaTitulo > 0 && $obraPrevisitaTitulo !== '') {
 <div id="popover-content-oc" style="display:none">
 </div>
 
+<div id="popover-content-pm" style="display:none">
+  <?= $pedidoMaterialesIntervinoResumen['popover_html'] ?? '' ?>
+</div>
+
 <style>
   .previsita-documentos-panel {
     padding: 0.6rem 0.7rem;
@@ -4767,9 +4788,70 @@ window.actualizarIntervinoOrdenCompraUI = function (intervino) {
   window.initPopoverIntervinoOrdenCompra();
 };
 
+window.initPopoverIntervinoPedidoMateriales = function () {
+  const $target = $('#heading5 .intervino-pm-ultimo[data-toggle="popover"]');
+  if (!$target.length) return;
+
+  window.bindIntervinoPopoverPersistente($target, function () {
+    return $('#popover-content-pm').html();
+  });
+};
+
+window.actualizarIntervinoPedidoMaterialesUI = function (intervino) {
+  const ultimo = String(intervino?.ultimo_texto || 'Sin intervenciones');
+  const popoverHtml = String(intervino?.popover_html || '');
+
+  $('#popover-content-pm').html(popoverHtml);
+  $('.intervino-pm-ultimo').text(ultimo);
+
+  window.initPopoverIntervinoPedidoMateriales();
+};
+
+// Refresca la cabecera "Intervino" tras cualquier operacion exitosa del circuito de Pedido de materiales
+// (guardar, realizar, autorizar/rechazar, etc.), sin tocar cada flujo. Las consultas de solo lectura no refrescan.
+$(function () {
+  var accionesSoloLecturaPedidoMateriales = [
+    'consultar_intervinientes_pedido_materiales',
+    'listar_pdfs_pedido_materiales',
+    'descargar_pdf_pedido',
+    'obtener_snapshot'
+  ];
+
+  $(document).ajaxSuccess(function (evento, xhr, opciones) {
+    var url = String((opciones && opciones.url) || '');
+    if (url.indexOf('pedidoMaterialesController.php') === -1) return;
+
+    var cuerpo = {};
+    try {
+      cuerpo = typeof opciones.data === 'string' ? JSON.parse(opciones.data) : (opciones.data || {});
+    } catch (e) {
+      cuerpo = {};
+    }
+
+    var accion = String(cuerpo.accion || 'guardar_snapshot');
+    if (accionesSoloLecturaPedidoMateriales.indexOf(accion) !== -1) return;
+
+    var idPrevisita = parseInt((window.SEGUIMIENTO_PEDIDO_MATERIALES || {}).id_previsita, 10) || 0;
+    if (idPrevisita <= 0) return;
+
+    $.ajax({
+      type: 'POST',
+      url: url,
+      contentType: 'application/json; charset=utf-8',
+      dataType: 'json',
+      data: JSON.stringify({ accion: 'consultar_intervinientes_pedido_materiales', id_previsita: idPrevisita })
+    }).done(function (resp) {
+      if (resp && resp.success && resp.data && resp.data.intervino) {
+        window.actualizarIntervinoPedidoMaterialesUI(resp.data.intervino);
+      }
+    });
+  });
+});
+
 $(function () {
   window.initPopoverIntervinoPresupuesto();
   window.initPopoverIntervinoOrdenCompra();
+  window.initPopoverIntervinoPedidoMateriales();
 });
 </script>
 

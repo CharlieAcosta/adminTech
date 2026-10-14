@@ -14,6 +14,7 @@ require_once __DIR__ . '/../04-modelo/pedidoMaterialesAutorizacionesModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPedidosModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesPdfModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesEnviosModel.php';
+require_once __DIR__ . '/../04-modelo/pedidoMaterialesIntervencionesModel.php';
 require_once __DIR__ . '/../04-modelo/pedidoMaterialesCantidadesModel.php';
 
 if (!function_exists('leerEntradaPedidoMaterialesController')) {
@@ -723,6 +724,18 @@ try {
             [],
             200,
             $dataEnvio
+        );
+    }
+
+    if ($accion === 'consultar_intervinientes_pedido_materiales') {
+        // Solo lectura: refresca la cabecera "Intervino" del acordeon. No otorga ni requiere permisos extra.
+        $idPrevisita = (int)($input['id_previsita'] ?? 0);
+        validarPrevisitaPedidoMaterialesController($db, $idPrevisita);
+
+        responderPedidoMaterialesJson(
+            true,
+            'Intervinientes de Pedido de Materiales obtenidos correctamente.',
+            ['intervino' => obtenerResumenIntervencionesPedidoMaterialesEnConexion($db, $idPrevisita)]
         );
     }
 
