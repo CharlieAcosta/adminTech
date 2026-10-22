@@ -8,6 +8,7 @@ include_once '../04-modelo/presupuestosModel.php'; //conecta a la base de datos
 include_once '../04-modelo/presupuestoIntervencionesModel.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/ordenCompraWorkflowModel.php';
+include_once '../04-modelo/pedidoMaterialesAutorizacionesModel.php';
 //////// function poblarDatableAll(columnas de la base, php o ajax, filtro){  
 
 if (!function_exists('escapeHtmlSeguimientoListado')) {
@@ -373,7 +374,7 @@ if (!function_exists('resolverDescripcionSeguimientoListado')) {
     }
 }
 
-function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiempo = '30_dias', $busqueda = '', $estadoVisitaFiltro = '', $estadoPresupuestoFiltro = '', $estadoOrdenCompraFiltro = ''){
+function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiempo = '30_dias', $busqueda = '', $estadoVisitaFiltro = '', $estadoPresupuestoFiltro = '', $estadoOrdenCompraFiltro = '', $soloAutorizacionesPendientes = false){
 
    $esBandejaOrdenCompraAdministrativa = perfilPuedeAccederSoloOrdenCompra($perfil);
    $estadoOrdenCompraFiltroNormalizado = normalizarFiltroEstadoOrdenCompraSeguimiento($estadoOrdenCompraFiltro);
@@ -385,6 +386,14 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 
    $origenFechaRango = $esBandejaOrdenCompraAdministrativa ? 'previsita_oc' : 'previsita';
    $all_registros = modGetAllRegistros($filtro, $rangoTiempo, $busqueda, $origenFechaRango);
+
+   // Filtro "Aut. pend.": seguimientos con autorizacion de Pedido de materiales pendiente.
+   // Solo lo aplican los perfiles que ven la alerta en el panel (consulta; no otorga permiso de autorizar).
+   // El filtro unicamente restringe el conjunto ya visible: no amplia el alcance del perfil.
+   $idsPrevisitaAutorizacionPendiente = null;
+   if ($soloAutorizacionesPendientes && !$esBandejaOrdenCompraAdministrativa && puedeVerAutorizacionesPendientesPedidoMateriales($perfil)) {
+      $idsPrevisitaAutorizacionPendiente = array_flip(obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendiente());
+   }
    $modoCircuitoActivo = obtenerModoActivoCircuitoComercialPresupuestos();
    $estadoVisitaFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoVisitaFiltro);
    $estadoPresupuestoFiltro = normalizarEstadoFiltroRapidoSeguimientoListado($estadoPresupuestoFiltro);
@@ -393,20 +402,33 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
    $filas = "";
     		foreach ($all_registros as $key_all_registros => $value_all_registros) {
 
-   		$stringFechaHora = $value_all_registros['fecha_visita']." ".$value_all_registros['hora_visita'];
-   		$resultadoFechaHora = comparaFechaHora($stringFechaHora, 'fh');
+			if ($idsPrevisitaAutorizacionPendiente !== null
+				&& !isset($idsPrevisitaAutorizacionPendiente[(int)$value_all_registros['id_previsita']])) {
+				continue;
+			}
 
-   		if($resultadoFechaHora['statusFechaHora'] == 'anterior' && ($value_all_registros['estado_visita'] == 'Programada' || $value_all_registros['estado_visita'] == 'Reprogramada')){  			
-				$tabla = 'previsitas'; 
-				$arraySet = ['estado_visita' => 'Vencida']; 
-				$arrayWhere = [
-					['columna' => 'id_previsita', 'condicion' => '=', 'valorCompara' => $value_all_registros['id_previsita']]
-				];
-				$callType = false;
-				$valueStatus = false;
-   			$resultadoUpdate = simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatus);
-   			if($resultadoUpdate == true){$value_all_registros['estado_visita'] = 'Vencida';}
-   		}
+			// El vencimiento automático sólo aplica a Programada/Reprogramada: para el resto
+			// de los estados el resultado de comparaFechaHora() no se usa, así que se evita
+			// calcularlo (y se evita depender de una fecha/hora que puede faltar o ser inválida
+			// en registros que ya no están programados).
+			if ($value_all_registros['estado_visita'] == 'Programada' || $value_all_registros['estado_visita'] == 'Reprogramada') {
+				$stringFechaHora = $value_all_registros['fecha_visita']." ".$value_all_registros['hora_visita'];
+				$resultadoFechaHora = comparaFechaHora($stringFechaHora, 'fh');
+
+				// Una fecha/hora faltante o inválida no alcanza para determinar vencimiento:
+				// se conserva el estado actual en lugar de forzar una transición automática.
+				if (isset($resultadoFechaHora['statusFechaHora']) && $resultadoFechaHora['statusFechaHora'] == 'anterior') {
+					$tabla = 'previsitas';
+					$arraySet = ['estado_visita' => 'Vencida'];
+					$arrayWhere = [
+						['columna' => 'id_previsita', 'condicion' => '=', 'valorCompara' => $value_all_registros['id_previsita']]
+					];
+					$callType = false;
+					$valueStatus = false;
+					$resultadoUpdate = simpleUpdateInDB($tabla, $arraySet, $arrayWhere, $callType, $valueStatus);
+					if($resultadoUpdate == true){$value_all_registros['estado_visita'] = 'Vencida';}
+				}
+			}
 
 		  $estadoVisitaVisual = resolverBadgeEstadoVisitaSeguimientoListado($value_all_registros['estado_visita'] ?? '');
           $esPrevisitaAdministrativa = esEstadoPrevisitaAdministrativaSeguimientoListado($estadoVisitaVisual['normalizado'] ?? '');
@@ -788,6 +810,22 @@ function poblarDatableAll($tds, $via, $filtro, $perfil, $deleteIcon, $rangoTiemp
 if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
     header('Content-Type: application/json; charset=utf-8');
 
+    // Control de acceso previo a cualquier consulta: sesion activa y perfil con acceso al listado.
+    // Misma convencion de respuesta que pedidoMaterialesController (401 sin sesion / 403 sin permiso).
+    if (empty($_SESSION['usuario']['id_usuario']) && function_exists('restaurarSesionDesdeRecordarmeLogin')) {
+        restaurarSesionDesdeRecordarmeLogin();
+    }
+    if (empty($_SESSION['usuario']['id_usuario'])) {
+        http_response_code(401);
+        echo json_encode(array('success' => false, 'message' => 'No hay sesion de usuario activa.', 'data' => array(), 'errors' => array()));
+        exit;
+    }
+    if (!perfilPuedeConsultarListadoSeguimiento($_SESSION['usuario']['perfil'] ?? null)) {
+        http_response_code(403);
+        echo json_encode(array('success' => false, 'message' => 'El perfil no tiene permiso para consultar el listado de Seguimiento.', 'data' => array(), 'errors' => array()));
+        exit;
+    }
+
     $perfil = $_SESSION['usuario']['perfil'] ?? null;
     $deleteIcon = array('Super Administrador', 'Administrador');
 
@@ -801,7 +839,8 @@ if (isset($_POST['ajax']) && $_POST['ajax'] == 'on') {
         $_POST['busqueda'] ?? '',
         $_POST['estado_visita'] ?? '',
         $_POST['estado_presupuesto'] ?? '',
-        $_POST['estado_oc'] ?? ''
+        $_POST['estado_oc'] ?? '',
+        ($_POST['aut_pend'] ?? '') === '1'
     );
 }
 

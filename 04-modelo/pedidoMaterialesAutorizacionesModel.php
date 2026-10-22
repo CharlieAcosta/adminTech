@@ -89,9 +89,12 @@ if (!function_exists('obtenerContextoFilaAutorizacionPedidoMateriales')) {
         $cantidadPrevia = normalizarDecimalAutorizacionPedidoMateriales(
             $fila['pedido_autorizacion_previo'] ?? 0
         );
-        $requiereAutorizacion = $tipoFila === 'agregado'
-            ? $cantidadPedido > 0.00005
-            : $cantidadAcumulada > ($cantidadInicial + 0.00005);
+        // La autorizacion solo cubre el ciclo (numero_pedido) en el que fue otorgada: un excedente
+        // ya autorizado/confirmado en un pedido historico no debe volver a exigir autorizacion en un
+        // ciclo nuevo cuyo pedido activo todavia esta en 0. Por eso ambos tipos de fila exigen que la
+        // cantidad del pedido activo sea positiva antes de evaluar el excedente acumulado.
+        $requiereAutorizacion = $cantidadPedido > 0.00005
+            && ($tipoFila === 'agregado' || $cantidadAcumulada > ($cantidadInicial + 0.00005));
         $claveFila = construirClaveFilaAutorizacionPedidoMateriales($fila);
         $datosHash = [
             'clave_fila' => $claveFila,
@@ -545,5 +548,67 @@ if (!function_exists('resolverAutorizacionPedidoMaterialesEnConexion')) {
             mysqli_rollback($db);
             throw $e;
         }
+    }
+}
+
+if (!function_exists('obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendienteEnConexion')) {
+    /**
+     * Seguimientos (id_previsita) con al menos una fila de Pedido de materiales en estado
+     * 'pendiente' dentro del snapshot vigente. Es la misma condicion que bloquea la
+     * confirmacion del pedido, por lo que contador y filtro del listado comparten fuente.
+     * El snapshot es unico por previsita (uk_pedido_materiales_snapshots_previsita) y el
+     * EXISTS evita duplicados por multiples filas pendientes.
+     *
+     * @return int[] ids de previsita distintos
+     */
+    function obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendienteEnConexion(mysqli $db): array
+    {
+        if (!tabla_existe($db, 'pedido_materiales_snapshots')
+            || !tabla_existe($db, 'pedido_materiales_snapshot_detalles')
+            || !tabla_existe($db, 'previsitas')) {
+            return [];
+        }
+
+        $sql = "
+            SELECT s.id_previsita
+            FROM pedido_materiales_snapshots s
+            INNER JOIN previsitas v ON v.id_previsita = s.id_previsita
+            WHERE s.finalizado = 0
+              AND v.estado_visita <> 'Eliminada'
+              AND EXISTS (
+                  SELECT 1
+                  FROM pedido_materiales_snapshot_detalles d
+                  WHERE d.id_pedido_materiales_snapshot = s.id_pedido_materiales_snapshot
+                    AND d.estado_autorizacion = 'pendiente'
+              )
+        ";
+        $resultado = mysqli_query($db, $sql);
+        if (!$resultado) {
+            return [];
+        }
+
+        $ids = [];
+        while ($row = mysqli_fetch_assoc($resultado)) {
+            $ids[(int)$row['id_previsita']] = (int)$row['id_previsita'];
+        }
+        mysqli_free_result($resultado);
+
+        return array_values($ids);
+    }
+}
+
+if (!function_exists('obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendiente')) {
+    function obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendiente(): array
+    {
+        $db = conectDB();
+        if (!$db) {
+            return [];
+        }
+
+        mysqli_set_charset($db, 'utf8mb4');
+        $ids = obtenerIdsPrevisitaConAutorizacionPedidoMaterialesPendienteEnConexion($db);
+        mysqli_close($db);
+
+        return $ids;
     }
 }

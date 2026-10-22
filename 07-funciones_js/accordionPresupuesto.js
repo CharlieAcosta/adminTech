@@ -529,11 +529,28 @@
     const $btnGuardar = $('.presupuesto-total-actions #btn-guardar-presupuesto');
     const $btnEmitir = $('.btn-emitir-presupuesto');
 
+    const $btnAgregarTarea = $('#btn-agregar-tarea-presupuesto');
+    const $accionesMaterial = $(`${rootSel} .presu-agregar-material, ${rootSel} .btn-eliminar-material-presupuesto`);
+    const $inputsAltaMaterial = $(`${rootSel} .presu-material-select, ${rootSel} .presu-material-cantidad`);
+    const $accionesManoObra = $(`${rootSel} .presu-agregar-mano-obra, ${rootSel} .btn-eliminar-mano-obra-presupuesto`);
+    const $inputsAltaManoObra = $(`${rootSel} .presu-mano-obra-select, ${rootSel} .presu-mano-obra-operarios, ${rootSel} .presu-mano-obra-dias, ${rootSel} .presu-mano-obra-observacion`);
+
     if (presupuestoEdicionComercialBloqueada()) {
       $btnGuardar.prop('disabled', true).addClass('btn-secondary').removeClass('btn-success');
       $btnEmitir.prop('disabled', true).addClass('btn-secondary').removeClass('btn-primary');
+      $btnAgregarTarea.prop('disabled', true).addClass('disabled');
+      $accionesMaterial.prop('disabled', true).addClass('disabled');
+      $inputsAltaMaterial.prop('disabled', true);
+      $accionesManoObra.prop('disabled', true).addClass('disabled');
+      $inputsAltaManoObra.prop('disabled', true);
       return;
     }
+
+    $btnAgregarTarea.prop('disabled', false).removeClass('disabled');
+    $accionesMaterial.prop('disabled', false).removeClass('disabled');
+    $inputsAltaMaterial.prop('disabled', false);
+    $accionesManoObra.prop('disabled', false).removeClass('disabled');
+    $inputsAltaManoObra.prop('disabled', false);
 
     $btnGuardar
       .prop('disabled', !presupuestoDirty)
@@ -554,6 +571,574 @@
     actualizarEstadoAccionesPresupuestoSilencioso();
   }
   window.marcarPresupuestoComoModificadoSilencioso = marcarPresupuestoComoModificadoSilencioso;
+
+
+  let contadorClientKeyTareaPresupuesto = 0;
+
+  function generarClientKeyTareaPresupuesto() {
+    contadorClientKeyTareaPresupuesto += 1;
+    return 'tmp_' + Date.now() + '_' + contadorClientKeyTareaPresupuesto;
+  }
+
+  function obtenerClientKeyTareaPresupuesto($card) {
+    let key = String($card.attr('data-presu-client-key') || $card.data('presu-client-key') || '').trim();
+    if (!key) {
+      key = generarClientKeyTareaPresupuesto();
+      $card.attr('data-presu-client-key', key).data('presu-client-key', key);
+    }
+    return key;
+  }
+
+  function obtenerIdPresuTareaCard($card) {
+    const raw = String($card.attr('data-id-presu-tarea') || $card.data('id-presu-tarea') || '').trim();
+    const id = parseInt(raw, 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+
+  function setIdentidadPresuTareaCard($card, idPresuTarea, clientKey) {
+    const id = parseInt(idPresuTarea, 10) || 0;
+    const key = clientKey || (id > 0 ? 'pt_' + id : obtenerClientKeyTareaPresupuesto($card));
+    $card.attr('data-id-presu-tarea', id > 0 ? String(id) : '').data('id-presu-tarea', id > 0 ? id : '');
+    $card.attr('data-presu-client-key', key).data('presu-client-key', key);
+    $card.find('.btn-tarea')
+      .attr('data-id-presu-tarea', id > 0 ? String(id) : '')
+      .data('id-presu-tarea', id > 0 ? id : '');
+    return key;
+  }
+
+  function sincronizarDatosTareaPresupuesto($card, nro) {
+    const key = obtenerClientKeyTareaPresupuesto($card);
+    const $titulo = $card.find('.tarea-encabezado b').first();
+    if ($titulo.length) {
+      const tituloActual = ($titulo.text() || '').replace(/^Tarea\s+\d+:\s*/i, '').trim();
+      $titulo.text('Tarea ' + nro + (tituloActual ? ': ' + tituloActual : ':'));
+    }
+    $card.find('.btn-tarea').attr('data-nro', String(nro)).data('nro', nro);
+    $card.find('.presu-fotos')
+      .attr('id', 'presu_fotos_tarea_' + nro)
+      .attr('data-index', String(nro))
+      .attr('data-client-key', key)
+      .data('index', nro)
+      .data('client-key', key);
+    $card.find('.presu-dropzone')
+      .attr('data-index', String(nro))
+      .attr('data-client-key', key)
+      .data('index', nro)
+      .data('client-key', key);
+    $card.find('.presu-preview-fotos').attr('id', 'presu_preview_' + nro);
+
+    // Reconciliación de IDs propios de la tarjeta (evita colisiones tras clonar en "Agregar tarea").
+    // Ubicados por clase estable donde existe; por prefijo de ID (no posicional) donde no hay clase única.
+    $card.find('.input-otros-materiales').attr('id', 'otros-mat-' + nro);
+    $card.find('.input-otros-mano').attr('id', 'otros-mo-' + nro);
+    $card.find('.subt-util-materiales').attr('id', 'subt-util-materiales-' + nro);
+    $card.find('.subt-util-manoobra').attr('id', 'subt-util-manoobra-' + nro);
+    $card.find('.subt-util-total').attr('id', 'subt-util-total-' + nro);
+    $card.find('.subt-util-final').attr('id', 'utilfinal-' + nro);
+    $card.find('.porcentajetarea').attr('id', 'porcentajetarea-' + nro);
+    $card.find('.fila-impuestos').attr('id', 'fila-impuestos-' + nro);
+    $card.find('[id^="iibb-"]').attr('id', 'iibb-' + nro);
+    $card.find('[id^="ganancias-"]').attr('id', 'ganancias-' + nro);
+    $card.find('[id^="cheque-"]').attr('id', 'cheque-' + nro);
+    $card.find('[id^="inversion-"]').attr('id', 'inversion-' + nro);
+    $card.find('[id^="retiva-"]').attr('id', 'retiva-' + nro);
+    $card.find('.btn-guardar-tarea').attr('id', 'btnGuardarTarea_' + nro);
+    $card.find('.btn-traer-tarea').attr('id', 'btnTraerTarea_' + nro);
+
+    // El botón de subtotal lleva el número de tarea también en su TEXTO visible
+    // ("Subtotal Tarea N: $importe"), no sólo en el id. Al renumerar (p.ej. tras
+    // eliminar otra tarea) hay que corregir la etiqueta sin tocar el importe ya calculado.
+    const $subtTarea = $card.find('[id^="subt-tarea-"]').attr('id', 'subt-tarea-' + nro);
+    if ($subtTarea.length) {
+      const $importe = $subtTarea.find('strong').first();
+      if ($importe.length) {
+        // El importe vive en un <strong> separado (formato normal tras un cálculo real):
+        // se preserva ese nodo intacto y sólo se reemplaza el texto previo a él.
+        const nodoTexto = $subtTarea.contents().filter(function () {
+          return this.nodeType === 3;
+        }).first();
+        if (nodoTexto.length) {
+          nodoTexto[0].nodeValue = 'Subtotal Tarea ' + nro + ': ';
+        } else {
+          $importe.before('Subtotal Tarea ' + nro + ': ');
+        }
+      } else {
+        // Sin <strong> (valor inicial renderizado por PHP, aún sin recalcular):
+        // se conserva el importe textual existente tal cual.
+        const textoActual = $subtTarea.text();
+        const m = textoActual.match(/:\s*(.*)$/);
+        const importeActual = m ? m[1] : textoActual;
+        $subtTarea.text('Subtotal Tarea ' + nro + ': ' + importeActual);
+      }
+    }
+  }
+
+  function renumerarTareasPresupuesto() {
+    $('#contenedorPresupuestoGenerado .tarea-card').each(function (index) {
+      sincronizarDatosTareaPresupuesto($(this), index + 1);
+    });
+  }
+
+  const ENDPOINT_PRESUPUESTO_GUARDAR = '../03-controller/presupuestos_guardar.php';
+
+  function mostrarMensajeMaterialPresupuesto(tipo, mensaje) {
+    if (tipo === 'error' && typeof mostrarError === 'function') {
+      mostrarError(mensaje, 4);
+      return;
+    }
+    if (tipo === 'warning' && typeof mostrarAdvertencia === 'function') {
+      mostrarAdvertencia(mensaje, 4);
+      return;
+    }
+    if (window.toastr && typeof toastr[tipo] === 'function') {
+      toastr[tipo](mensaje);
+      return;
+    }
+    window.alert(mensaje);
+  }
+
+  function parseNumeroPresupuesto(valor) {
+    const n = parseFloat(String(valor == null ? '' : valor).replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function escaparHtmlPresupuesto(valor) {
+    return $('<div>').text(String(valor == null ? '' : valor)).html();
+  }
+
+  function fechaCatalogoVencidaPresupuesto(fecha) {
+    if (!fecha) return true;
+    const base = new Date(String(fecha).replace(' ', 'T'));
+    if (Number.isNaN(base.getTime())) return true;
+    const diffDias = (Date.now() - base.getTime()) / 86400000;
+    return diffDias > 30;
+  }
+
+  function obtenerDatoOptionPresupuesto($option, nombre) {
+    if (!$option || !$option.length) return '';
+    const snake = 'data-' + String(nombre);
+    const kebab = 'data-' + String(nombre).replace(/_/g, '-');
+    const directo = $option.attr(snake);
+    if (directo !== undefined) return directo;
+    const kebabAttr = $option.attr(kebab);
+    if (kebabAttr !== undefined) return kebabAttr;
+    const data = $option.data(nombre);
+    return data == null ? '' : data;
+  }
+
+  function obtenerDatoOptionMaterial($option, nombre) {
+    return obtenerDatoOptionPresupuesto($option, nombre);
+  }
+
+  function solicitarContextoMaterialPresupuesto(idMaterial) {
+    return $.ajax({
+      url: ENDPOINT_PRESUPUESTO_GUARDAR,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'obtenerContextoPrecioCatalogoPresupuestoDinamico',
+        tipo: 'material',
+        id_catalogo: idMaterial
+      }
+    });
+  }
+
+  function confirmarContextoMaterialPresupuesto(contexto, importe, accionResolucion) {
+    return $.ajax({
+      url: ENDPOINT_PRESUPUESTO_GUARDAR,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'confirmarPrecioCatalogoPresupuestoDinamico',
+        tipo: 'material',
+        id_catalogo: contexto.id_catalogo || contexto.id_material,
+        importe: importe,
+        accion_resolucion: accionResolucion || 'CONFIRMAR_VIGENCIA_CATALOGO',
+        precio_catalogo_esperado: contexto.precio_catalogo || contexto.precio_unitario || contexto.precio || '',
+        fecha_catalogo_esperada: contexto.fecha_catalogo || contexto.fecha_actualizacion || contexto.log_edicion || contexto.log_alta || ''
+      }
+    });
+  }
+
+  function solicitarContextoJornalPresupuesto(idJornal) {
+    return $.ajax({
+      url: ENDPOINT_PRESUPUESTO_GUARDAR,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'obtenerContextoPrecioCatalogoPresupuestoDinamico',
+        tipo: 'jornal',
+        id_catalogo: idJornal
+      }
+    });
+  }
+
+  function confirmarContextoJornalPresupuesto(contexto, importe, accionResolucion) {
+    return $.ajax({
+      url: ENDPOINT_PRESUPUESTO_GUARDAR,
+      method: 'POST',
+      dataType: 'json',
+      data: {
+        via: 'ajax',
+        funcion: 'confirmarPrecioCatalogoPresupuestoDinamico',
+        tipo: 'jornal',
+        id_catalogo: contexto.id_catalogo || contexto.jornal_id,
+        importe: importe,
+        accion_resolucion: accionResolucion || 'CONFIRMAR_VIGENCIA_CATALOGO',
+        precio_catalogo_esperado: contexto.precio_catalogo || contexto.jornal_valor || contexto.precio || '',
+        fecha_catalogo_esperada: contexto.fecha_catalogo || contexto.fecha_actualizacion || contexto.updated_at || contexto.created_at || ''
+      }
+    });
+  }
+
+  async function pedirNuevoPrecioMaterialPresupuesto(contexto) {
+    const actual = parseNumeroPresupuesto(contexto.precio_unitario || contexto.precio);
+    const resp = await Swal.fire({
+      icon: 'question',
+      title: 'Actualizar precio',
+      text: 'Ingrese el precio vigente para este material.',
+      input: 'number',
+      inputValue: actual,
+      inputAttributes: { min: '0', step: 'any' },
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: (value) => {
+        const n = parseNumeroPresupuesto(value);
+        if (!(n > 0)) {
+          Swal.showValidationMessage('Ingrese un precio mayor a cero.');
+          return false;
+        }
+        return n;
+      }
+    });
+    return resp.isConfirmed ? resp.value : null;
+  }
+
+  async function pedirNuevoPrecioJornalPresupuesto(contexto) {
+    const actual = parseNumeroPresupuesto(contexto.jornal_valor || contexto.precio_catalogo || contexto.precio);
+    const resp = await Swal.fire({
+      icon: 'question',
+      title: 'Actualizar valor jornal',
+      text: 'Ingrese el valor vigente para este jornal.',
+      input: 'number',
+      inputValue: actual,
+      inputAttributes: { min: '0', step: 'any' },
+      showCancelButton: true,
+      confirmButtonText: 'Confirmar',
+      cancelButtonText: 'Cancelar',
+      preConfirm: (value) => {
+        const n = parseNumeroPresupuesto(value);
+        if (!(n > 0)) {
+          Swal.showValidationMessage('Ingrese un valor mayor a cero.');
+          return false;
+        }
+        return n;
+      }
+    });
+    return resp.isConfirmed ? resp.value : null;
+  }
+
+  async function resolverPrecioMaterialNuevoPresupuesto(idMaterial) {
+    const contextoResp = await solicitarContextoMaterialPresupuesto(idMaterial);
+    if (!contextoResp || contextoResp.ok === false || contextoResp.status === false) {
+      throw new Error((contextoResp && (contextoResp.mensaje || contextoResp.error)) || 'No se pudo obtener el precio del material.');
+    }
+
+    const contexto = contextoResp.contexto || contextoResp.data || contextoResp;
+    const precio = parseNumeroPresupuesto(contexto.precio_catalogo || contexto.precio_unitario || contexto.precio);
+    const fecha = contexto.fecha_catalogo || contexto.fecha_actualizacion || contexto.log_edicion || contexto.log_alta || '';
+
+    if (!fechaCatalogoVencidaPresupuesto(fecha)) {
+      return { precio, fecha, contexto };
+    }
+
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      throw new Error('El precio del material esta vencido y debe confirmarse antes de agregarlo.');
+    }
+
+    const decision = await Swal.fire({
+      icon: 'warning',
+      title: 'Precio vencido',
+      text: 'El precio del material tiene mas de 30 dias. Confirme el valor actual o cargue uno nuevo antes de agregarlo.',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'Usar precio actual',
+      denyButtonText: 'Ingresar nuevo',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (decision.isDismissed) return null;
+
+    let precioConfirmado = precio;
+    let accion = 'CONFIRMAR_VIGENCIA_CATALOGO';
+    if (decision.isDenied) {
+      const nuevo = await pedirNuevoPrecioMaterialPresupuesto(contexto);
+      if (nuevo == null) return null;
+      precioConfirmado = nuevo;
+      accion = 'ACTUALIZAR_PRECIO_CATALOGO';
+    }
+
+    const confirmacion = await confirmarContextoMaterialPresupuesto(contexto, precioConfirmado, accion);
+    if (!confirmacion || confirmacion.ok === false || confirmacion.status === false) {
+      throw new Error((confirmacion && (confirmacion.mensaje || confirmacion.error)) || 'No se pudo confirmar el precio del material.');
+    }
+
+    const confirmado = confirmacion.contexto || confirmacion.data || confirmacion;
+    return {
+      precio: parseNumeroPresupuesto(confirmado.importe_persistido || confirmado.precio_catalogo || confirmado.precio_unitario || confirmado.precio || precioConfirmado),
+      fecha: confirmado.fecha_actualizacion || confirmado.fecha_catalogo || confirmado.log_edicion || confirmado.log_alta || '',
+      contexto: confirmado
+    };
+  }
+
+  async function resolverPrecioJornalNuevoPresupuesto(idJornal) {
+    const contextoResp = await solicitarContextoJornalPresupuesto(idJornal);
+    if (!contextoResp || contextoResp.ok === false || contextoResp.status === false) {
+      throw new Error((contextoResp && (contextoResp.mensaje || contextoResp.error)) || 'No se pudo obtener el valor del jornal.');
+    }
+
+    const contexto = contextoResp.contexto || contextoResp.data || contextoResp;
+    const precio = parseNumeroPresupuesto(contexto.precio_catalogo || contexto.jornal_valor || contexto.precio);
+    const fecha = contexto.fecha_catalogo || contexto.fecha_actualizacion || contexto.updated_at || contexto.created_at || '';
+
+    if (!fechaCatalogoVencidaPresupuesto(fecha)) {
+      return { precio, fecha, contexto };
+    }
+
+    if (!window.Swal || typeof Swal.fire !== 'function') {
+      throw new Error('El valor del jornal esta vencido y debe confirmarse antes de agregarlo.');
+    }
+
+    const decision = await Swal.fire({
+      icon: 'warning',
+      title: 'Valor jornal vencido',
+      text: 'El valor del jornal tiene mas de 30 dias. Confirme el valor actual o cargue uno nuevo antes de agregarlo.',
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: 'Usar valor actual',
+      denyButtonText: 'Ingresar nuevo',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (decision.isDismissed) return null;
+
+    let precioConfirmado = precio;
+    let accion = 'CONFIRMAR_VIGENCIA_CATALOGO';
+    if (decision.isDenied) {
+      const nuevo = await pedirNuevoPrecioJornalPresupuesto(contexto);
+      if (nuevo == null) return null;
+      precioConfirmado = nuevo;
+      accion = 'ACTUALIZAR_PRECIO_CATALOGO';
+    }
+
+    const confirmacion = await confirmarContextoJornalPresupuesto(contexto, precioConfirmado, accion);
+    if (!confirmacion || confirmacion.ok === false || confirmacion.status === false) {
+      throw new Error((confirmacion && (confirmacion.mensaje || confirmacion.error)) || 'No se pudo confirmar el valor del jornal.');
+    }
+
+    const confirmado = confirmacion.contexto || confirmacion.data || confirmacion;
+    return {
+      precio: parseNumeroPresupuesto(confirmado.importe_persistido || confirmado.precio_catalogo || confirmado.jornal_valor || confirmado.precio || precioConfirmado),
+      fecha: confirmado.fecha_actualizacion || confirmado.fecha_catalogo || confirmado.updated_at || confirmado.created_at || '',
+      contexto: confirmado
+    };
+  }
+
+  // Las plantillas se aplican fuera de este closure, pero deben reutilizar
+  // exactamente la misma resolucion de catalogo que las altas manuales.
+  window.resolverPrecioMaterialNuevoPresupuesto = resolverPrecioMaterialNuevoPresupuesto;
+  window.resolverPrecioJornalNuevoPresupuesto = resolverPrecioJornalNuevoPresupuesto;
+
+  function materialYaExisteEnTarea($card, idMaterial) {
+    const idBuscado = String(idMaterial);
+    let existe = false;
+    $card.find('.tarea-materiales tbody tr[data-material-id]').each(function () {
+      if (String($(this).attr('data-material-id') || $(this).data('material-id') || '') === idBuscado) {
+        existe = true;
+        return false;
+      }
+      return true;
+    });
+    return existe;
+  }
+
+  function renumerarMaterialesPresupuesto($card) {
+    $card.find('.tarea-materiales tbody tr[data-material-id]').each(function (index) {
+      $(this).attr('data-orden', String(index + 1)).data('orden', index + 1);
+    });
+  }
+
+  function crearFilaMaterialPresupuesto(datos) {
+    const idPtm = datos.id_ptm ? String(datos.id_ptm) : '';
+    const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || '';
+    const fecha = datos.fecha_actualizacion || datos.log_edicion || datos.log_alta || '';
+    const precioVencido = fechaCatalogoVencidaPresupuesto(fecha);
+    const clasePrecio = precioVencido ? 'bg-danger' : 'bg-success';
+    const nombre = escaparHtmlPresupuesto(datos.nombre || datos.descripcion || 'Material');
+    const cantidad = parseNumeroPresupuesto(datos.cantidad);
+    const precio = parseNumeroPresupuesto(datos.precio_unitario || datos.precio_unitario_usado);
+    const extra = parseNumeroPresupuesto(datos.porcentaje_extra);
+
+    const $fila = $(
+      '<tr data-material-id="' + escaparHtmlPresupuesto(datos.id_material) + '" data-id-ptm="' + escaparHtmlPresupuesto(idPtm) + '" data-orden="' + escaparHtmlPresupuesto(datos.orden || '') + '">' +
+        '<td><span class="material-nombre-presupuesto">' + nombre + '</span></td>' +
+        '<td><input type="number" class="form-control form-control-sm cantidad-material" min="0" step="any"></td>' +
+        '<td><input type="number" class="form-control form-control-sm precio-unitario ' + clasePrecio + '" min="0" step="any" readonly></td>' +
+        '<td><input type="number" class="form-control form-control-sm porcentaje-extra" min="0" step="any"></td>' +
+        '<td class="text-right subtotal-material"></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-material-presupuesto" title="Eliminar material" aria-label="Eliminar material"><i class="fas fa-trash"></i></button></td>' +
+      '</tr>'
+    );
+
+    $fila.attr('data-log_alta', datos.log_alta || '').attr('data-log_edicion', datos.log_edicion || fecha || '');
+    $fila.find('.cantidad-material').val(cantidad);
+    $fila.find('.precio-unitario')
+      .val(precio)
+      .attr('data-id-presupuesto', idPresupuesto)
+      .attr('data-id-ptm', idPtm)
+      .attr('data-id-material', datos.id_material)
+      .attr('data-fecha-actualizacion', fecha)
+      .attr('data-confirmar-precio-tipo', 'material')
+      .data('id-presupuesto', idPresupuesto)
+      .data('id-ptm', idPtm)
+      .data('id-material', datos.id_material)
+      .data('fecha-actualizacion', fecha)
+      .data('confirmar-precio-tipo', 'material');
+    $fila.find('.porcentaje-extra').val(extra);
+    return $fila;
+  }
+
+  function insertarFilaMaterialPresupuesto($card, datos) {
+    const $tbody = $card.find('.tarea-materiales tbody').first();
+    const $fila = crearFilaMaterialPresupuesto(datos);
+    const $referencia = $tbody.find('tr.fila-otros-materiales, tr.fila-subtotal').first();
+    if ($referencia.length) $referencia.before($fila); else $tbody.append($fila);
+    renumerarMaterialesPresupuesto($card);
+    if (typeof window.calcularFilaMaterial === 'function') window.calcularFilaMaterial($fila);
+    _safeActualizarSubtotalesBloque($card, $card[0]);
+    _safeActualizarTotalesPorTarea($card, $card[0]);
+    _safeActualizarTotalGeneral();
+    marcarPresupuestoComoModificadoSilencioso();
+    actualizarEstadoAccionesPresupuestoSilencioso();
+    return $fila;
+  }
+
+  function inicializarSelectMaterialesPresupuesto($scope) {
+    const $root = $scope && $scope.length ? $scope : $('#contenedorPresupuestoGenerado');
+    const opciones = $('#opcionesMaterialBase').html() || '';
+    $root.find('.presu-material-select').each(function () {
+      const $select = $(this);
+      if (!$select.find('option[value!=""]').length && opciones) {
+        $select.append(opciones);
+      }
+      if ($.fn.select2 && !$select.data('select2')) {
+        $select.select2({ width: '100%', placeholder: 'Material', allowClear: true });
+      }
+    });
+  }
+
+  function jornalYaExisteEnTarea($card, idJornal) {
+    const idBuscado = String(idJornal);
+    let existe = false;
+    $card.find('.tarea-mano-obra tbody tr[data-jornal_id]').each(function () {
+      if (String($(this).attr('data-jornal_id') || $(this).data('jornal_id') || '') === idBuscado) {
+        existe = true;
+        return false;
+      }
+      return true;
+    });
+    return existe;
+  }
+
+  function renumerarManoObraPresupuesto($card) {
+    $card.find('.tarea-mano-obra tbody tr[data-jornal_id]').each(function (index) {
+      $(this).attr('data-orden', String(index + 1)).data('orden', index + 1);
+    });
+  }
+
+  function crearFilaManoObraPresupuesto(datos) {
+    const idPtmo = datos.id_ptmo ? String(datos.id_ptmo) : '';
+    const idPresupuesto = Number($('#contenedorPresupuestoGenerado').data('id_presupuesto')) || '';
+    const fecha = datos.fecha_actualizacion || datos.updated_at || datos.created_at || '';
+    const precioVencido = fechaCatalogoVencidaPresupuesto(fecha);
+    const clasePrecio = precioVencido ? 'bg-danger' : 'bg-success';
+    const nombre = escaparHtmlPresupuesto(datos.nombre || datos.descripcion || 'Jornal');
+    const operarios = parseNumeroPresupuesto(datos.cantidad || datos.operarios);
+    const dias = parseNumeroPresupuesto(datos.dias || 1);
+    const jornales = operarios * dias;
+    const valor = parseNumeroPresupuesto(datos.jornal_valor || datos.valor_jornal_usado);
+    const extra = parseNumeroPresupuesto(datos.porcentaje_extra);
+
+    const $fila = $(
+      '<tr data-jornal_id="' + escaparHtmlPresupuesto(datos.jornal_id || datos.id_jornal) + '" data-id-ptmo="' + escaparHtmlPresupuesto(idPtmo) + '" data-orden="' + escaparHtmlPresupuesto(datos.orden || '') + '">' +
+        '<td><span class="mano-obra-nombre-presupuesto">' + nombre + '</span></td>' +
+        '<td><input type="number" class="form-control form-control-sm cantidad-mano-obra" min="0" step="any"></td>' +
+        '<td><input type="number" class="form-control form-control-sm dias-mano-obra" min="0" step="any"></td>' +
+        '<td><input type="number" class="form-control form-control-sm jornales-mano-obra" min="0" step="any" readonly></td>' +
+        '<td><input type="number" class="form-control form-control-sm valor-jornal ' + clasePrecio + '" min="0" step="any" readonly></td>' +
+        '<td><input type="number" class="form-control form-control-sm porcentaje-extra" min="0" step="any"></td>' +
+        '<td class="text-right subtotal-mano"></td>' +
+        '<td><input type="text" class="form-control form-control-sm observacion-mano-obra" maxlength="255"></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-sm p-0 border-0 bg-transparent text-danger btn-eliminar-mano-obra-presupuesto" title="Eliminar mano de obra" aria-label="Eliminar mano de obra"><i class="fas fa-trash"></i></button></td>' +
+      '</tr>'
+    );
+
+    $fila.find('.cantidad-mano-obra').val(operarios);
+    $fila.find('.dias-mano-obra').val(dias);
+    $fila.find('.jornales-mano-obra').val(jornales);
+    $fila.find('.valor-jornal')
+      .val(valor)
+      .attr('data-id-presupuesto', idPresupuesto)
+      .attr('data-id-ptmo', idPtmo)
+      .attr('data-id-jornal', datos.jornal_id || datos.id_jornal)
+      .attr('data-fecha-actualizacion', fecha)
+      .attr('data-confirmar-precio-tipo', 'jornal')
+      .data('id-presupuesto', idPresupuesto)
+      .data('id-ptmo', idPtmo)
+      .data('id-jornal', datos.jornal_id || datos.id_jornal)
+      .data('fecha-actualizacion', fecha)
+      .data('confirmar-precio-tipo', 'jornal');
+    $fila.find('.porcentaje-extra').val(extra);
+    $fila.find('.observacion-mano-obra').val(datos.observacion || '');
+    return $fila;
+  }
+
+  function insertarFilaManoObraPresupuesto($card, datos) {
+    const $tbody = $card.find('.tarea-mano-obra tbody').first();
+    const $fila = crearFilaManoObraPresupuesto(datos);
+    const $referencia = $tbody.find('tr.fila-otros-mano, tr.fila-subtotal').first();
+    if ($referencia.length) $referencia.before($fila); else $tbody.append($fila);
+    renumerarManoObraPresupuesto($card);
+    if (typeof window.calcularFilaManoObra === 'function') window.calcularFilaManoObra($fila);
+    _safeActualizarSubtotalesBloque($card, $card[0]);
+    _safeActualizarTotalesPorTarea($card, $card[0]);
+    _safeActualizarTotalGeneral();
+    marcarPresupuestoComoModificadoSilencioso();
+    actualizarEstadoAccionesPresupuestoSilencioso();
+    return $fila;
+  }
+
+  window.insertarFilaMaterialPresupuesto = insertarFilaMaterialPresupuesto;
+  window.insertarFilaManoObraPresupuesto = insertarFilaManoObraPresupuesto;
+
+  function inicializarSelectManoObraPresupuesto($scope) {
+    const $root = $scope && $scope.length ? $scope : $('#contenedorPresupuestoGenerado');
+    const opciones = $('#opcionesManoObraBase').html() || '';
+    $root.find('.presu-mano-obra-select').each(function () {
+      const $select = $(this);
+      if (!$select.find('option[value!=""]').length && opciones) {
+        $select.append(opciones);
+      }
+      if ($.fn.select2 && !$select.data('select2')) {
+        $select.select2({ width: '100%', placeholder: 'Tipo de jornal', allowClear: true });
+      }
+    });
+  }
+
 
   function obtenerResumenPreciosVencidosPresupuesto() {
     const $root = $('#contenedorPresupuestoGenerado');
@@ -602,6 +1187,310 @@
     .off('change.presu', '.presu-fotos')
     .off('click.presu',  '.presu-eliminar-imagen')
     .off('click.presu', '#btn-guardar-presupuesto')
+    .off('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto')
+    .off('click.presu-agregar-material', '#contenedorPresupuestoGenerado .presu-agregar-material')
+    .off('click.presu-eliminar-material', '#contenedorPresupuestoGenerado .btn-eliminar-material-presupuesto')
+    .off('click.presu-agregar-mano-obra', '#contenedorPresupuestoGenerado .presu-agregar-mano-obra')
+    .off('click.presu-eliminar-mano-obra', '#contenedorPresupuestoGenerado .btn-eliminar-mano-obra-presupuesto')
+    .off('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto')
+    .off('click.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso')
+    .off('keydown.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso')
+    .on('click.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso', function (e) {
+      e.preventDefault();
+      const $toggle = $(this);
+      const $card = $toggle.closest('.tarea-card');
+      if (!$card.length) return;
+      const colapsada = $card.toggleClass('tarea-colapsada').hasClass('tarea-colapsada');
+      $toggle.attr('aria-expanded', colapsada ? 'false' : 'true');
+    })
+    .on('keydown.presu-toggle-tarea', '#contenedorPresupuestoGenerado .tarea-toggle-colapso', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      e.preventDefault();
+      $(this).trigger('click');
+    })
+    .on('click.presu-agregar-tarea', '#btn-agregar-tarea-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $root = $('#contenedorPresupuestoGenerado');
+      const $base = $root.find('.tarea-card').last();
+      if (!$base.length) return;
+
+      const $nueva = $base.clone(false, false);
+      // P99: una tarea nueva siempre arranca colapsada, independientemente
+      // del estado (colapsado o expandido) que tuviera la ultima tarjeta
+      // clonada.
+      $nueva.addClass('tarea-colapsada');
+      $nueva.find('.tarea-toggle-colapso').attr('aria-expanded', 'false');
+      $nueva.find('.select2-container').remove();
+      $nueva.find('.presu-material-select, .presu-mano-obra-select')
+        .removeClass('select2-hidden-accessible')
+        .removeAttr('data-select2-id tabindex aria-hidden')
+        .val('');
+
+      const key = generarClientKeyTareaPresupuesto();
+      setIdentidadPresuTareaCard($nueva, null, key);
+      window.fotosNuevasPorTarea[key] = [];
+      window.fotosEliminadasPorTarea[key] = [];
+
+      if (typeof window.setDetalleTareaEditorValue === 'function') {
+        window.setDetalleTareaEditorValue($nueva, '', { triggerInput: false });
+      } else {
+        $nueva.find('textarea.tarea-descripcion').val('');
+        $nueva.find('.tarea-descripcion-editor').empty();
+      }
+      $nueva.find('.incluir-en-total').prop('checked', true);
+      $nueva.find('.utilidad-global-materiales, .utilidad-global-mano-obra').val('');
+      $nueva.find('.input-otros-materiales, .input-otros-mano').val('0');
+      $nueva.find('.tarea-materiales tbody tr').not('.fila-otros-materiales,.fila-subtotal').remove();
+      $nueva.find('.tarea-mano-obra tbody tr').not('.fila-otros-mano,.fila-subtotal').remove();
+      $nueva.find('.presu-preview-fotos').empty();
+      $nueva.find('.presu-fotos').val('');
+      $nueva.find('.presu-material-select').val('');
+      $nueva.find('.presu-material-cantidad').val('1');
+      $nueva.find('.presu-mano-obra-select').val('');
+      $nueva.find('.presu-mano-obra-operarios').val('1');
+      $nueva.find('.presu-mano-obra-dias').val('1');
+      $nueva.find('.presu-mano-obra-observacion').val('');
+
+      $root.find('.presupuesto-total-card').before($nueva);
+      renumerarTareasPresupuesto();
+      initDetalleTareaRichEditors($nueva, { triggerInput: false });
+      inicializarSelectMaterialesPresupuesto($nueva);
+      inicializarSelectManoObraPresupuesto($nueva);
+      syncTituloCardPresupuesto($nueva);
+      _safeActualizarSubtotalesBloque($nueva, $nueva[0]);
+      _safeActualizarTotalesPorTarea($nueva, $nueva[0]);
+      _safeActualizarTotalGeneral();
+      marcarPresupuestoComoModificadoSilencioso();
+    })
+    .on('click.presu-agregar-material', '#contenedorPresupuestoGenerado .presu-agregar-material', async function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $btn = $(this);
+      const $card = $btn.closest('.tarea-card');
+      const $filaAlta = $btn.closest('.presu-material-add-row');
+      const $select = $filaAlta.find('.presu-material-select').first();
+      const $cantidad = $filaAlta.find('.presu-material-cantidad').first();
+      const idMaterial = parseInt($select.val(), 10) || 0;
+      const cantidad = parseNumeroPresupuesto($cantidad.val());
+
+      if (!(idMaterial > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Seleccione un material.');
+        return;
+      }
+      if (!(cantidad > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ingrese una cantidad mayor a cero.');
+        return;
+      }
+      if (materialYaExisteEnTarea($card, idMaterial)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ese material ya existe en la tarea. Para reemplazarlo, elimine la linea anterior y agregue el nuevo material.');
+        return;
+      }
+
+      const $option = $select.find('option:selected');
+      $btn.prop('disabled', true).addClass('disabled');
+      try {
+        const precioResuelto = await resolverPrecioMaterialNuevoPresupuesto(idMaterial);
+        if (!precioResuelto) return;
+
+        insertarFilaMaterialPresupuesto($card, {
+          id_ptm: null,
+          id_material: idMaterial,
+          nombre: ($option.text() || '').trim(),
+          cantidad,
+          precio_unitario: precioResuelto.precio,
+          porcentaje_extra: 0,
+          fecha_actualizacion: precioResuelto.fecha,
+          log_alta: obtenerDatoOptionMaterial($option, 'log_alta'),
+          log_edicion: precioResuelto.fecha || obtenerDatoOptionMaterial($option, 'log_edicion')
+        });
+
+        $select.val('').trigger('change');
+        $cantidad.val('1');
+      } catch (err) {
+        mostrarMensajeMaterialPresupuesto('error', err && err.message ? err.message : 'No se pudo agregar el material.');
+      } finally {
+        $btn.prop('disabled', false).removeClass('disabled');
+        actualizarEstadoAccionesPresupuestoSilencioso();
+      }
+    })
+    .on('click.presu-eliminar-material', '#contenedorPresupuestoGenerado .btn-eliminar-material-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $fila = $(this).closest('tr');
+      const $card = $fila.closest('.tarea-card');
+      const eliminar = () => {
+        $fila.remove();
+        renumerarMaterialesPresupuesto($card);
+        _safeActualizarSubtotalesBloque($card, $card[0]);
+        _safeActualizarTotalesPorTarea($card, $card[0]);
+        _safeActualizarTotalGeneral();
+        marcarPresupuestoComoModificadoSilencioso();
+      };
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Eliminar material?',
+          text: 'La baja se aplicara al guardar el presupuesto.',
+          showCancelButton: true,
+          confirmButtonText: 'Eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then((res) => { if (res.isConfirmed) eliminar(); });
+      } else if (window.confirm('Eliminar material?')) {
+        eliminar();
+      }
+    })
+    .on('click.presu-agregar-mano-obra', '#contenedorPresupuestoGenerado .presu-agregar-mano-obra', async function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $btn = $(this);
+      const $card = $btn.closest('.tarea-card');
+      const $filaAlta = $btn.closest('.presu-mano-obra-add-row');
+      const $select = $filaAlta.find('.presu-mano-obra-select').first();
+      const $operarios = $filaAlta.find('.presu-mano-obra-operarios').first();
+      const $dias = $filaAlta.find('.presu-mano-obra-dias').first();
+      const $observacion = $filaAlta.find('.presu-mano-obra-observacion').first();
+      const idJornal = parseInt($select.val(), 10) || 0;
+      const operarios = parseNumeroPresupuesto($operarios.val());
+      const dias = parseNumeroPresupuesto($dias.val());
+
+      if (!(idJornal > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Seleccione un tipo de jornal.');
+        return;
+      }
+      if (!(operarios > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ingrese operarios mayor a cero.');
+        return;
+      }
+      if (!(dias > 0)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ingrese dias mayor a cero.');
+        return;
+      }
+      if (jornalYaExisteEnTarea($card, idJornal)) {
+        mostrarMensajeMaterialPresupuesto('warning', 'Ese tipo de jornal ya existe en la tarea. Para reemplazarlo, elimine la linea anterior y agregue el nuevo jornal.');
+        return;
+      }
+
+      const $option = $select.find('option:selected');
+      $btn.prop('disabled', true).addClass('disabled');
+      try {
+        const precioResuelto = await resolverPrecioJornalNuevoPresupuesto(idJornal);
+        if (!precioResuelto) return;
+
+        insertarFilaManoObraPresupuesto($card, {
+          id_ptmo: null,
+          jornal_id: idJornal,
+          nombre: ($option.text() || '').trim(),
+          cantidad: operarios,
+          dias,
+          jornal_valor: precioResuelto.precio,
+          porcentaje_extra: 0,
+          observacion: ($observacion.val() || '').trim(),
+          fecha_actualizacion: precioResuelto.fecha
+        });
+
+        $select.val('').trigger('change');
+        $operarios.val('1');
+        $dias.val('1');
+        $observacion.val('');
+      } catch (err) {
+        mostrarMensajeMaterialPresupuesto('error', err && err.message ? err.message : 'No se pudo agregar mano de obra.');
+      } finally {
+        $btn.prop('disabled', false).removeClass('disabled');
+        actualizarEstadoAccionesPresupuestoSilencioso();
+      }
+    })
+    .on('click.presu-eliminar-mano-obra', '#contenedorPresupuestoGenerado .btn-eliminar-mano-obra-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $fila = $(this).closest('tr');
+      const $card = $fila.closest('.tarea-card');
+      const eliminar = () => {
+        $fila.remove();
+        renumerarManoObraPresupuesto($card);
+        _safeActualizarSubtotalesBloque($card, $card[0]);
+        _safeActualizarTotalesPorTarea($card, $card[0]);
+        _safeActualizarTotalGeneral();
+        marcarPresupuestoComoModificadoSilencioso();
+      };
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Eliminar mano de obra?',
+          text: 'La baja se aplicara al guardar el presupuesto.',
+          showCancelButton: true,
+          confirmButtonText: 'Eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then((res) => { if (res.isConfirmed) eliminar(); });
+      } else if (window.confirm('Eliminar mano de obra?')) {
+        eliminar();
+      }
+    })
+    .on('click.presu-eliminar-tarea', '#contenedorPresupuestoGenerado .btn-eliminar-tarea-presupuesto', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (presupuestoEdicionComercialBloqueada()) {
+        mostrarBloqueoEdicionComercialPresupuesto();
+        return;
+      }
+
+      const $card = $(this).closest('.tarea-card');
+      const confirmar = () => {
+        const key = obtenerClientKeyTareaPresupuesto($card);
+        delete window.fotosNuevasPorTarea[key];
+        delete window.fotosEliminadasPorTarea[key];
+        $card.remove();
+        renumerarTareasPresupuesto();
+        _safeActualizarTotalGeneral();
+        marcarPresupuestoComoModificadoSilencioso();
+      };
+
+      if (window.Swal && typeof Swal.fire === 'function') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Eliminar tarea?',
+          text: 'La baja se aplicara al guardar el presupuesto.',
+          showCancelButton: true,
+          confirmButtonText: 'Eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then((res) => { if (res.isConfirmed) confirmar(); });
+      } else if (window.confirm('Eliminar tarea?')) {
+        confirmar();
+      }
+    })
     .on('click.presu', '#btn-guardar-presupuesto', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -682,6 +1571,9 @@
 
   $(function () {
     initDetalleTareaRichEditors(document, { triggerInput: false });
+    inicializarSelectMaterialesPresupuesto($('#contenedorPresupuestoGenerado'));
+    inicializarSelectManoObraPresupuesto($('#contenedorPresupuestoGenerado'));
+    actualizarEstadoAccionesPresupuestoSilencioso();
   });
 
     // === Recalculo en vivo para presupuesto cargado del backend ===
@@ -1224,15 +2116,17 @@
   $(document).on('change.presu', '.presu-fotos', function (e) {
     e.stopPropagation();
     const idx = $(this).data('index');
+    const $card = $(this).closest('.tarea-card');
+    const key = obtenerClientKeyTareaPresupuesto($card);
     const files = Array.from(this.files || []);
     if (!idx || !files.length) return;
     const $preview = $('#presu_preview_' + idx);
     if (!$preview.length) return;
 
-    if (!window.fotosNuevasPorTarea[idx]) window.fotosNuevasPorTarea[idx] = [];
+    if (!window.fotosNuevasPorTarea[key]) window.fotosNuevasPorTarea[key] = [];
     files.forEach((file, i) => {
       const tempId = 'tmp_' + Date.now() + '_' + i;
-      window.fotosNuevasPorTarea[idx].push({ tempId, file });
+      window.fotosNuevasPorTarea[key].push({ tempId, file });
       const url = URL.createObjectURL(file);
       $preview.append(
         `<div class="preview-img-container position-relative d-inline-block m-1" data-temp-id="${tempId}">
@@ -1253,12 +2147,13 @@
     e.stopPropagation();
 
     const $wrap = $(this).closest('.preview-img-container');
-    const idx   = $wrap.closest('.presu-dropzone').data('index');
+    const $card = $wrap.closest('.tarea-card');
+    const key   = obtenerClientKeyTareaPresupuesto($card);
     const nombre = $wrap.data('nombre-archivo'); // existente
 
     if (nombre) {
-      if (!window.fotosEliminadasPorTarea[idx]) window.fotosEliminadasPorTarea[idx] = [];
-      window.fotosEliminadasPorTarea[idx].push(nombre);
+      if (!window.fotosEliminadasPorTarea[key]) window.fotosEliminadasPorTarea[key] = [];
+      window.fotosEliminadasPorTarea[key].push(nombre);
       $wrap.remove();
 
       marcarPresupuestoComoModificadoSilencioso();
@@ -1266,8 +2161,8 @@
     }
 
     const tempId = $wrap.data('temp-id'); // nueva
-    if (tempId && window.fotosNuevasPorTarea[idx]) {
-      window.fotosNuevasPorTarea[idx] = window.fotosNuevasPorTarea[idx].filter(x => x.tempId !== tempId);
+    if (tempId && window.fotosNuevasPorTarea[key]) {
+      window.fotosNuevasPorTarea[key] = window.fotosNuevasPorTarea[key].filter(x => x.tempId !== tempId);
       $wrap.remove();
 
       marcarPresupuestoComoModificadoSilencioso();
@@ -1277,6 +2172,9 @@
 // === Guardar tarea (VISTA) — SweetAlert con input, único para backend + visita ===
 // === Helper: serializa UNA sola tarea-card (mismos selectores que presupuestoGuardar) ===
 window._presuSerializarCard = function ($card, nro) {
+  const id_presu_tarea = obtenerIdPresuTareaCard($card);
+  const client_key = obtenerClientKeyTareaPresupuesto($card);
+
   // Descripción (prioriza textarea; si no, el título)
   const descTextarea = obtenerDetalleTareaHtml($card);
   const descTitulo   = ($card.find('.tarea-encabezado b').text() || '').replace(/^Tarea\s+\d+:\s*/i, '');
@@ -1293,13 +2191,17 @@ window._presuSerializarCard = function ($card, nro) {
     const id_material = $tr.data('material-id');
     if (!id_material) return;
 
-    const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+    const id_ptm = $tr.find('.precio-unitario').data('id-ptm') || $tr.attr('data-id-ptm') || null;
+    const orden = parseInt($tr.attr('data-orden') || $tr.data('orden') || (materiales.length + 1), 10) || (materiales.length + 1);
+    const nombre = ($tr.find('.material-nombre-presupuesto').first().text() || $tr.find('td').eq(0).text() || '').trim();
     const cantidad         = parseFloat($tr.find('.cantidad-material').val()) || 0;
     const precio_unitario  = parseFloat($tr.find('.precio-unitario').val()) || 0;
     const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
 
     materiales.push({
+      id_ptm: id_ptm ? String(id_ptm) : null,
       id_material: String(id_material),
+      orden,
       nombre,
       cantidad,
       precio_unitario,
@@ -1321,17 +2223,27 @@ window._presuSerializarCard = function ($card, nro) {
     const jornal_id = $tr.data('jornal_id');
     if (!jornal_id) return;
 
-    const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+    const id_ptmo          = $tr.find('.valor-jornal').data('id-ptmo') || $tr.attr('data-id-ptmo') || null;
+    const orden            = parseInt($tr.attr('data-orden') || $tr.data('orden') || (mano_obra.length + 1), 10) || (mano_obra.length + 1);
+    const nombre           = ($tr.find('.mano-obra-nombre-presupuesto').first().text() || $tr.find('td').eq(0).text() || '').trim();
     const cantidad         = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0;
+    const dias             = parseFloat($tr.find('.dias-mano-obra').val()) || 0;
+    const jornales         = parseFloat($tr.find('.jornales-mano-obra').val()) || 0;
     const jornal_valor     = parseFloat($tr.find('.valor-jornal').val()) || 0;
     const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+    const observacion      = ($tr.find('.observacion-mano-obra').val() || '').trim();
 
     mano_obra.push({
+      id_ptmo: id_ptmo ? String(id_ptmo) : null,
       jornal_id: String(jornal_id),
+      orden,
       nombre,
       cantidad,
+      dias,
+      jornales,
       jornal_valor,
-      porcentaje_extra
+      porcentaje_extra,
+      observacion
     });
   });
 
@@ -1342,6 +2254,8 @@ window._presuSerializarCard = function ($card, nro) {
 
   // Nota: fotos quedan fuera para tareas archivadas
   return {
+    id_presu_tarea,
+    client_key,
     nro,
     descripcion,
     incluir_en_total,
@@ -1487,20 +2401,36 @@ $(document)
   function aplicarMapeoLineasPresupuestoGuardado(mapeo) {
     if (!mapeo || typeof mapeo !== 'object') return;
 
+    // IMPORTANTE: los mappings de materiales y mano de obra ubican la card de su tarea
+    // por el mismo client_key con el que fue enviada en el request (p.ej. "tmp_...").
+    // El mapping de tareas es el único paso que muta ese client_key (a "pt_<id>").
+    // Por eso materiales/MO deben aplicarse ANTES de tocar el client_key de la tarea:
+    // si se cambia primero, el lookup de materiales/MO por el client_key original
+    // deja de encontrar la card y esas líneas quedan sin id_ptm/id_ptmo en el DOM.
     const $materialesDom = $('#contenedorPresupuestoGenerado .precio-unitario');
     (mapeo.materiales || []).forEach((item, indice) => {
       const idAnterior = item && item.id_ptm_anterior ? String(item.id_ptm_anterior) : '';
       const idNuevo = item && item.id_ptm ? String(item.id_ptm) : '';
       if (!idNuevo) return;
 
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const indiceLocal = item && item.indice !== undefined ? Number(item.indice) : indice;
+      const $scopeMateriales = key
+        ? $('#contenedorPresupuestoGenerado .tarea-card').filter(function () {
+            return String($(this).attr('data-presu-client-key') || '') === key;
+          }).first().find('.precio-unitario')
+        : $materialesDom;
+
       const $input = idAnterior
-        ? $materialesDom.filter(function () {
+        ? $scopeMateriales.filter(function () {
             return String($(this).data('id-ptm') || '') === idAnterior;
           }).first()
-        : $materialesDom.eq(indice);
+        : $scopeMateriales.eq(indiceLocal);
 
       if ($input.length) {
         $input.attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
+        $input.closest('tr').attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
+        $input.closest('tr').find('.btn-eliminar-material-presupuesto').attr('data-id-ptm', idNuevo).data('id-ptm', idNuevo);
       }
     });
 
@@ -1510,16 +2440,57 @@ $(document)
       const idNuevo = item && item.id_ptmo ? String(item.id_ptmo) : '';
       if (!idNuevo) return;
 
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const indiceLocal = item && item.indice !== undefined ? Number(item.indice) : indice;
+      const $scopeJornales = key
+        ? $('#contenedorPresupuestoGenerado .tarea-card').filter(function () {
+            return String($(this).attr('data-presu-client-key') || '') === key;
+          }).first().find('.valor-jornal')
+        : $jornalesDom;
+
       const $input = idAnterior
-        ? $jornalesDom.filter(function () {
+        ? $scopeJornales.filter(function () {
             return String($(this).data('id-ptmo') || '') === idAnterior;
           }).first()
-        : $jornalesDom.eq(indice);
+        : $scopeJornales.eq(indiceLocal);
 
       if ($input.length) {
         $input.attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
+        $input.closest('tr').attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
+        $input.closest('tr').find('.btn-eliminar-mano-obra-presupuesto').attr('data-id-ptmo', idNuevo).data('id-ptmo', idNuevo);
       }
     });
+
+    // El mapping de tareas se aplica al final: recién aquí se muta el client_key
+    // (tmp_* -> pt_<id>), una vez que materiales y mano de obra ya localizaron
+    // sus cards usando el client_key original.
+    (mapeo.tareas || []).forEach((item, indice) => {
+      const idNuevo = item && item.id_presu_tarea ? String(item.id_presu_tarea) : '';
+      if (!idNuevo) return;
+
+      const key = item && item.client_key ? String(item.client_key) : '';
+      const $cards = $('#contenedorPresupuestoGenerado .tarea-card');
+      const $card = key
+        ? $cards.filter(function () { return String($(this).attr('data-presu-client-key') || '') === key; }).first()
+        : $cards.eq(indice);
+
+      if ($card.length) {
+        setIdentidadPresuTareaCard($card, idNuevo, 'pt_' + idNuevo);
+      }
+    });
+  }
+
+  function obtenerMensajeErrorGuardarPresupuesto(err) {
+    let mensaje = err && err.responseJSON && (err.responseJSON.msg || err.responseJSON.mensaje);
+    if (!mensaje && err && err.responseText) {
+      try {
+        const respuesta = JSON.parse(err.responseText);
+        mensaje = respuesta.msg || respuesta.mensaje;
+      } catch (_) {
+        mensaje = err.responseText;
+      }
+    }
+    return mensaje || (err && err.message) || 'Error al guardar el presupuesto.';
   }
 
   window.presupuestoGuardar = async function (idPresuOpcional) {
@@ -1543,6 +2514,9 @@ $(document)
       $root.find('.tarea-card').each(function (index) {
         const $card = $(this);
         const nro = index + 1;
+        sincronizarDatosTareaPresupuesto($card, nro);
+        const id_presu_tarea = obtenerIdPresuTareaCard($card);
+        const client_key = obtenerClientKeyTareaPresupuesto($card);
   
         // descripción igual que tu versión “buena” (textarea o título)
         const descTextarea = obtenerDetalleTareaHtml($card);
@@ -1570,8 +2544,9 @@ $(document)
           const id_material = $tr.data('material-id');
           if (!id_material) return;
   
-          const id_ptm          = $tr.find('.precio-unitario').data('id-ptm') || null;
-          const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+          const id_ptm = $tr.find('.precio-unitario').data('id-ptm') || $tr.attr('data-id-ptm') || null;
+          const orden = parseInt($tr.attr('data-orden') || $tr.data('orden') || (materiales.length + 1), 10) || (materiales.length + 1);
+          const nombre = ($tr.find('.material-nombre-presupuesto').first().text() || $tr.find('td').eq(0).text() || '').trim();
           const cantidad         = parseFloat($tr.find('.cantidad-material').val()) || 0;
           const precio_unitario  = parseFloat($tr.find('.precio-unitario').val()) || 0;
           const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
@@ -1579,6 +2554,7 @@ $(document)
           materiales.push({
             id_ptm: id_ptm ? String(id_ptm) : null,
             id_material: String(id_material),
+            orden,
             nombre,
             cantidad,
             precio_unitario,
@@ -1595,31 +2571,37 @@ $(document)
           const jornal_id = $tr.data('jornal_id');
           if (!jornal_id) return;
         
-          const id_ptmo          = $tr.find('.valor-jornal').data('id-ptmo') || null;
-          const nombre           = ($tr.find('td').eq(0).text() || '').trim();
+          const id_ptmo          = $tr.find('.valor-jornal').data('id-ptmo') || $tr.attr('data-id-ptmo') || null;
+          const orden            = parseInt($tr.attr('data-orden') || $tr.data('orden') || (mano_obra.length + 1), 10) || (mano_obra.length + 1);
+          const nombre           = ($tr.find('.mano-obra-nombre-presupuesto').first().text() || $tr.find('td').eq(0).text() || '').trim();
           const cantidad         = parseFloat($tr.find('.cantidad-mano-obra').val()) || 0; // operarios
           const dias             = parseFloat($tr.find('.dias-mano-obra').val()) || 0;
           const jornales         = parseFloat($tr.find('.jornales-mano-obra').val()) || 0;
           const jornal_valor     = parseFloat($tr.find('.valor-jornal').val()) || 0;
           const porcentaje_extra = parseFloat($tr.find('.porcentaje-extra').val()) || 0;
+          const observacion      = ($tr.find('.observacion-mano-obra').val() || '').trim();
         
           mano_obra.push({
             id_ptmo: id_ptmo ? String(id_ptmo) : null,
             jornal_id: String(jornal_id),
+            orden,
             nombre,
             cantidad,        // operarios
             dias,
             jornales,
             jornal_valor,
-            porcentaje_extra
+            porcentaje_extra,
+            observacion
           });
         });
          
         // Contadores (buffers reales del dropzone actual)
-        const nuevas     = (window.fotosNuevasPorTarea && window.fotosNuevasPorTarea[nro]) ? window.fotosNuevasPorTarea[nro] : [];
-        const eliminadas = (window.fotosEliminadasPorTarea && window.fotosEliminadasPorTarea[nro]) ? window.fotosEliminadasPorTarea[nro] : [];
+        const nuevas     = (window.fotosNuevasPorTarea && window.fotosNuevasPorTarea[client_key]) ? window.fotosNuevasPorTarea[client_key] : [];
+        const eliminadas = (window.fotosEliminadasPorTarea && window.fotosEliminadasPorTarea[client_key]) ? window.fotosEliminadasPorTarea[client_key] : [];
   
         tareas.push({
+          id_presu_tarea,
+          client_key,
           nro,
           descripcion,
           incluir_en_total,
@@ -1691,6 +2673,7 @@ $(document)
         window.fotosEliminadasPorTarea = {};
 
         aplicarMapeoLineasPresupuestoGuardado(resp.lineas || null);
+        renumerarTareasPresupuesto();
 
         window.presupuestoDirty = false;
         actualizarEstadoAccionesPresupuestoSilencioso();
@@ -1705,9 +2688,10 @@ $(document)
       }
   
     } catch (err) {
-      console.error('Error al guardar presupuesto (unificado):', err);
-      if (typeof mostrarError === 'function') mostrarError('Error al guardar el presupuesto.');
-      else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: 'Error al guardar el presupuesto.' });
+      const mensaje = obtenerMensajeErrorGuardarPresupuesto(err);
+      console.error('Error al guardar presupuesto (unificado):', mensaje, err);
+      if (typeof mostrarError === 'function') mostrarError(mensaje);
+      else if (window.Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Error', text: mensaje });
     } finally {
       actualizarEstadoAccionesPresupuestoSilencioso();
     }
@@ -1880,6 +2864,18 @@ $(document)
     $tbody.empty().append(
       `<tr><td colspan="4" class="text-muted">Cargando templados…</td></tr>`
     );
+
+    // El modal se abre programaticamente (no via data-toggle), por lo que
+    // Bootstrap 4 no captura un relatedTarget y no devuelve el foco al
+    // cerrarse. Se guarda el disparador y se restaura manualmente.
+    window.__disparadorModalTraerTarea = this;
+    $modal.off('hidden.bs.modal.presu-traer-tarea')
+      .on('hidden.bs.modal.presu-traer-tarea', function () {
+        if (window.__disparadorModalTraerTarea) {
+          $(window.__disparadorModalTraerTarea).trigger('focus');
+        }
+      });
+
     $modal.modal('show');
 
     // Disparo inicial sin filtro
@@ -1995,13 +2991,22 @@ function obtenerYAplicarPlantilla(id_arch_tarea, $card) {
       id_arch_tarea
     }
   })
-  .done(function (resp) {
+  .done(async function (resp) {
     if (!resp || !resp.ok || !resp.tarea) {
       console.error('obtener_tarea_archivada → respuesta no OK:', resp);
       if (window.mostrarError) mostrarError('No se pudo obtener la plantilla.');
       return;
     }
-    aplicarPlantillaEnCard(resp.tarea, $card);
+    try {
+      const aplicada = await aplicarPlantillaEnCard(resp.tarea, $card);
+      if (!aplicada && window.mostrarAdvertencia) {
+        mostrarAdvertencia('Se cancelo la importacion. La tarea original no fue modificada.');
+      }
+    } catch (err) {
+      const mensaje = err && err.message ? err.message : 'No se pudo preparar la plantilla con los precios actuales.';
+      console.error('aplicarPlantillaEnCard → error:', mensaje, err);
+      if (window.mostrarError) mostrarError(mensaje);
+    }
   })
   .fail(function (xhr) {
     console.error('obtener_tarea_archivada → error:', xhr.responseText || xhr.statusText);
@@ -2009,9 +3014,65 @@ function obtenerYAplicarPlantilla(id_arch_tarea, $card) {
   });
 }
 
-// === Helper: aplica materiales + MO + utilidades/otros en la card destino ===
-function aplicarPlantillaEnCard(tareaPlantilla, $card) {
-  if (!$card || !$card.length) return;
+function validarDuplicadosPlantilla(items, campoId, etiqueta) {
+  const encontrados = new Set();
+  (items || []).forEach((item) => {
+    const id = parseInt(item && item[campoId], 10) || 0;
+    if (!(id > 0)) {
+      throw new Error(`La plantilla contiene ${etiqueta} sin identificador de catalogo.`);
+    }
+    if (encontrados.has(id)) {
+      throw new Error(`La plantilla contiene ${etiqueta} duplicados.`);
+    }
+    encontrados.add(id);
+  });
+}
+
+async function prepararPlantillaConCatalogosActuales(tareaPlantilla) {
+  const materialesOrigen = Array.isArray(tareaPlantilla.materiales) ? tareaPlantilla.materiales : [];
+  const manoObraOrigen = Array.isArray(tareaPlantilla.mano_obra) ? tareaPlantilla.mano_obra : [];
+
+  validarDuplicadosPlantilla(materialesOrigen, 'id_material', 'materiales');
+  validarDuplicadosPlantilla(manoObraOrigen, 'jornal_id', 'tipos de jornal');
+
+  const materiales = [];
+  for (let indice = 0; indice < materialesOrigen.length; indice += 1) {
+    const material = materialesOrigen[indice];
+    const precioResuelto = await window.resolverPrecioMaterialNuevoPresupuesto(material.id_material);
+    if (!precioResuelto) return null;
+    materiales.push({
+      ...material,
+      id_ptm: null,
+      orden: material.orden || (indice + 1),
+      precio_unitario: precioResuelto.precio,
+      fecha_actualizacion: precioResuelto.fecha
+    });
+  }
+
+  const manoObra = [];
+  for (let indice = 0; indice < manoObraOrigen.length; indice += 1) {
+    const jornal = manoObraOrigen[indice];
+    const precioResuelto = await window.resolverPrecioJornalNuevoPresupuesto(jornal.jornal_id);
+    if (!precioResuelto) return null;
+    manoObra.push({
+      ...jornal,
+      id_ptmo: null,
+      orden: jornal.orden || (indice + 1),
+      jornal_valor: precioResuelto.precio,
+      fecha_actualizacion: precioResuelto.fecha
+    });
+  }
+
+  return { ...tareaPlantilla, materiales, mano_obra: manoObra };
+}
+
+// === Helper: resuelve catalogos y aplica materiales + MO + utilidades/otros ===
+async function aplicarPlantillaEnCard(tareaPlantilla, $card) {
+  if (!$card || !$card.length) return false;
+
+  const tareaPreparada = await prepararPlantillaConCatalogosActuales(tareaPlantilla);
+  if (!tareaPreparada) return false;
+  tareaPlantilla = tareaPreparada;
 
   // 0) Título de la tarea = nombre de la plantilla
   const $titulo = $card.find('.tarea-encabezado b');
@@ -2062,31 +3123,19 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   const $matSubtotal = $tbMat.find('tr.fila-subtotal').first().detach();
   $tbMat.empty();
 
-  (tareaPlantilla.materiales || []).forEach(m => {
-    const idMat = (m.id_material != null ? m.id_material : '');
-    const nombre = (m.nombre || '');
-    const cantidad = (m.cantidad != null ? m.cantidad : 0);
-    const precio = (m.precio_unitario != null ? m.precio_unitario : 0);
-    const extra = (m.porcentaje_extra != null ? m.porcentaje_extra : 0);
-
-    const row = `
-      <tr data-material-id="${idMat}">
-        <td>${nombre}</td>
-        <td>
-          <input type="number" class="form-control form-control-sm cantidad-material"
-                 value="${cantidad}" min="0" step="any">
-        </td>
-        <td>
-          <input type="number" class="form-control form-control-sm precio-unitario bg-success"
-                 value="${precio}" min="0" step="any" readonly>
-        </td>
-        <td>
-          <input type="number" class="form-control form-control-sm porcentaje-extra"
-                 value="${extra}" min="0" step="any">
-        </td>
-        <td class="text-right subtotal-material"></td>
-      </tr>`;
-    $tbMat.append(row);
+  (tareaPlantilla.materiales || []).forEach((m, indice) => {
+    window.insertarFilaMaterialPresupuesto($card, {
+      id_ptm: null,
+      id_material: (m.id_material != null ? m.id_material : ''),
+      orden: m.orden || (indice + 1),
+      nombre: (m.nombre || ''),
+      cantidad: (m.cantidad != null ? m.cantidad : 0),
+      precio_unitario: m.precio_unitario,
+      porcentaje_extra: (m.porcentaje_extra != null ? m.porcentaje_extra : 0),
+      fecha_actualizacion: m.fecha_actualizacion || m.log_edicion || m.log_alta || '',
+      log_alta: m.log_alta || '',
+      log_edicion: m.log_edicion || ''
+    });
   });
 
   if ($matOtros && $matOtros.length) $tbMat.append($matOtros);
@@ -2100,57 +3149,19 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   const $moSubtotal = $tbMo.find('tr.fila-subtotal').first().detach();
   $tbMo.empty();
 
-  (tareaPlantilla.mano_obra || []).forEach(o => {
-    const jornalId = (o.jornal_id != null ? o.jornal_id : '');
-    const nombre = (o.nombre || '');
-
-    // En plantillas puede venir "cantidad" (operarios) y "dias"
-    const operarios = (o.cantidad != null ? o.cantidad : 0);
-    const dias = (o.dias != null ? o.dias : 1);
-    const valor = (o.jornal_valor != null ? o.jornal_valor : 0);
-    const extra = (o.porcentaje_extra != null ? o.porcentaje_extra : 0);
-
-    // Jornales = operarios * dias (readonly, como visita)
-    const jornales = (parseFloat(operarios) || 0) * (parseFloat(dias) || 0);
-
-    const row = `
-      <tr data-jornal_id="${jornalId}">
-        <td>${nombre}</td>
-
-        <!-- Operarios -->
-        <td>
-          <input type="number" class="form-control form-control-sm cantidad-mano-obra"
-                 value="${operarios}" min="0" step="any">
-        </td>
-
-        <!-- Días -->
-        <td>
-          <input type="number" class="form-control form-control-sm dias-mano-obra"
-                 value="${dias}" min="0" step="any">
-        </td>
-
-        <!-- Jornales (Operarios × Días) -->
-        <td>
-          <input type="number" class="form-control form-control-sm jornales-mano-obra"
-                 value="${jornales}" min="0" step="any" readonly>
-        </td>
-
-        <!-- Valor Jornal -->
-        <td>
-          <input type="number" class="form-control form-control-sm valor-jornal bg-success"
-                 value="${valor}" min="0" step="any" readonly>
-        </td>
-
-        <!-- % Extra -->
-        <td>
-          <input type="number" class="form-control form-control-sm porcentaje-extra"
-                 value="${extra}" min="0" step="any">
-        </td>
-
-        <!-- Subtotal -->
-        <td class="text-right subtotal-mano"></td>
-      </tr>`;
-    $tbMo.append(row);
+  (tareaPlantilla.mano_obra || []).forEach((o, indice) => {
+    window.insertarFilaManoObraPresupuesto($card, {
+      id_ptmo: null,
+      jornal_id: (o.jornal_id != null ? o.jornal_id : ''),
+      orden: o.orden || (indice + 1),
+      nombre: (o.nombre || o.nombre_jornal || ''),
+      cantidad: (o.cantidad != null ? o.cantidad : 0),
+      dias: (o.dias != null ? o.dias : 1),
+      jornal_valor: o.jornal_valor,
+      porcentaje_extra: (o.porcentaje_extra != null ? o.porcentaje_extra : 0),
+      observacion: (o.observacion != null ? o.observacion : ''),
+      fecha_actualizacion: o.fecha_actualizacion || o.updated_at_origen || o.updated_at || ''
+    });
   });
 
   if ($moOtros && $moOtros.length) $tbMo.append($moOtros);
@@ -2179,6 +3190,7 @@ function aplicarPlantillaEnCard(tareaPlantilla, $card) {
   if (window.mostrarExito) {
     mostrarExito('Plantilla aplicada a la tarea.');
   }
+  return true;
 }
 
 

@@ -199,7 +199,7 @@ function guardarTareaArchivada(array $payload)
                 VALUES
                     (?,?,?,
                      ?,?,?,
-                     ?,NULL,?,
+                     ?,?,?,
                      NULL, NOW(), NOW())";
             $stmtO = $db->prepare($sqlMo);
             if (!$stmtO) {
@@ -210,15 +210,27 @@ function guardarTareaArchivada(array $payload)
                 $idJ     = array_key_exists('jornal_id', $o) && $o['jornal_id'] !== null ? (int)$o['jornal_id'] : null;
                 $nombre  = trim((string)($o['nombre'] ?? ''));
                 $cant    = (float)($o['cantidad'] ?? 0);
-                $dias    = 1; // no lo traemos desde UI; default 1
+                // El payload de _presuSerializarCard() sí incluye 'dias' (lee .dias-mano-obra);
+                // se preserva el valor real y sólo se cae a 1 si viene ausente o inválido.
+                $dias    = isset($o['dias']) ? (int)$o['dias'] : 0;
+                if ($dias <= 0) {
+                    $dias = 1;
+                }
                 $valor   = (float)($o['jornal_valor'] ?? 0);
                 $extra   = (float)($o['porcentaje_extra'] ?? 0);
+                $observacion = trim((string)($o['observacion'] ?? ''));
+                if (function_exists('mb_substr')) {
+                    $observacion = mb_substr($observacion, 0, 255);
+                } else {
+                    $observacion = substr($observacion, 0, 255);
+                }
+                $observacion = $observacion !== '' ? $observacion : null;
 
                 $subtotal = round($cant * $valor * (1 + $extra / 100), 2);
 
-                // tipos: i i s d i d d d
+                // tipos: i i s d i d d s d
                 $stmtO->bind_param(
-                    'iisdiddd',
+                    'iisdiddsd',
                     $idArchTarea,
                     $idJ,
                     $nombre,
@@ -226,6 +238,7 @@ function guardarTareaArchivada(array $payload)
                     $dias,
                     $valor,
                     $extra,
+                    $observacion,
                     $subtotal
                 );
                 if (!$stmtO->execute()) {

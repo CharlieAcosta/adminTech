@@ -4,25 +4,86 @@ session_start();
 //  guardar_visita.php
 // —————————————————————————————
 
-file_put_contents('../log/log_fotos.txt', print_r($_FILES, true)); // log inicial
 ob_start();
-file_put_contents('../log/log_fotos.txt', "--- NUEVO INGRESO ---\n", FILE_APPEND);
-file_put_contents('../log/log_fotos.txt', "🟠 _POST:\n" . print_r($_POST, true), FILE_APPEND);
-file_put_contents('../log/log_fotos.txt', "🔵 _FILES:\n" . print_r($_FILES, true), FILE_APPEND);
 
 include_once '../06-funciones_php/funciones.php';
 include_once '../04-modelo/conectDB.php';
 include_once '../04-modelo/presupuestoComercialLockModel.php';
 include_once '../04-modelo/previsitaWorkflowModel.php';
-$db = conectDB();
-if (!$db) {
-    ob_end_clean();
-    echo json_encode(['status' => false, 'mensaje' => 'Fallo al conectar con la base de datos.']);
-    exit;
-}
+include_once '../04-modelo/visitaPresupuestoEventoModel.php';
 
 header('Content-Type: application/json; charset=utf-8');
 $response = ['status' => false, 'mensaje' => 'No se pudo procesar la solicitud.'];
+
+function responderGuardarVisita(array $payload, int $httpStatus = 200): void {
+    http_response_code($httpStatus);
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/**
+ * Validacion defensiva del payload de tareas ANTES de escribir en la base.
+ * H-P19-01: el guardado no debe iniciar ningun DELETE/INSERT si el payload
+ * trae una tarea, material o mano de obra malformados (indices ausentes,
+ * ids invalidos, tipos inesperados). Devuelve null si el payload es valido,
+ * o un mensaje descriptivo del primer problema encontrado.
+ */
+function validarPayloadTareasGuardarVisita($tareas): ?string {
+    if (!is_array($tareas)) {
+        return 'El listado de tareas es invalido.';
+    }
+
+    foreach ($tareas as $i => $tarea) {
+        if (!is_array($tarea)) {
+            return "La tarea en la posicion {$i} es invalida.";
+        }
+        if (!array_key_exists('descripcion', $tarea) || !is_string($tarea['descripcion'])) {
+            return "La tarea en la posicion {$i} no tiene una descripcion valida.";
+        }
+
+        if (isset($tarea['materiales'])) {
+            if (!is_array($tarea['materiales'])) {
+                return "Los materiales de la tarea en la posicion {$i} son invalidos.";
+            }
+            foreach ($tarea['materiales'] as $j => $mat) {
+                if (!is_array($mat) || !isset($mat['id']) || !is_numeric($mat['id']) || (int)$mat['id'] <= 0) {
+                    return "El material en la posicion {$j} de la tarea {$i} tiene un identificador invalido.";
+                }
+                if (!isset($mat['cantidad']) || !is_numeric($mat['cantidad']) || (float)$mat['cantidad'] < 0) {
+                    return "El material en la posicion {$j} de la tarea {$i} tiene una cantidad invalida.";
+                }
+            }
+        }
+
+        if (isset($tarea['mano_obra'])) {
+            if (!is_array($tarea['mano_obra'])) {
+                return "La mano de obra de la tarea en la posicion {$i} es invalida.";
+            }
+            foreach ($tarea['mano_obra'] as $j => $mo) {
+                if (!is_array($mo) || !isset($mo['id']) || !is_numeric($mo['id']) || (int)$mo['id'] <= 0) {
+                    return "La mano de obra en la posicion {$j} de la tarea {$i} tiene un identificador invalido.";
+                }
+                if (!isset($mo['cantidad']) || !is_numeric($mo['cantidad']) || (float)$mo['cantidad'] < 0) {
+                    return "La mano de obra en la posicion {$j} de la tarea {$i} tiene una cantidad invalida.";
+                }
+                if (isset($mo['dias']) && (!is_numeric($mo['dias']) || (float)$mo['dias'] < 0)) {
+                    return "La mano de obra en la posicion {$j} de la tarea {$i} tiene dias invalidos.";
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function registrarPayloadValidadoGuardarVisita(): void {
+    file_put_contents('../log/log_fotos.txt', "--- NUEVO INGRESO VALIDADO ---\n", FILE_APPEND);
+    file_put_contents('../log/log_fotos.txt', "POST:\n" . print_r($_POST, true), FILE_APPEND);
+    file_put_contents('../log/log_fotos.txt', "FILES:\n" . print_r($_FILES, true), FILE_APPEND);
+}
 
 /**
  * Elimina todas las fotos (DB + físicas) de una tarea dada.
@@ -56,36 +117,76 @@ function eliminarFotosDeTarea($db, $tareaId) {
     mysqli_stmt_close($stmt2);
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Metodo no permitido.'], 405);
+}
+
+$idUsuarioSesion = isset($_SESSION['usuario']['id_usuario']) ? intval($_SESSION['usuario']['id_usuario']) : 0;
+if ($idUsuarioSesion <= 0) {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Sesion no valida.'], 401);
+}
+
 // Acepta tanto 'id_visita' como 'id_previsita'
 if (isset($_POST['id_visita'])) {
     $id_visita = intval($_POST['id_visita']);
 } elseif (isset($_POST['id_previsita'])) {
     $id_visita = intval($_POST['id_previsita']);
 } else {
-    echo json_encode(['status' => false, 'mensaje' => 'ID de visita no recibido.']);
-    exit;
+    responderGuardarVisita(['status' => false, 'mensaje' => 'ID de visita no recibido.'], 400);
+}
+
+if ($id_visita <= 0) {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'ID de visita invalido.'], 400);
+}
+
+$db = conectDB();
+if (!$db) {
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Fallo al conectar con la base de datos.'], 500);
+}
+mysqli_set_charset($db, 'utf8mb4');
+
+$estadoWorkflowPrevisita = obtenerEstadoWorkflowPrevisitaPorIdEnConexion($db, (int)$id_visita);
+if ($estadoWorkflowPrevisita === '') {
+    mysqli_close($db);
+    responderGuardarVisita(['status' => false, 'mensaje' => 'Pre-visita no encontrada.'], 404);
+}
+
+if (visitaEstaCongeladaPorPresupuestoEnConexion($db, (int)$id_visita)) {
+    mysqli_close($db);
+    responderGuardarVisita([
+        'status' => false,
+        'mensaje' => 'La visita quedo cerrada al generar el presupuesto y ya no admite modificaciones.',
+    ], 409);
+}
+
+if (!estadoHabilitaVisitaWorkflowPrevisita($estadoWorkflowPrevisita)) {
+    mysqli_close($db);
+    responderGuardarVisita([
+        'status' => false,
+        'mensaje' => 'La Pre-visita no esta en estado Ejecutada y no admite guardar Visita.',
+    ], 409);
 }
 
 $bloqueoEdicion = obtenerBloqueoEdicionComercialPresupuestoPorPrevisita((int)$id_visita);
 if (!empty($bloqueoEdicion['bloqueado'])) {
-    echo json_encode([
+    mysqli_close($db);
+    responderGuardarVisita([
         'status' => false,
         'mensaje' => $bloqueoEdicion['mensaje'] ?: mensajeBloqueoEdicionComercialPresupuesto($bloqueoEdicion['estado'] ?? ''),
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+    ], 409);
 }
 
-$bloqueoWorkflowPrevisita = obtenerBloqueoWorkflowPrevisitaPorId((int)$id_visita);
-if (!empty($bloqueoWorkflowPrevisita['bloquea_avance'])) {
-    echo json_encode([
-        'status' => false,
-        'mensaje' => $bloqueoWorkflowPrevisita['mensaje'] ?: mensajeBloqueoWorkflowPrevisita($bloqueoWorkflowPrevisita['estado'] ?? ''),
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+registrarPayloadValidadoGuardarVisita();
+
+$tareasPost = $_POST['tareas'] ?? [];
+$errorPayload = validarPayloadTareasGuardarVisita($tareasPost);
+if ($errorPayload !== null) {
+    mysqli_close($db);
+    responderGuardarVisita(['status' => false, 'mensaje' => $errorPayload], 400);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $tareas = $_POST['tareas'] ?? [];
+    $tareas = $tareasPost;
     $tieneOrdenMaterialesVisita = columna_existe($db, 'visita_tarea_material', 'orden');
     $tieneOrdenManoObraVisita = columna_existe($db, 'visita_tarea_mano_obra', 'orden');
 

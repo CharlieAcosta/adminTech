@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/schemaIntrospectionModel.php';
 require_once __DIR__ . '/pedidoMaterialesAutorizacionesModel.php';
+require_once __DIR__ . '/pedidoMaterialesCantidadesModel.php';
 
 if (!function_exists('pedidoMaterialesSnapshotTablasMinimasDisponibles')) {
     function pedidoMaterialesSnapshotTablasMinimasDisponibles(mysqli $db): bool
@@ -232,6 +233,21 @@ if (!function_exists('obtenerPedidoMaterialesSnapshotPorPrevisitaEnConexion')) {
                     : null,
                 'orden_visual' => (int)($row['orden_visual'] ?? 0),
             ];
+
+            // P111: la unidad de venta NO se persiste en el detalle del
+            // snapshot (evita duplicar un dato que puede cambiar de fuente);
+            // se resuelve en lectura con la MISMA funcion que valida el
+            // backend, para que el frontend pueda clasificar entero/decimal
+            // sin reimplementar la regla ni depender de materiales_visita.
+            $unidadVentaDetalle = obtenerUnidadVentaMaterialPedidoEnConexion(
+                $db,
+                $idPrevisita,
+                $detalle['tipo_fila'],
+                $detalle['id_material'],
+                $detalle['tarea_nro']
+            );
+            $detalle['unidad_venta'] = $unidadVentaDetalle ?? '';
+            $detalle['admite_decimales'] = unidadVentaPedidoMaterialesAdmiteDecimales($unidadVentaDetalle);
 
             if ($detalle['tipo_fila'] === 'agregado') {
                 $headerNormalizado['materiales_agregados'][] = $detalle;
