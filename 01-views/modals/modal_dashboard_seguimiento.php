@@ -27,26 +27,28 @@
 
       <div class="modal-body" id="modalDashboardSeguimientoBody">
         <!--
-          DATOS DE DEMOSTRACIÓN - PANEL DE ANALÍTICA
-          Eliminar/reemplazar cuando se implemente backend real.
+          PANEL DE ANALITICA - V1 DE INTEGRACION REAL
+          DATO REAL: se completa por AJAX (obtenerDashboardSeguimiento).
+          DATO DEMO: Estado actual, KPI Materiales solicitados y Duracion del circuito.
         -->
+        <div id="dashboardSeguimientoEstadoCarga" class="text-muted small mb-2 d-none"></div>
         <div class="card card-outline card-secondary mb-3">
           <div class="card-body py-2">
             <div class="row">
               <div class="col-12 col-md-3 mb-2 mb-md-0">
-                <span class="text-muted d-block small text-uppercase">Cliente</span>
-                <span class="font-weight-bold" data-dashboard-field="cliente">Industrias del Plata S.A.</span>
+                <span class="text-muted d-block small text-uppercase">Cliente <span class="badge badge-success ml-1">DATO REAL</span></span>
+                <span class="font-weight-bold" data-dashboard-field="cliente">-</span>
               </div>
               <div class="col-12 col-md-3 mb-2 mb-md-0">
-                <span class="text-muted d-block small text-uppercase">CUIT</span>
-                <span class="font-weight-bold" data-dashboard-field="cuit">30-71234567-8</span>
+                <span class="text-muted d-block small text-uppercase">CUIT <span class="badge badge-success ml-1">DATO REAL</span></span>
+                <span class="font-weight-bold" data-dashboard-field="cuit">-</span>
               </div>
               <div class="col-12 col-md-3 mb-2 mb-md-0">
-                <span class="text-muted d-block small text-uppercase">Presupuesto</span>
-                <span class="font-weight-bold" data-dashboard-field="presupuesto">P-2026-0148</span>
+                <span class="text-muted d-block small text-uppercase">Presupuesto <span class="badge badge-success ml-1">DATO REAL</span></span>
+                <span class="font-weight-bold" data-dashboard-field="presupuesto">-</span>
               </div>
               <div class="col-12 col-md-3">
-                <span class="text-muted d-block small text-uppercase">Estado actual</span>
+                <span class="text-muted d-block small text-uppercase">Estado actual <span class="badge badge-warning ml-1">DATO DEMO</span></span>
                 <span class="badge badge-info" data-dashboard-field="estado_actual">En ejecuci&oacute;n</span>
               </div>
             </div>
@@ -58,8 +60,8 @@
             <div class="info-box">
               <span class="info-box-icon bg-info elevation-1"><i class="fas fa-calendar-alt"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Inicio</span>
-                <span class="info-box-number" data-dashboard-kpi="inicio">12/06/2026</span>
+                <span class="info-box-text">Inicio del circuito <span class="badge badge-success ml-1">DATO REAL</span></span>
+                <span class="info-box-number" data-dashboard-kpi="inicio">-</span>
               </div>
             </div>
           </div>
@@ -68,8 +70,8 @@
             <div class="info-box">
               <span class="info-box-icon bg-success elevation-1"><i class="fas fa-clock"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">D&iacute;as transcurridos</span>
-                <span class="info-box-number" data-dashboard-kpi="dias_transcurridos">76 d&iacute;as</span>
+                <span class="info-box-text">D&iacute;as transcurridos <span class="badge badge-success ml-1">DATO REAL</span></span>
+                <span class="info-box-number" data-dashboard-kpi="dias_transcurridos">-</span>
               </div>
             </div>
           </div>
@@ -78,8 +80,8 @@
             <div class="info-box">
               <span class="info-box-icon bg-warning elevation-1"><i class="fas fa-dollar-sign"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Monto presupuestado</span>
-                <span class="info-box-number" data-dashboard-kpi="monto_presupuestado">$ 18.450.000</span>
+                <span class="info-box-text">Monto presupuestado <span class="badge badge-success ml-1">DATO REAL</span></span>
+                <span class="info-box-number" data-dashboard-kpi="monto_presupuestado">-</span>
               </div>
             </div>
           </div>
@@ -88,18 +90,23 @@
             <div class="info-box">
               <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-dolly-flatbed"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Materiales solicitados</span>
+                <span class="info-box-text">Materiales solicitados <span class="badge badge-warning ml-1">DATO DEMO</span></span>
                 <span class="info-box-number" data-dashboard-kpi="materiales_solicitados">82%</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="card card-outline card-primary mb-3">
+        <div class="card card-outline card-primary mb-3 collapsed-card dashboard-seguimiento-card">
           <div class="card-header py-2">
             <h5 class="card-title mb-0">
-              <i class="fas fa-tasks mr-2"></i>Duraci&oacute;n del circuito
+              <i class="fas fa-tasks mr-2"></i>Duraci&oacute;n del circuito <span class="badge badge-warning ml-1">DATO DEMO</span>
             </h5>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse" aria-label="Expandir o contraer">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
           </div>
           <div class="card-body p-2">
             <div class="table-responsive">
@@ -162,11 +169,16 @@
           </div>
         </div>
 
-        <div class="card card-outline card-info mb-3">
+        <div class="card card-outline card-info mb-3 collapsed-card dashboard-seguimiento-card">
           <div class="card-header py-2">
             <h5 class="card-title mb-0">
-              <i class="fas fa-dolly-flatbed mr-2"></i>Materiales
+              <i class="fas fa-dolly-flatbed mr-2"></i>Materiales <span class="badge badge-success ml-1">DATO REAL</span>
             </h5>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse" aria-label="Expandir o contraer">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
           </div>
           <div class="card-body p-2">
             <div class="table-responsive">
@@ -182,57 +194,23 @@
                   </tr>
                 </thead>
                 <tbody id="dashboardSeguimientoMaterialesBody">
-                  <tr>
-                    <td>Chapa galvanizada</td>
-                    <td class="text-right">1.200 m&sup2;</td>
-                    <td class="text-right">980 m&sup2;</td>
-                    <td class="text-right">220 m&sup2;</td>
-                    <td class="text-center">82%</td>
-                    <td class="text-center"><span class="badge badge-success">Dentro de presupuesto</span></td>
-                  </tr>
-                  <tr>
-                    <td>Membrana aislante</td>
-                    <td class="text-right">850 m&sup2;</td>
-                    <td class="text-right">720 m&sup2;</td>
-                    <td class="text-right">130 m&sup2;</td>
-                    <td class="text-center">85%</td>
-                    <td class="text-center"><span class="badge badge-success">Dentro de presupuesto</span></td>
-                  </tr>
-                  <tr>
-                    <td>Tornillos autoperforantes</td>
-                    <td class="text-right">4.500 un.</td>
-                    <td class="text-right">4.200 un.</td>
-                    <td class="text-right">300 un.</td>
-                    <td class="text-center">93%</td>
-                    <td class="text-center"><span class="badge badge-warning">Pr&oacute;ximo al l&iacute;mite</span></td>
-                  </tr>
-                  <tr>
-                    <td>Perfil galvanizado</td>
-                    <td class="text-right">600 ml</td>
-                    <td class="text-right">630 ml</td>
-                    <td class="text-right">-30 ml</td>
-                    <td class="text-center">105%</td>
-                    <td class="text-center"><span class="badge badge-danger">Excedido</span></td>
-                  </tr>
-                  <tr>
-                    <td>Sellador poliuret&aacute;nico</td>
-                    <td class="text-right">0</td>
-                    <td class="text-right">35 un.</td>
-                    <td class="text-right">-</td>
-                    <td class="text-center">N/A</td>
-                    <td class="text-center"><span class="badge badge-secondary">Adicional</span></td>
-                  </tr>
+                  <tr><td colspan="6" class="text-center text-muted">Cargando datos...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        <div class="card card-outline card-info mb-3">
+        <div class="card card-outline card-info mb-3 collapsed-card dashboard-seguimiento-card">
           <div class="card-header py-2">
             <h5 class="card-title mb-0">
-              <i class="fas fa-users mr-2"></i>Jornales
+              <i class="fas fa-users mr-2"></i>Jornales <span class="badge badge-success ml-1">DATO REAL</span>
             </h5>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse" aria-label="Expandir o contraer">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
           </div>
           <div class="card-body p-2">
             <div class="table-responsive">
@@ -240,67 +218,37 @@
                 <thead class="thead-light">
                   <tr>
                     <th>Jornal</th>
-                    <th class="text-center">Presupuestado</th>
-                    <th class="text-center">Utilizado</th>
-                    <th class="text-center">Diferencia</th>
-                    <th class="text-center">%</th>
-                    <th class="text-center">Estado</th>
+                    <th class="text-center">Personas</th>
+                    <th class="text-center">D&iacute;as</th>
+                    <th class="text-center">Jornales presupuestados</th>
                   </tr>
                 </thead>
                 <tbody id="dashboardSeguimientoJornalesBody">
-                  <tr>
-                    <td>Oficial techista</td>
-                    <td class="text-right">320 hs</td>
-                    <td class="text-right">245 hs</td>
-                    <td class="text-right">75 hs</td>
-                    <td class="text-center">77%</td>
-                    <td class="text-center"><span class="badge badge-success">Dentro de presupuesto</span></td>
-                  </tr>
-                  <tr>
-                    <td>Medio oficial</td>
-                    <td class="text-right">240 hs</td>
-                    <td class="text-right">210 hs</td>
-                    <td class="text-right">30 hs</td>
-                    <td class="text-center">88%</td>
-                    <td class="text-center"><span class="badge badge-success">Dentro de presupuesto</span></td>
-                  </tr>
-                  <tr>
-                    <td>Ayudante</td>
-                    <td class="text-right">360 hs</td>
-                    <td class="text-right">345 hs</td>
-                    <td class="text-right">15 hs</td>
-                    <td class="text-center">96%</td>
-                    <td class="text-center"><span class="badge badge-warning">Pr&oacute;ximo al l&iacute;mite</span></td>
-                  </tr>
-                  <tr>
-                    <td>Supervisor</td>
-                    <td class="text-right">80 hs</td>
-                    <td class="text-right">86 hs</td>
-                    <td class="text-right">-6 hs</td>
-                    <td class="text-center">108%</td>
-                    <td class="text-center"><span class="badge badge-danger">Excedido</span></td>
-                  </tr>
+                  <tr><td colspan="4" class="text-center text-muted">Cargando datos...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        <div class="card card-outline card-warning mb-0">
+        <div class="card card-outline card-warning mb-0 collapsed-card dashboard-seguimiento-card">
           <div class="card-header py-2">
             <h5 class="card-title mb-0">
-              <i class="fas fa-clipboard-check mr-2"></i>Adicionales / autorizaciones
+              <i class="fas fa-clipboard-check mr-2"></i>Adicionales / autorizaciones <span class="badge badge-success ml-1">DATO REAL</span>
             </h5>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse" aria-label="Expandir o contraer">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
           </div>
           <div class="card-body py-2">
             <div id="dashboardSeguimientoAutorizacionesBody" class="d-flex flex-wrap align-items-center">
-              <span class="mr-4 my-1"><span class="badge badge-warning mr-1">2</span> solicitudes pendientes</span>
-              <span class="mr-4 my-1"><span class="badge badge-success mr-1">1</span> material adicional autorizado</span>
-              <span class="my-1"><span class="badge badge-danger mr-1">1</span> solicitud rechazada</span>
+              <span class="text-muted">Cargando datos...</span>
             </div>
           </div>
         </div>
-        <!-- FIN DATOS DE DEMOSTRACION - PANEL DE ANALITICA -->
+        <!-- FIN PANEL DE ANALITICA -->
       </div>
 
       <div class="modal-footer">

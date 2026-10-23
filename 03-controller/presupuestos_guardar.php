@@ -12,6 +12,7 @@ require_once $BASE . '/../04-modelo/presupuestoIntervencionesModel.php';
 require_once $BASE . '/../04-modelo/presupuestoComercialLockModel.php';
 require_once $BASE . '/../04-modelo/previsitaWorkflowModel.php';
 require_once $BASE . '/../04-modelo/ordenCompraWorkflowModel.php';
+require_once $BASE . '/../04-modelo/seguimientoDashboardModel.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -798,6 +799,35 @@ try {
                     'total' => count($items),
                 ], JSON_UNESCAPED_UNICODE);
                 exit;
+
+            case 'obtenerDashboardSeguimiento':
+                // Panel de analitica (solo lectura). Acceso temporal: Administrador o superior.
+                $idUsuarioDashboard = (int)($_SESSION['usuario']['id_usuario'] ?? 0);
+                $perfilDashboard = obtenerPerfilUsuarioSolicitudPresupuesto();
+                if ($idUsuarioDashboard <= 0 || $perfilDashboard === '') {
+                    responderJsonPresupuesto(['ok' => false, 'msg' => 'No hay sesion de usuario activa.'], 401);
+                }
+                if (!perfilPuedeVerPanelAnaliticaSeguimiento($perfilDashboard)) {
+                    responderJsonPresupuesto(['ok' => false, 'msg' => 'El perfil no tiene permiso para consultar el Panel.'], 403);
+                }
+
+                $idPrevisitaDashboard = leerEnteroPositivoSolicitudPresupuesto('id_previsita');
+                if ($idPrevisitaDashboard === null) {
+                    responderJsonPresupuesto(['ok' => false, 'msg' => 'Seguimiento invalido.'], 422);
+                }
+
+                try {
+                    $datosDashboard = obtenerDatosDashboardSeguimiento($idPrevisitaDashboard);
+                } catch (Throwable $eDashboard) {
+                    error_log('obtenerDashboardSeguimiento: ' . $eDashboard->getMessage());
+                    responderJsonPresupuesto(['ok' => false, 'msg' => 'No se pudieron cargar los datos reales del Panel.'], 500);
+                }
+
+                if ($datosDashboard === null) {
+                    responderJsonPresupuesto(['ok' => false, 'msg' => 'No se encontro el seguimiento solicitado.'], 404);
+                }
+
+                responderJsonPresupuesto(['ok' => true, 'data' => $datosDashboard]);
 
             default:
                 throw new RuntimeException('Funcion no soportada: ' . $funcion);
