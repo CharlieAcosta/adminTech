@@ -569,11 +569,248 @@ function resetearModalEnviarDocumentoEmitido() {
     $('#btnEnviarDocumentoEmitido').prop('disabled', false);
 }
 
+var dashboardSeguimientoXhr = null;
+
+function formatearNumeroDashboardSeguimiento(valor, decimalesMax) {
+    const numero = Number(valor);
+    if (valor === null || valor === undefined || !isFinite(numero)) {
+        return '-';
+    }
+    return numero.toLocaleString('es-AR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: decimalesMax
+    });
+}
+
+function formatearCantidadDashboardSeguimiento(valor, unidad) {
+    if (valor === null || valor === undefined) {
+        return 'N/D';
+    }
+    const texto = formatearNumeroDashboardSeguimiento(valor, 4);
+    return unidad ? `${texto} ${unidad}` : texto;
+}
+
+function construirCeldaNombreDashboardSeguimiento(nombre, tarea) {
+    const principal = escapeHtmlDocumentoEmitido(nombre || '-');
+    if (!tarea) {
+        return principal;
+    }
+    return `${principal}<br><small class="text-muted">Tarea: ${escapeHtmlDocumentoEmitido(tarea)}</small>`;
+}
+
+function construirBadgeEstadoMaterialDashboardSeguimiento(estado) {
+    const mapa = {
+        sin_pedido: ['badge-light border', 'Sin pedido'],
+        dentro: ['badge-success', 'Dentro de presupuesto'],
+        excedido: ['badge-danger', 'Excedido'],
+        adicional: ['badge-secondary', 'Adicional'],
+        nd: ['badge-light border', 'N/D']
+    };
+    const item = mapa[estado] || mapa.nd;
+    return `<span class="badge ${item[0]}">${item[1]}</span>`;
+}
+
 function resetearModalDashboardSeguimiento() {
     const $modal = $('#modalDashboardSeguimiento');
 
+    if (dashboardSeguimientoXhr) {
+        dashboardSeguimientoXhr.abort();
+        dashboardSeguimientoXhr = null;
+    }
+
     $modal.removeData('id');
     $('#modalDashboardSeguimientoContexto [data-dashboard-field="id_previsita"]').text('-');
+
+    // Solo se limpian los DATOS REALES; los bloques DEMO conservan su contenido.
+    ['cliente', 'cuit', 'presupuesto'].forEach(function (campo) {
+        $modal.find(`[data-dashboard-field="${campo}"]`).text('-');
+    });
+    ['inicio', 'dias_transcurridos', 'monto_presupuestado'].forEach(function (kpi) {
+        $modal.find(`[data-dashboard-kpi="${kpi}"]`).text('-');
+    });
+    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="6" class="text-center text-muted">Cargando datos...</td></tr>');
+    $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="4" class="text-center text-muted">Cargando datos...</td></tr>');
+    $('#dashboardSeguimientoAutorizacionesBody').html('<span class="text-muted">Cargando datos...</span>');
+    $modal.find('.dashboard-seguimiento-nota').remove();
+
+    // Cada apertura vuelve a dejar COLAPSADAS las cards grandes (estado inicial de AdminLTE).
+    $modal.find('.dashboard-seguimiento-card').each(function () {
+        const $card = $(this);
+        $card.children('.card-body, .card-footer').stop(true, true).css('display', '');
+        $card.removeClass('collapsing expanding').addClass('collapsed-card');
+        $card.find('> .card-header [data-card-widget="collapse"] .fa-minus')
+            .removeClass('fa-minus')
+            .addClass('fa-plus');
+    });
+    $('#dashboardSeguimientoEstadoCarga').addClass('d-none').removeClass('text-danger').text('');
+}
+
+function renderizarMaterialesDashboardSeguimiento(materiales, meta) {
+    const $body = $('#dashboardSeguimientoMaterialesBody');
+    const $contenedor = $body.closest('.table-responsive');
+    meta = meta || {};
+    let nota = '';
+
+    if (Array.isArray(meta.sin_historial_formal) && meta.sin_historial_formal.length) {
+        nota = 'Sin historial formal de pedidos: el seguimiento registra pedidos realizados que no figuran como pedidos confirmados, por lo que el solicitado no es informable (N/D).';
+    } else if (Number(meta.pedidos_otro_presupuesto) > 0) {
+        nota = 'Existen pedidos confirmados asociados a otro presupuesto que no se consideran en este detalle.';
+    } else if (!Number(meta.pedidos_confirmados)) {
+        nota = 'Sin pedidos confirmados.';
+    }
+
+    $contenedor.siblings('.dashboard-seguimiento-nota').remove();
+    if (nota) {
+        $contenedor.before($('<div class="small text-muted mb-1 dashboard-seguimiento-nota"></div>').text(nota));
+    }
+
+    if (!Array.isArray(materiales) || !materiales.length) {
+        $body.html('<tr><td colspan="6" class="text-center text-muted">Sin materiales presupuestados</td></tr>');
+        return;
+    }
+
+    $body.html(materiales.map(function (fila) {
+        const unidad = fila.unidad || '';
+        const sinSolicitado = fila.solicitado === null || fila.solicitado === undefined;
+        let diferencia = '-';
+        if (sinSolicitado) {
+            diferencia = 'N/D';
+        } else if (!fila.adicional && fila.diferencia !== null && fila.diferencia !== undefined) {
+            diferencia = formatearCantidadDashboardSeguimiento(fila.diferencia, unidad);
+        }
+        let porcentaje = 'N/A';
+        if (sinSolicitado) {
+            porcentaje = 'N/D';
+        } else if (fila.porcentaje !== null && fila.porcentaje !== undefined) {
+            porcentaje = formatearNumeroDashboardSeguimiento(fila.porcentaje, 1) + '%';
+        }
+
+        return `<tr>
+            <td>${construirCeldaNombreDashboardSeguimiento(fila.material, fila.tarea)}</td>
+            <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.presupuestado, unidad))}</td>
+            <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.solicitado, unidad))}</td>
+            <td class="text-right">${escapeHtmlDocumentoEmitido(diferencia)}</td>
+            <td class="text-center">${escapeHtmlDocumentoEmitido(porcentaje)}</td>
+            <td class="text-center">${construirBadgeEstadoMaterialDashboardSeguimiento(fila.estado)}</td>
+        </tr>`;
+    }).join(''));
+}
+
+function renderizarJornalesDashboardSeguimiento(jornales) {
+    const $body = $('#dashboardSeguimientoJornalesBody');
+
+    if (!Array.isArray(jornales) || !jornales.length) {
+        $body.html('<tr><td colspan="4" class="text-center text-muted">Sin jornales presupuestados</td></tr>');
+        return;
+    }
+
+    $body.html(jornales.map(function (fila) {
+        return `<tr>
+            <td>${construirCeldaNombreDashboardSeguimiento(fila.jornal, fila.tarea)}</td>
+            <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.personas, 4))}</td>
+            <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.dias, 0))}</td>
+            <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.jornales, 4))}</td>
+        </tr>`;
+    }).join(''));
+}
+
+function renderizarAutorizacionesDashboardSeguimiento(aut) {
+    const $cont = $('#dashboardSeguimientoAutorizacionesBody');
+    const pendientes = Number(aut && aut.pendientes) || 0;
+    const autorizadas = Number(aut && aut.autorizadas) || 0;
+    const rechazadas = Number(aut && aut.rechazadas) || 0;
+
+    if (!pendientes && !autorizadas && !rechazadas) {
+        $cont.html('<span class="text-muted">Sin autorizaciones</span>');
+        return;
+    }
+
+    const partes = [];
+    if (pendientes) {
+        partes.push(`<span class="mr-4 my-1"><span class="badge badge-warning mr-1">${pendientes}</span> ${pendientes === 1 ? 'solicitud pendiente' : 'solicitudes pendientes'} <small class="text-muted">(estado actual)</small></span>`);
+    }
+    if (autorizadas) {
+        partes.push(`<span class="mr-4 my-1"><span class="badge badge-success mr-1">${autorizadas}</span> ${autorizadas === 1 ? 'autorizada' : 'autorizadas'}</span>`);
+    }
+    if (rechazadas) {
+        partes.push(`<span class="my-1"><span class="badge badge-danger mr-1">${rechazadas}</span> ${rechazadas === 1 ? 'rechazada' : 'rechazadas'}</span>`);
+    }
+    $cont.html(partes.join(''));
+}
+
+function renderizarDashboardSeguimiento(data) {
+    const $modal = $('#modalDashboardSeguimiento');
+    const ident = data.identificacion || {};
+    const kpis = data.kpis || {};
+    const monto = kpis.monto_presupuestado || {};
+
+    $('#modalDashboardSeguimientoContexto [data-dashboard-field="id_previsita"]').text(ident.id_previsita || '-');
+    $modal.find('[data-dashboard-field="cliente"]').text(ident.cliente || '-');
+    $modal.find('[data-dashboard-field="cuit"]').text(ident.cuit || '-');
+    $modal.find('[data-dashboard-field="presupuesto"]').text(ident.presupuesto || '-');
+
+    $modal.find('[data-dashboard-kpi="inicio"]').text(kpis.inicio || '-');
+    $modal.find('[data-dashboard-kpi="dias_transcurridos"]').text(
+        kpis.dias_transcurridos === null || kpis.dias_transcurridos === undefined
+            ? '-'
+            : `${kpis.dias_transcurridos} ${Number(kpis.dias_transcurridos) === 1 ? 'día' : 'días'}`
+    );
+    $modal.find('[data-dashboard-kpi="monto_presupuestado"]').text(
+        monto.valor === null || monto.valor === undefined
+            ? '-'
+            : `${monto.moneda ? monto.moneda + ' ' : ''}${formatearNumeroDashboardSeguimiento(monto.valor, 2)}`
+    );
+
+    renderizarMaterialesDashboardSeguimiento(data.materiales, data.materiales_meta);
+    renderizarJornalesDashboardSeguimiento(data.jornales);
+    renderizarAutorizacionesDashboardSeguimiento(data.autorizaciones);
+}
+
+function mostrarErrorDashboardSeguimiento(mensaje) {
+    $('#dashboardSeguimientoEstadoCarga')
+        .removeClass('d-none')
+        .addClass('text-danger')
+        .text(mensaje);
+    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="6" class="text-center text-muted">-</td></tr>');
+    $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="4" class="text-center text-muted">-</td></tr>');
+    $('#dashboardSeguimientoAutorizacionesBody').html('<span class="text-muted">-</span>');
+}
+
+function cargarDashboardSeguimiento(idPrevisita) {
+    const $estado = $('#dashboardSeguimientoEstadoCarga');
+    $estado.removeClass('d-none text-danger').text('Cargando datos...');
+
+    dashboardSeguimientoXhr = $.ajax({
+        url: '../03-controller/presupuestos_guardar.php',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            via: 'ajax',
+            funcion: 'obtenerDashboardSeguimiento',
+            id_previsita: idPrevisita
+        },
+        success: function (response) {
+            // Descarta respuestas de una apertura anterior.
+            if (Number($('#modalDashboardSeguimiento').data('id')) !== Number(idPrevisita)) {
+                return;
+            }
+            if (!response || response.ok !== true || !response.data) {
+                mostrarErrorDashboardSeguimiento('No se pudieron cargar los datos reales del Panel.');
+                return;
+            }
+            $estado.addClass('d-none').text('');
+            renderizarDashboardSeguimiento(response.data);
+        },
+        error: function (xhr, estado) {
+            if (estado === 'abort' || Number($('#modalDashboardSeguimiento').data('id')) !== Number(idPrevisita)) {
+                return;
+            }
+            mostrarErrorDashboardSeguimiento('No se pudieron cargar los datos reales del Panel.');
+        },
+        complete: function () {
+            dashboardSeguimientoXhr = null;
+        }
+    });
 }
 
 function abrirModalDashboardSeguimientoDesdeListado(idPrevisita) {
@@ -584,6 +821,13 @@ function abrirModalDashboardSeguimientoDesdeListado(idPrevisita) {
 
     $('#modalDashboardSeguimientoContexto [data-dashboard-field="id_previsita"]').text(idPrevisita || '-');
     $('#modalDashboardSeguimiento').modal('show');
+
+    if (!idPrevisita || idPrevisita <= 0) {
+        mostrarErrorDashboardSeguimiento('No se pudieron cargar los datos reales del Panel.');
+        return;
+    }
+
+    cargarDashboardSeguimiento(idPrevisita);
 }
 
 function construirHtmlAccionesHistorialPresupuesto(acciones, idPrevisita, idPresupuesto) {
