@@ -82,6 +82,21 @@ if (!function_exists('puedeAutorizarPedidoMateriales')) {
     }
 }
 
+if (!function_exists('perfilPuedeVerPanelAnaliticaSeguimiento')) {
+    /**
+     * Acceso TEMPORAL al Panel de analitica de Seguimiento: solo Administrador o superior.
+     * Se usa tanto para mostrar el icono del listado como para autorizar el endpoint.
+     */
+    function perfilPuedeVerPanelAnaliticaSeguimiento(?string $perfil): bool
+    {
+        return in_array(
+            normalizarPerfilOrdenCompraSeguimiento($perfil),
+            ['Super Administrador', 'Administrador'],
+            true
+        );
+    }
+}
+
 if (!function_exists('perfilPuedeAccederSoloOrdenCompra')) {
     function perfilPuedeAccederSoloOrdenCompra(?string $perfil): bool
     {
