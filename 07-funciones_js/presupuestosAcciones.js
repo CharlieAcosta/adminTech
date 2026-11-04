@@ -590,12 +590,14 @@ function formatearCantidadDashboardSeguimiento(valor, unidad) {
     return unidad ? `${texto} ${unidad}` : texto;
 }
 
-function construirCeldaNombreDashboardSeguimiento(nombre, tarea) {
+function construirCeldaNombreDashboardSeguimiento(nombre, tareaNro) {
     const principal = escapeHtmlDocumentoEmitido(nombre || '-');
-    if (!tarea) {
+    const nro = Number(tareaNro);
+    if (!isFinite(nro) || nro <= 0) {
         return principal;
     }
-    return `${principal}<br><small class="text-muted">Tarea: ${escapeHtmlDocumentoEmitido(tarea)}</small>`;
+
+    return `${principal}<br><small class="text-muted">${escapeHtmlDocumentoEmitido(`Tarea ${nro}`)}</small>`;
 }
 
 function construirBadgeEstadoMaterialDashboardSeguimiento(estado) {
@@ -686,7 +688,7 @@ function renderizarMaterialesDashboardSeguimiento(materiales, meta) {
         }
 
         return `<tr>
-            <td>${construirCeldaNombreDashboardSeguimiento(fila.material, fila.tarea)}</td>
+            <td>${construirCeldaNombreDashboardSeguimiento(fila.material, fila.tarea_nro)}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.presupuestado, unidad))}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.solicitado, unidad))}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(diferencia)}</td>
@@ -706,7 +708,7 @@ function renderizarJornalesDashboardSeguimiento(jornales) {
 
     $body.html(jornales.map(function (fila) {
         return `<tr>
-            <td>${construirCeldaNombreDashboardSeguimiento(fila.jornal, fila.tarea)}</td>
+            <td>${construirCeldaNombreDashboardSeguimiento(fila.jornal, fila.tarea_nro)}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.personas, 4))}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.dias, 0))}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.jornales, 4))}</td>

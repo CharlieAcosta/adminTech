@@ -186,7 +186,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 $db,
                 "
                 SELECT ptm.id_ptm, ptm.id_material, ptm.nombre_material, ptm.cantidad,
-                       pt.nro AS tarea_nro, pt.descripcion AS tarea_titulo,
+                       pt.nro AS tarea_nro,
                        COALESCE(NULLIF(TRIM(ptm.unidad_venta), ''), NULLIF(TRIM(m.unidad_venta), '')) AS unidad
                 FROM presupuesto_tarea_material ptm
                 INNER JOIN presupuesto_tareas pt ON pt.id_presu_tarea = ptm.id_presu_tarea
@@ -203,7 +203,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 $db,
                 "
                 SELECT mo.id_ptmo, mo.id_jornal, mo.nombre_jornal, mo.cantidad, mo.dias,
-                       pt.nro AS tarea_nro, pt.descripcion AS tarea_titulo
+                       pt.nro AS tarea_nro
                 FROM presupuesto_tarea_mano_obra mo
                 INNER JOIN presupuesto_tareas pt ON pt.id_presu_tarea = mo.id_presu_tarea
                 WHERE pt.id_presupuesto = ?
@@ -218,7 +218,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 $dias = (int)($linea['dias'] ?? 0);
                 $jornales[] = [
                     'jornal' => trim((string)($linea['nombre_jornal'] ?? '')),
-                    'tarea' => trim((string)($linea['tarea_titulo'] ?? '')),
+                    'tarea_nro' => (int)($linea['tarea_nro'] ?? 0) > 0 ? (int)$linea['tarea_nro'] : null,
                     'personas' => $personas,
                     'dias' => $dias,
                     'jornales' => dashboardSeguimientoRedondearCantidad($personas * $dias),
@@ -315,7 +315,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 $estado = dashboardSeguimientoEstadoMaterial($presupuestado, $solicitado, false);
                 $materiales[] = [
                     'material' => trim((string)($linea['nombre_material'] ?? '')),
-                    'tarea' => trim((string)($linea['tarea_titulo'] ?? '')),
+                    'tarea_nro' => (int)($linea['tarea_nro'] ?? 0) > 0 ? (int)$linea['tarea_nro'] : null,
                     'unidad' => trim((string)($linea['unidad'] ?? '')),
                     'presupuestado' => $presupuestado,
                     'solicitado' => $solicitado,
@@ -355,7 +355,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 foreach ($extras as $extra) {
                     $materiales[] = [
                         'material' => $extra['material'],
-                        'tarea' => '',
+                        'tarea_nro' => null,
                         'unidad' => $unidades[$extra['id_material']] ?? '',
                         'presupuestado' => 0.0,
                         'solicitado' => $extra['cantidad'],
