@@ -186,6 +186,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 $db,
                 "
                 SELECT ptm.id_ptm, ptm.id_material, ptm.nombre_material, ptm.cantidad,
+                       ptm.subtotal_fila,
                        pt.nro AS tarea_nro,
                        COALESCE(NULLIF(TRIM(ptm.unidad_venta), ''), NULLIF(TRIM(m.unidad_venta), '')) AS unidad
                 FROM presupuesto_tarea_material ptm
@@ -203,6 +204,7 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 $db,
                 "
                 SELECT mo.id_ptmo, mo.id_jornal, mo.nombre_jornal, mo.cantidad, mo.dias,
+                       mo.subtotal_fila,
                        pt.nro AS tarea_nro
                 FROM presupuesto_tarea_mano_obra mo
                 INNER JOIN presupuesto_tareas pt ON pt.id_presu_tarea = mo.id_presu_tarea
@@ -222,6 +224,8 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                     'personas' => $personas,
                     'dias' => $dias,
                     'jornales' => dashboardSeguimientoRedondearCantidad($personas * $dias),
+                    // Snapshot historico de la linea (sin utilidad/otros); null si no existe.
+                    'importe_presupuestado' => isset($linea['subtotal_fila']) ? round((float)$linea['subtotal_fila'], 2) : null,
                 ];
             }
 
@@ -323,6 +327,8 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                     'porcentaje' => ($solicitado !== null && $presupuestado > 0)
                         ? round($solicitado / $presupuestado * 100, 1)
                         : null,
+                    // Snapshot historico de la linea (sin utilidad/otros); null si no existe.
+                    'importe_presupuestado' => isset($linea['subtotal_fila']) ? round((float)$linea['subtotal_fila'], 2) : null,
                     'estado' => $estado,
                     'adicional' => $estado === 'adicional',
                 ];
@@ -361,6 +367,8 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                         'solicitado' => $extra['cantidad'],
                         'diferencia' => null,
                         'porcentaje' => null,
+                        // Sin linea ni snapshot de precio en el presupuesto: no hay importe presupuestado.
+                        'importe_presupuestado' => null,
                         'estado' => 'adicional',
                         'adicional' => true,
                     ];

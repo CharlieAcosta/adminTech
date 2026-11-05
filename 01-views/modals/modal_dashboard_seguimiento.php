@@ -190,11 +190,12 @@
                     <th class="text-center">Solicitado</th>
                     <th class="text-center">Diferencia</th>
                     <th class="text-center">%</th>
+                    <th class="text-center">Importe presupuestado</th>
                     <th class="text-center">Estado</th>
                   </tr>
                 </thead>
                 <tbody id="dashboardSeguimientoMaterialesBody">
-                  <tr><td colspan="6" class="text-center text-muted">Cargando datos...</td></tr>
+                  <tr><td colspan="7" class="text-center text-muted">Cargando datos...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -221,10 +222,11 @@
                     <th class="text-center">Personas</th>
                     <th class="text-center">D&iacute;as</th>
                     <th class="text-center">Jornales presupuestados</th>
+                    <th class="text-center">Importe presupuestado</th>
                   </tr>
                 </thead>
                 <tbody id="dashboardSeguimientoJornalesBody">
-                  <tr><td colspan="4" class="text-center text-muted">Cargando datos...</td></tr>
+                  <tr><td colspan="5" class="text-center text-muted">Cargando datos...</td></tr>
                 </tbody>
               </table>
             </div>
