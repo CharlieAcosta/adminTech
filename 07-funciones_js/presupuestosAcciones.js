@@ -571,15 +571,23 @@ function resetearModalEnviarDocumentoEmitido() {
 
 var dashboardSeguimientoXhr = null;
 
-function formatearNumeroDashboardSeguimiento(valor, decimalesMax) {
+function formatearNumeroDashboardSeguimiento(valor, decimalesMax, decimalesMin) {
     const numero = Number(valor);
     if (valor === null || valor === undefined || !isFinite(numero)) {
         return '-';
     }
     return numero.toLocaleString('es-AR', {
-        minimumFractionDigits: 0,
+        minimumFractionDigits: decimalesMin || 0,
         maximumFractionDigits: decimalesMax
     });
+}
+
+// Importe historico de una linea: "MONEDA 1.234,50"; sin valor real => "—" (nunca 0, NaN ni null).
+function formatearImporteDashboardSeguimiento(importe, moneda) {
+    if (importe === null || importe === undefined || importe === '' || !isFinite(Number(importe))) {
+        return '—';
+    }
+    return `${moneda ? moneda + ' ' : ''}${formatearNumeroDashboardSeguimiento(importe, 2, 2)}`;
 }
 
 function formatearCantidadDashboardSeguimiento(valor, unidad) {
@@ -590,12 +598,14 @@ function formatearCantidadDashboardSeguimiento(valor, unidad) {
     return unidad ? `${texto} ${unidad}` : texto;
 }
 
-function construirCeldaNombreDashboardSeguimiento(nombre, tarea) {
+function construirCeldaNombreDashboardSeguimiento(nombre, tareaNro) {
     const principal = escapeHtmlDocumentoEmitido(nombre || '-');
-    if (!tarea) {
+    const nro = Number(tareaNro);
+    if (!isFinite(nro) || nro <= 0) {
         return principal;
     }
-    return `${principal}<br><small class="text-muted">Tarea: ${escapeHtmlDocumentoEmitido(tarea)}</small>`;
+
+    return `${principal}<br><small class="text-muted">${escapeHtmlDocumentoEmitido(`Tarea ${nro}`)}</small>`;
 }
 
 function construirBadgeEstadoMaterialDashboardSeguimiento(estado) {
@@ -628,8 +638,8 @@ function resetearModalDashboardSeguimiento() {
     ['inicio', 'dias_transcurridos', 'monto_presupuestado'].forEach(function (kpi) {
         $modal.find(`[data-dashboard-kpi="${kpi}"]`).text('-');
     });
-    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="6" class="text-center text-muted">Cargando datos...</td></tr>');
-    $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="4" class="text-center text-muted">Cargando datos...</td></tr>');
+    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="7" class="text-center text-muted">Cargando datos...</td></tr>');
+    $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="5" class="text-center text-muted">Cargando datos...</td></tr>');
     $('#dashboardSeguimientoAutorizacionesBody').html('<span class="text-muted">Cargando datos...</span>');
     $modal.find('.dashboard-seguimiento-nota').remove();
 
@@ -645,7 +655,7 @@ function resetearModalDashboardSeguimiento() {
     $('#dashboardSeguimientoEstadoCarga').addClass('d-none').removeClass('text-danger').text('');
 }
 
-function renderizarMaterialesDashboardSeguimiento(materiales, meta) {
+function renderizarMaterialesDashboardSeguimiento(materiales, meta, moneda) {
     const $body = $('#dashboardSeguimientoMaterialesBody');
     const $contenedor = $body.closest('.table-responsive');
     meta = meta || {};
@@ -665,7 +675,7 @@ function renderizarMaterialesDashboardSeguimiento(materiales, meta) {
     }
 
     if (!Array.isArray(materiales) || !materiales.length) {
-        $body.html('<tr><td colspan="6" class="text-center text-muted">Sin materiales presupuestados</td></tr>');
+        $body.html('<tr><td colspan="7" class="text-center text-muted">Sin materiales presupuestados</td></tr>');
         return;
     }
 
@@ -686,30 +696,32 @@ function renderizarMaterialesDashboardSeguimiento(materiales, meta) {
         }
 
         return `<tr>
-            <td>${construirCeldaNombreDashboardSeguimiento(fila.material, fila.tarea)}</td>
+            <td>${construirCeldaNombreDashboardSeguimiento(fila.material, fila.tarea_nro)}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.presupuestado, unidad))}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.solicitado, unidad))}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(diferencia)}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(porcentaje)}</td>
+            <td class="text-right">${escapeHtmlDocumentoEmitido(formatearImporteDashboardSeguimiento(fila.importe_presupuestado, moneda))}</td>
             <td class="text-center">${construirBadgeEstadoMaterialDashboardSeguimiento(fila.estado)}</td>
         </tr>`;
     }).join(''));
 }
 
-function renderizarJornalesDashboardSeguimiento(jornales) {
+function renderizarJornalesDashboardSeguimiento(jornales, moneda) {
     const $body = $('#dashboardSeguimientoJornalesBody');
 
     if (!Array.isArray(jornales) || !jornales.length) {
-        $body.html('<tr><td colspan="4" class="text-center text-muted">Sin jornales presupuestados</td></tr>');
+        $body.html('<tr><td colspan="5" class="text-center text-muted">Sin jornales presupuestados</td></tr>');
         return;
     }
 
     $body.html(jornales.map(function (fila) {
         return `<tr>
-            <td>${construirCeldaNombreDashboardSeguimiento(fila.jornal, fila.tarea)}</td>
+            <td>${construirCeldaNombreDashboardSeguimiento(fila.jornal, fila.tarea_nro)}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.personas, 4))}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.dias, 0))}</td>
             <td class="text-center">${escapeHtmlDocumentoEmitido(formatearNumeroDashboardSeguimiento(fila.jornales, 4))}</td>
+            <td class="text-right">${escapeHtmlDocumentoEmitido(formatearImporteDashboardSeguimiento(fila.importe_presupuestado, moneda))}</td>
         </tr>`;
     }).join(''));
 }
@@ -761,8 +773,8 @@ function renderizarDashboardSeguimiento(data) {
             : `${monto.moneda ? monto.moneda + ' ' : ''}${formatearNumeroDashboardSeguimiento(monto.valor, 2)}`
     );
 
-    renderizarMaterialesDashboardSeguimiento(data.materiales, data.materiales_meta);
-    renderizarJornalesDashboardSeguimiento(data.jornales);
+    renderizarMaterialesDashboardSeguimiento(data.materiales, data.materiales_meta, monto.moneda);
+    renderizarJornalesDashboardSeguimiento(data.jornales, monto.moneda);
     renderizarAutorizacionesDashboardSeguimiento(data.autorizaciones);
 }
 
@@ -771,8 +783,8 @@ function mostrarErrorDashboardSeguimiento(mensaje) {
         .removeClass('d-none')
         .addClass('text-danger')
         .text(mensaje);
-    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="6" class="text-center text-muted">-</td></tr>');
-    $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="4" class="text-center text-muted">-</td></tr>');
+    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="7" class="text-center text-muted">-</td></tr>');
+    $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="5" class="text-center text-muted">-</td></tr>');
     $('#dashboardSeguimientoAutorizacionesBody').html('<span class="text-muted">-</span>');
 }
 
