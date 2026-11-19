@@ -1,6 +1,15 @@
 <?php
 // ../01-views/modals/modal_dashboard_seguimiento.php
 ?>
+<style>
+  /* Ancho local del Panel de analitica (no altera .modal-xl global ni otros modales). */
+  @media (min-width: 992px) {
+    #modalDashboardSeguimiento .modal-dialog {
+      max-width: 95vw;
+      max-width: min(95vw, 1560px);
+    }
+  }
+</style>
 <!-- Modal: Panel de analitica -->
 <div class="modal fade" id="modalDashboardSeguimiento" tabindex="-1" role="dialog" aria-labelledby="modalDashboardSeguimientoLabel" aria-hidden="true" data-backdrop="static" data-keyboard="false">
 
@@ -188,14 +197,17 @@
                     <th>Material</th>
                     <th class="text-center">Presupuestado</th>
                     <th class="text-center">Solicitado</th>
-                    <th class="text-center">Diferencia</th>
+                    <th class="text-center">Saldo</th>
+                    <th class="text-center">Excedido</th>
                     <th class="text-center">%</th>
                     <th class="text-center">Importe presupuestado</th>
+                    <th class="text-center">Saldo importe</th>
+                    <th class="text-center">Excedido importe</th>
                     <th class="text-center">Estado</th>
                   </tr>
                 </thead>
                 <tbody id="dashboardSeguimientoMaterialesBody">
-                  <tr><td colspan="7" class="text-center text-muted">Cargando datos...</td></tr>
+                  <tr><td colspan="10" class="text-center text-muted">Cargando datos...</td></tr>
                 </tbody>
               </table>
             </div>

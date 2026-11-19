@@ -598,6 +598,33 @@ function formatearCantidadDashboardSeguimiento(valor, unidad) {
     return unidad ? `${texto} ${unidad}` : texto;
 }
 
+// Saldo/Excedido: cantidad con unidad; > 0 resaltado (clase de color + negrita), 0 neutro, null => N/D atenuado.
+function construirCeldaCantidadResaltadaDashboardSeguimiento(valor, unidad, claseColor) {
+    let clase = 'text-right';
+    if (valor === null || valor === undefined) {
+        clase += ' text-muted';
+    } else if (Number(valor) > 0) {
+        clase += ` ${claseColor} font-weight-bold`;
+    }
+
+    return `<td class="${clase}">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(valor, unidad))}</td>`;
+}
+
+// Saldo/Excedido valorizados: importe > 0 resaltado, 0 neutro; null => "N/D" atenuado (historial
+// incompleto) o "—" (sin base historica, p. ej. adicional).
+function construirCeldaImporteResaltadoDashboardSeguimiento(importe, moneda, claseColor, sinSolicitado) {
+    let clase = 'text-right';
+    if (importe === null || importe === undefined) {
+        if (sinSolicitado) {
+            return `<td class="${clase} text-muted">N/D</td>`;
+        }
+    } else if (Number(importe) > 0) {
+        clase += ` ${claseColor} font-weight-bold`;
+    }
+
+    return `<td class="${clase}">${escapeHtmlDocumentoEmitido(formatearImporteDashboardSeguimiento(importe, moneda))}</td>`;
+}
+
 function construirCeldaNombreDashboardSeguimiento(nombre, tareaNro) {
     const principal = escapeHtmlDocumentoEmitido(nombre || '-');
     const nro = Number(tareaNro);
@@ -638,7 +665,7 @@ function resetearModalDashboardSeguimiento() {
     ['inicio', 'dias_transcurridos', 'monto_presupuestado'].forEach(function (kpi) {
         $modal.find(`[data-dashboard-kpi="${kpi}"]`).text('-');
     });
-    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="7" class="text-center text-muted">Cargando datos...</td></tr>');
+    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="10" class="text-center text-muted">Cargando datos...</td></tr>');
     $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="5" class="text-center text-muted">Cargando datos...</td></tr>');
     $('#dashboardSeguimientoAutorizacionesBody').html('<span class="text-muted">Cargando datos...</span>');
     $modal.find('.dashboard-seguimiento-nota').remove();
@@ -675,33 +702,35 @@ function renderizarMaterialesDashboardSeguimiento(materiales, meta, moneda) {
     }
 
     if (!Array.isArray(materiales) || !materiales.length) {
-        $body.html('<tr><td colspan="7" class="text-center text-muted">Sin materiales presupuestados</td></tr>');
+        $body.html('<tr><td colspan="10" class="text-center text-muted">Sin materiales presupuestados</td></tr>');
         return;
     }
 
     $body.html(materiales.map(function (fila) {
         const unidad = fila.unidad || '';
         const sinSolicitado = fila.solicitado === null || fila.solicitado === undefined;
-        let diferencia = '-';
-        if (sinSolicitado) {
-            diferencia = 'N/D';
-        } else if (!fila.adicional && fila.diferencia !== null && fila.diferencia !== undefined) {
-            diferencia = formatearCantidadDashboardSeguimiento(fila.diferencia, unidad);
-        }
         let porcentaje = 'N/A';
+        let clasePorcentaje = 'text-center';
         if (sinSolicitado) {
             porcentaje = 'N/D';
         } else if (fila.porcentaje !== null && fila.porcentaje !== undefined) {
             porcentaje = formatearNumeroDashboardSeguimiento(fila.porcentaje, 1) + '%';
+            // Resaltado solo por encima de 100% (100% exacto es neutro), sobre el valor numerico original.
+            if (Number(fila.porcentaje) > 100) {
+                clasePorcentaje += ' text-danger font-weight-bold';
+            }
         }
 
         return `<tr>
             <td>${construirCeldaNombreDashboardSeguimiento(fila.material, fila.tarea_nro)}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.presupuestado, unidad))}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearCantidadDashboardSeguimiento(fila.solicitado, unidad))}</td>
-            <td class="text-right">${escapeHtmlDocumentoEmitido(diferencia)}</td>
-            <td class="text-center">${escapeHtmlDocumentoEmitido(porcentaje)}</td>
+            ${construirCeldaCantidadResaltadaDashboardSeguimiento(fila.saldo, unidad, 'text-success')}
+            ${construirCeldaCantidadResaltadaDashboardSeguimiento(fila.excedido, unidad, 'text-danger')}
+            <td class="${clasePorcentaje}">${escapeHtmlDocumentoEmitido(porcentaje)}</td>
             <td class="text-right">${escapeHtmlDocumentoEmitido(formatearImporteDashboardSeguimiento(fila.importe_presupuestado, moneda))}</td>
+            ${construirCeldaImporteResaltadoDashboardSeguimiento(fila.saldo_importe, moneda, 'text-success', sinSolicitado)}
+            ${construirCeldaImporteResaltadoDashboardSeguimiento(fila.excedido_importe, moneda, 'text-danger', sinSolicitado)}
             <td class="text-center">${construirBadgeEstadoMaterialDashboardSeguimiento(fila.estado)}</td>
         </tr>`;
     }).join(''));
@@ -783,7 +812,7 @@ function mostrarErrorDashboardSeguimiento(mensaje) {
         .removeClass('d-none')
         .addClass('text-danger')
         .text(mensaje);
-    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="7" class="text-center text-muted">-</td></tr>');
+    $('#dashboardSeguimientoMaterialesBody').html('<tr><td colspan="10" class="text-center text-muted">-</td></tr>');
     $('#dashboardSeguimientoJornalesBody').html('<tr><td colspan="5" class="text-center text-muted">-</td></tr>');
     $('#dashboardSeguimientoAutorizacionesBody').html('<span class="text-muted">-</span>');
 }
