@@ -17,6 +17,43 @@ if (!function_exists('dashboardSeguimientoRedondearCantidad')) {
     }
 }
 
+if (!function_exists('dashboardSeguimientoSaldoExcedido')) {
+    // Saldo = max(presupuestado - solicitado, 0); Excedido = max(solicitado - presupuestado, 0).
+    // Sin solicitado conocido (historial incompleto) ambos son null: no se infiere ni se convierte en cero.
+    function dashboardSeguimientoSaldoExcedido(float $presupuestado, ?float $solicitado): array
+    {
+        if ($solicitado === null) {
+            return ['saldo' => null, 'excedido' => null];
+        }
+
+        $diferenciaBase = dashboardSeguimientoRedondearCantidad($presupuestado - $solicitado);
+
+        return [
+            'saldo' => $diferenciaBase > 0 ? $diferenciaBase : 0.0,
+            'excedido' => $diferenciaBase < 0 ? dashboardSeguimientoRedondearCantidad(abs($diferenciaBase)) : 0.0,
+        ];
+    }
+}
+
+if (!function_exists('dashboardSeguimientoImportesSaldoExcedido')) {
+    // Valoriza Saldo/Excedido con el valor unitario historico efectivo de la linea
+    // (importe_presupuestado = subtotal_fila / presupuestado, ya incluye el % extra). Nunca usa el catalogo.
+    // Se calcula importe * cantidad / presupuestado (equivale a cantidad * valor unitario sin error intermedio).
+    // null si no hay base historica (sin saldo/excedido conocido, importe inexistente o presupuestado <= 0);
+    // un importe historico real de 0 produce 0, no null.
+    function dashboardSeguimientoImportesSaldoExcedido(float $presupuestado, ?float $saldo, ?float $excedido, ?float $importePresupuestado): array
+    {
+        if ($saldo === null || $excedido === null || $importePresupuestado === null || $presupuestado <= 0) {
+            return ['saldo_importe' => null, 'excedido_importe' => null];
+        }
+
+        return [
+            'saldo_importe' => round($importePresupuestado * $saldo / $presupuestado, 2),
+            'excedido_importe' => round($importePresupuestado * $excedido / $presupuestado, 2),
+        ];
+    }
+}
+
 if (!function_exists('dashboardSeguimientoEjecutarFilas')) {
     // Ejecuta una consulta preparada y devuelve todas las filas asociativas.
     function dashboardSeguimientoEjecutarFilas(mysqli $db, string $sql, string $tipos = '', array $params = []): array
@@ -317,18 +354,29 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
                 }
 
                 $estado = dashboardSeguimientoEstadoMaterial($presupuestado, $solicitado, false);
+                $saldoExcedido = dashboardSeguimientoSaldoExcedido($presupuestado, $solicitado);
+                $importePresupuestado = isset($linea['subtotal_fila']) ? round((float)$linea['subtotal_fila'], 2) : null;
+                $importesSaldoExcedido = dashboardSeguimientoImportesSaldoExcedido(
+                    $presupuestado,
+                    $saldoExcedido['saldo'],
+                    $saldoExcedido['excedido'],
+                    $importePresupuestado
+                );
                 $materiales[] = [
                     'material' => trim((string)($linea['nombre_material'] ?? '')),
                     'tarea_nro' => (int)($linea['tarea_nro'] ?? 0) > 0 ? (int)$linea['tarea_nro'] : null,
                     'unidad' => trim((string)($linea['unidad'] ?? '')),
                     'presupuestado' => $presupuestado,
                     'solicitado' => $solicitado,
-                    'diferencia' => $solicitado === null ? null : dashboardSeguimientoRedondearCantidad($presupuestado - $solicitado),
+                    'saldo' => $saldoExcedido['saldo'],
+                    'excedido' => $saldoExcedido['excedido'],
                     'porcentaje' => ($solicitado !== null && $presupuestado > 0)
                         ? round($solicitado / $presupuestado * 100, 1)
                         : null,
                     // Snapshot historico de la linea (sin utilidad/otros); null si no existe.
-                    'importe_presupuestado' => isset($linea['subtotal_fila']) ? round((float)$linea['subtotal_fila'], 2) : null,
+                    'importe_presupuestado' => $importePresupuestado,
+                    'saldo_importe' => $importesSaldoExcedido['saldo_importe'],
+                    'excedido_importe' => $importesSaldoExcedido['excedido_importe'],
                     'estado' => $estado,
                     'adicional' => $estado === 'adicional',
                 ];
@@ -359,16 +407,21 @@ if (!function_exists('obtenerDatosDashboardSeguimientoEnConexion')) {
 
                 $unidades = dashboardSeguimientoUnidadesCatalogo($db, array_column($extras, 'id_material'));
                 foreach ($extras as $extra) {
+                    $saldoExcedido = dashboardSeguimientoSaldoExcedido(0.0, $extra['cantidad']);
                     $materiales[] = [
                         'material' => $extra['material'],
                         'tarea_nro' => null,
                         'unidad' => $unidades[$extra['id_material']] ?? '',
                         'presupuestado' => 0.0,
                         'solicitado' => $extra['cantidad'],
-                        'diferencia' => null,
+                        'saldo' => $saldoExcedido['saldo'],
+                        'excedido' => $saldoExcedido['excedido'],
                         'porcentaje' => null,
-                        // Sin linea ni snapshot de precio en el presupuesto: no hay importe presupuestado.
+                        // Sin linea ni snapshot de precio en el presupuesto: no hay importe presupuestado
+                        // ni base historica para valorizar saldo/excedido (no se usa el catalogo actual).
                         'importe_presupuestado' => null,
+                        'saldo_importe' => null,
+                        'excedido_importe' => null,
                         'estado' => 'adicional',
                         'adicional' => true,
                     ];
